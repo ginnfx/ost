@@ -1,0 +1,65 @@
+name: OSTTracker
+options:
+  bundleIdPrefix: com.brajanzalta
+  deploymentTarget:
+    macOS: "27.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.2"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    MACOSX_DEPLOYMENT_TARGET: "27.0"
+    ARCHS: arm64
+packages:
+  GlowEffectKit:
+    path: ../GlowEffectKit-main
+targets:
+  OSTTracker:
+    type: application
+    platform: macOS
+    sources:
+      - Sources
+      - path: Fonts
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - package: GlowEffectKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.brajanzalta.OSTTracker
+        INFOPLIST_KEY_NSHumanReadableCopyright: ""
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.music
+        INFOPLIST_KEY_ATSApplicationFontsPath: "Fonts"
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+        ENABLE_HARDENED_RUNTIME: NO
+    postBuildScripts:
+      - name: Embed Python runtime
+        script: "\"${SRCROOT}/../packaging/04_copy_runtime.sh\""
+        basedOnDependencyAnalysis: false
+      - name: Install to /Applications
+        script: "\"${SRCROOT}/../packaging/07_install_to_applications.sh\""
+        basedOnDependencyAnalysis: false
+  OSTTrackerTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+    dependencies:
+      - target: OSTTracker
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.brajanzalta.OSTTrackerTests
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGN_STYLE: Manual
+schemes:
+  OSTTracker:
+    build:
+      targets:
+        OSTTracker: all
+    test:
+      targets:
+        - OSTTrackerTests
