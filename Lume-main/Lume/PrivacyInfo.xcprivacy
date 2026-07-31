@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Privacy manifest for Lume's app binary. Audited 2026-06-17 via the
+  privacy-manifest skill. Auto-bundled because Lume/ is a synchronized folder
+  (no Copy Bundle Resources entry needed; verified it ships inside Lume.app).
+
+  Required-reason API audit of the app binary (Lume sources + KSPlayer, which is
+  a source SPM package compiled in):
+  - UserDefaults (CA92.1): used app-wide (.standard, no app group -> not 1C8F.1).
+  - NO file-timestamp APIs: the only attributesOfItem/resourceValues calls read
+    .size / .typeIdentifierKey, which are not gated. (no C617/3B52/0A2A)
+  - NO disk-space, system-boot-time, or active-keyboard required-reason APIs.
+  Tracking is false: no ATTrackingManager / IDFA anywhere in the source.
+
+  Binary frameworks VLCKit + FFmpegKit ship no manifest and are NOT on Apple's
+  mandatory-signed-SDK list, so no signature requirement. If an upload scan
+  raises ITMS-91053 against one of them, inject a per-framework manifest in
+  Scripts/fix-ksplayer-frameworks.sh rather than declaring it here (you cannot
+  declare another bundle's API usage in this app manifest).
+-->
+<plist version="1.0">
+<dict>
+    <key>NSPrivacyTracking</key>
+    <false/>
+    <key>NSPrivacyTrackingDomains</key>
+    <array/>
+    <key>NSPrivacyCollectedDataTypes</key>
+    <array/>
+    <key>NSPrivacyAccessedAPITypes</key>
+    <array>
+        <dict>
+            <key>NSPrivacyAccessedAPIType</key>
+            <string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+            <key>NSPrivacyAccessedAPITypeReasons</key>
+            <array>
+                <string>CA92.1</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

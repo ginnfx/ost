@@ -1,0 +1,25 @@
+.DS_Store
+
+# XCode
+xcuserdata/
+
+.env
+
+ExampleData/
+
+build/
+
+.muxy/
+
+.vscode/
+
+# Swift Package Manager (root manifest vendors dev tooling — see Package.swift)
+.build/
+
+# Lefthook personal overrides
+lefthook-local.yml
+
+# Claude Code skills (local-only)
+.claude/skills/
+
+.xcodebuildmcp/

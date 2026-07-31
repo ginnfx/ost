@@ -1,0 +1,599 @@
+//
+//  LiveTVView.swift
+//  Lume
+//
+//  Main view for browsing live TV channels — categories sidebar; channels
+//  for the selected category are loaded lazily via @Query.
+//
+
+import SwiftData
+import SwiftUI
+
+/// How the Live TV detail area presents channels: a scannable list (default) or
+/// the EPG timeline grid. Persisted across launches.
+enum LiveTVLayoutMode: String, CaseIterable, Identifiable {
+    case list
+    case guide
+
+    var id: String {
+        rawValue
+    }
+
+    var label: LocalizedStringKey {
+        self == .list ? "List" : "Guide"
+    }
+
+    var systemImage: String {
+        self == .list ? "list.bullet" : "tablecells"
+    }
+
+    static let storageKey = "lume.liveTV.layoutMode"
+}
+
+struct LiveTVView: View {
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.contentRestriction) private var restriction
+    #if os(macOS)
+        @Environment(\.openWindow) private var openWindow
+    #endif
+    @Query private var playlists: [Playlist]
+    @Query(filter: #Predicate<Category> { $0.typeRaw == "live" && $0.isHidden == false })
+    private var categories: [Category]
+
+    /// Drives whether the Favorites / Recently Watched virtual sections appear in
+    /// the rail. Queried across all playlists, then scoped in-memory by prefix.
+    @Query(filter: #Predicate<LiveStream> { $0.isFavorite && $0.isHidden == false })
+    private var favoriteStreams: [LiveStream]
+    @Query(filter: #Predicate<LiveStream> { $0.lastWatchedDate != nil && $0.isHidden == false })
+    private var recentStreams: [LiveStream]
+
+    @AppStorage(PlaylistSelectionStore.key) private var selectedPlaylistID: String = ""
+    @State private var selectedSection: LiveTVSection?
+    @State private var showingSync = false
+    @State private var playingMedia: PlayableMedia?
+    @State private var showingSettings = false
+
+    @AppStorage(SortStorageKey.liveCategories) private var categorySortRaw: String = CategorySortOption.playlist.rawValue
+    @AppStorage(SortStorageKey.liveContent) private var contentSortRaw: String = ContentSortOption.playlist.rawValue
+    @AppStorage(LiveTVLayoutMode.storageKey) private var layoutModeRaw: String = LiveTVLayoutMode.list.rawValue
+
+    private var categorySort: CategorySortOption {
+        CategorySortOption(rawValue: categorySortRaw) ?? .playlist
+    }
+
+    private var contentSort: ContentSortOption {
+        ContentSortOption(rawValue: contentSortRaw) ?? .playlist
+    }
+
+    private var layoutMode: LiveTVLayoutMode {
+        LiveTVLayoutMode(rawValue: layoutModeRaw) ?? .list
+    }
+
+    /// Guide/List segmented switch shared across platforms.
+    private var layoutModePicker: some View {
+        Picker("Layout", selection: $layoutModeRaw) {
+            ForEach(LiveTVLayoutMode.allCases) { mode in
+                Label(mode.label, systemImage: mode.systemImage).tag(mode.rawValue)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+
+    /// The channel detail area for the selected section, honouring the current
+    /// layout mode. Shared by every platform's layout.
+    private func detail(for section: LiveTVSection) -> some View {
+        Group {
+            if layoutMode == .guide {
+                EPGGuideView(
+                    scope: section.scope,
+                    playlistPrefix: playlistPrefix,
+                    sort: contentSort,
+                    onPlay: { playChannel($0) },
+                    onPlayCatchup: { playCatchup($0, cell: $1) }
+                )
+            } else {
+                channelList(for: section)
+            }
+        }
+        .id("\(section.id)-\(contentSort.rawValue)-\(layoutModeRaw)")
+    }
+
+    @ViewBuilder
+    private func channelList(for section: LiveTVSection) -> some View {
+        #if os(tvOS)
+            TVChannelsList(scope: section.scope, playlistPrefix: playlistPrefix, sort: contentSort) { stream in
+                playChannel(stream)
+            }
+            .frame(maxWidth: .infinity)
+        #else
+            ChannelsList(scope: section.scope, playlistPrefix: playlistPrefix, sort: contentSort) { stream in
+                playChannel(stream)
+            }
+        #endif
+    }
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if playlists.isEmpty {
+                    ContentUnavailableView(
+                        "No Playlists",
+                        systemImage: "antenna.radiowaves.left.and.right",
+                        description: Text("Add a playlist in Settings to start watching live TV")
+                    )
+                } else if categories.isEmpty {
+                    VStack(spacing: 20) {
+                        ContentUnavailableView(
+                            "No Channels",
+                            systemImage: "antenna.radiowaves.left.and.right",
+                            description: Text("Sync your playlist to load live TV channels")
+                        )
+                    }
+                } else {
+                    // Resolve the rail's sections (and the displayed one) once
+                    // per render — both `displayedSection` and the layouts read
+                    // them, and each resolve filters + sorts the categories.
+                    let sections = sortedSections
+                    let displayed = displayedSection(in: sections)
+                    #if os(iOS)
+                        iOSLayout(sections: sections, displayed: displayed)
+                    #elseif os(tvOS)
+                        tvOSLayout(sections: sections, displayed: displayed)
+                    #else
+                        macOSLayout(sections: sections, displayed: displayed)
+                    #endif
+                }
+            }
+            .platformNavigationTitle("Live TV")
+            #if os(iOS)
+                // Inline title: the category selector sits directly below the
+                // nav bar, so a large title would rubber-band down and float
+                // behind the selector when the channel list is overscrolled.
+                .navigationBarTitleDisplayMode(.inline)
+            #endif
+            #if os(iOS) || os(macOS)
+            .toolbar {
+                if !playlists.isEmpty, !categories.isEmpty {
+                    ToolbarItem(placement: .principal) {
+                        layoutModePicker
+                            .frame(maxWidth: 240)
+                    }
+                }
+            }
+            #endif
+            .libraryToolbar(config: LibraryToolbarConfiguration(
+                playlists: playlists,
+                selectedPlaylistID: $selectedPlaylistID,
+                categorySortRaw: $categorySortRaw,
+                contentSortRaw: $contentSortRaw,
+                showingSync: $showingSync,
+                showingSettings: $showingSettings,
+                activePlaylist: activePlaylist
+            ))
+            .task {
+                if selectedSection == nil, let first = sortedSections.first {
+                    selectedSection = first
+                }
+            }
+            .onChange(of: selectedPlaylistID) {
+                // Switching playlists invalidates the current selection, which
+                // belongs to the previous playlist. Reset to the new playlist's
+                // first section so the channel list stays in sync.
+                selectedSection = sortedSections.first
+            }
+            #if os(iOS) || os(tvOS)
+            .fullScreenCover(item: $playingMedia) { media in
+                FullScreenPlayerView(media: media)
+            }
+            #endif
+        }
+    }
+
+    // MARK: - Platform-specific layouts
+
+    #if os(iOS)
+        private func iOSLayout(sections: [LiveTVSection], displayed: LiveTVSection?) -> some View {
+            VStack(spacing: 0) {
+                CategoryBar(
+                    sections: sections,
+                    selectedSection: $selectedSection
+                )
+
+                if let displayed {
+                    detail(for: displayed)
+                } else {
+                    ContentUnavailableView(
+                        "Select a Category",
+                        systemImage: "list.bullet",
+                        description: Text("Choose a category from the list")
+                    )
+                }
+            }
+        }
+    #endif
+
+    private func macOSLayout(sections: [LiveTVSection], displayed: LiveTVSection?) -> some View {
+        HStack(spacing: 0) {
+            CategorySidebar(
+                sections: sections,
+                selectedSection: $selectedSection
+            )
+            .frame(width: 200)
+
+            Divider()
+
+            if let displayed {
+                detail(for: displayed)
+            } else {
+                ContentUnavailableView(
+                    "Select a Category",
+                    systemImage: "list.bullet",
+                    description: Text("Choose a category from the sidebar")
+                )
+            }
+        }
+    }
+
+    #if os(tvOS)
+        /// One shape for both modes: a slim category rail on the leading edge —
+        /// topped by a single List/Guide switch — beside the content area, which
+        /// shows either the channel list or the programme guide. Sharing one rail
+        /// and one switch keeps moving between the two views consistent.
+        private func tvOSLayout(sections: [LiveTVSection], displayed: LiveTVSection?) -> some View {
+            TVLiveTVScreen(
+                sections: sections,
+                selectedSection: $selectedSection,
+                displayedSection: displayed,
+                layoutModeRaw: $layoutModeRaw,
+                contentSort: contentSort,
+                onPlay: { playChannel($0) },
+                onPlayCatchup: { playCatchup($0, cell: $1) },
+                playlistPrefix: playlistPrefix
+            )
+        }
+    #endif
+
+    /// The playlist whose content is currently shown, resolved from the global
+    /// selection. Falls back to the first playlist until the user picks one.
+    private var activePlaylist: Playlist? {
+        playlists.active(for: selectedPlaylistID)
+    }
+
+    /// The id prefix every Category / LiveStream of the active playlist shares.
+    private var playlistPrefix: String {
+        activePlaylist.map { "\($0.id.uuidString)-" } ?? ""
+    }
+
+    /// Categories scoped to the active playlist. The `@Query` fetches every
+    /// playlist's categories (SwiftData can't parameterize a `@Query` on view
+    /// state), so we isolate by the playlist-prefixed category `id` here.
+    private var sortedCategories: [Category] {
+        guard let playlistId = activePlaylist?.id else { return [] }
+        let prefix = "\(playlistId.uuidString)-"
+        return categorySort.sort(categories.filter { $0.id.hasPrefix(prefix) && !restriction.hides(categoryID: $0.id) })
+    }
+
+    /// Whether the active playlist has any favorited / recently-watched channels,
+    /// gating the corresponding virtual sections so empty collections never show.
+    /// Channels in restricted categories are excluded while a child profile is
+    /// active, so those collections never surface restricted content.
+    private var hasFavorites: Bool {
+        !playlistPrefix.isEmpty && favoriteStreams.contains {
+            $0.id.hasPrefix(playlistPrefix) && !restriction.hides(categoryID: $0.categoryId)
+        }
+    }
+
+    private var hasRecents: Bool {
+        !playlistPrefix.isEmpty && recentStreams.contains {
+            $0.id.hasPrefix(playlistPrefix) && !restriction.hides(categoryID: $0.categoryId)
+        }
+    }
+
+    /// The rail's entries: the virtual collections (when non-empty) pinned above
+    /// the synced categories.
+    private var sortedSections: [LiveTVSection] {
+        var sections: [LiveTVSection] = []
+        if hasFavorites { sections.append(.favorites) }
+        if hasRecents { sections.append(.recentlyWatched) }
+        sections.append(contentsOf: sortedCategories.map(LiveTVSection.category))
+        return sections
+    }
+
+    /// The section to render in the detail pane. Normally the user's selection,
+    /// but if that section just disappeared (a category hidden in Content
+    /// Management, or the last favorite removed) fall back to the first available
+    /// one rather than keep showing stale content.
+    private func displayedSection(in sections: [LiveTVSection]) -> LiveTVSection? {
+        guard let selectedSection else { return sections.first }
+        return sections.contains { $0.id == selectedSection.id }
+            ? selectedSection
+            : sections.first
+    }
+
+    private func playChannel(_ stream: LiveStream) {
+        guard let playlist = activePlaylist,
+              let media = PlayableMedia.from(stream: stream, playlist: playlist) else { return }
+        present(media)
+    }
+
+    /// Replays a past programme from the channel's catch-up archive.
+    private func playCatchup(_ stream: LiveStream, cell: EPGProgramCell) {
+        guard let playlist = activePlaylist,
+              let media = PlayableMedia.catchup(
+                  stream: stream,
+                  playlist: playlist,
+                  programTitle: cell.title,
+                  start: cell.start,
+                  end: cell.end
+              ) else { return }
+        present(media)
+    }
+
+    private func present(_ media: PlayableMedia) {
+        if ExternalPlayback.open(media) { return }
+        #if os(macOS)
+            openWindow(id: "player", value: media)
+        #else
+            playingMedia = media
+        #endif
+    }
+}
+
+// MARK: - Category Sidebar
+
+struct CategorySidebar: View {
+    let sections: [LiveTVSection]
+    @Binding var selectedSection: LiveTVSection?
+
+    var body: some View {
+        List(sections) { section in
+            let isSelected = selectedSection?.id == section.id
+            Button {
+                selectedSection = section
+            } label: {
+                HStack(spacing: 8) {
+                    if let icon = section.icon {
+                        Image(systemName: icon)
+                            .font(.subheadline)
+                            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                    }
+                    section.titleText
+                        .font(.headline)
+                        .foregroundStyle(isSelected ? Color.accentColor : Color.primary)
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .listRowBackground(
+                isSelected
+                    ? Color.accentColor.opacity(0.15)
+                    : Color.clear
+            )
+        }
+        #if !os(tvOS)
+        .listStyle(.sidebar)
+        #endif
+    }
+}
+
+// MARK: - iOS Category Bar
+
+#if os(iOS)
+    /// iOS category selector. A horizontal pill strip is unscannable once a
+    /// playlist syncs hundreds of categories, so the current section is shown as a
+    /// single button that opens a searchable list of every section instead.
+    struct CategoryBar: View {
+        let sections: [LiveTVSection]
+        @Binding var selectedSection: LiveTVSection?
+
+        @State private var showingPicker = false
+
+        /// The section the button reflects — the user's selection, or the first
+        /// available one if that selection has since disappeared (mirrors
+        /// `displayedSection(in:)`).
+        private var currentSection: LiveTVSection? {
+            guard let selectedSection else { return sections.first }
+            return sections.first { $0.id == selectedSection.id } ?? sections.first
+        }
+
+        var body: some View {
+            Button {
+                showingPicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    if let icon = currentSection?.icon {
+                        Image(systemName: icon)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    (currentSection?.titleText ?? Text("Select a Category"))
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Spacer()
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .padding(.horizontal)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .background(.bar)
+            .sheet(isPresented: $showingPicker) {
+                CategoryPickerSheet(sections: sections, selectedSection: $selectedSection)
+            }
+
+            Divider()
+        }
+    }
+
+    /// Searchable list of every Live TV section. Type to filter hundreds of
+    /// synced categories down to a handful; the virtual collections stay pinned
+    /// at the top while the search field is empty.
+    private struct CategoryPickerSheet: View {
+        let sections: [LiveTVSection]
+        @Binding var selectedSection: LiveTVSection?
+
+        @Environment(\.dismiss) private var dismiss
+        @State private var query = ""
+
+        private var filteredSections: [LiveTVSection] {
+            let trimmed = query.trimmingCharacters(in: .whitespaces)
+            guard !trimmed.isEmpty else { return sections }
+            return sections.filter { $0.title.localizedCaseInsensitiveContains(trimmed) }
+        }
+
+        var body: some View {
+            NavigationStack {
+                List(filteredSections) { section in
+                    let isSelected = selectedSection?.id == section.id
+                    Button {
+                        selectedSection = section
+                        dismiss()
+                    } label: {
+                        HStack(spacing: 12) {
+                            if let icon = section.icon {
+                                Image(systemName: icon)
+                                    .foregroundStyle(.secondary)
+                            }
+                            section.titleText
+                                .foregroundStyle(.primary)
+                            Spacer()
+                            if isSelected {
+                                Image(systemName: "checkmark")
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .listStyle(.plain)
+                .overlay {
+                    if filteredSections.isEmpty {
+                        ContentUnavailableView.search(text: query)
+                    }
+                }
+                .searchable(text: $query, prompt: "Search categories")
+                .navigationTitle("Categories")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+            }
+        }
+    }
+#endif
+
+// MARK: - Channels List
+
+struct ChannelsList: View {
+    let scope: LiveChannelScope
+    let playlistPrefix: String
+    let onPlay: (LiveStream) -> Void
+    @Environment(\.modelContext) private var modelContext
+    @Environment(\.contentRestriction) private var restriction
+    @Query private var streams: [LiveStream]
+    /// Now/next EPG for the visible channels, resolved in one off-main fetch
+    /// (see `ChannelEPGSnapshot`) instead of a per-card `@Query`.
+    @State private var epgByChannel: [String: ChannelEPG] = [:]
+    /// Observed so the EPG lookup refreshes when a guide import finishes.
+    @State private var epgSync = EPGSyncService.shared
+    /// How many channels are currently rendered. Grows by a page as the list
+    /// nears its end so a large category loads lazily instead of all at once.
+    @State private var visibleCount = LiveChannelQuery.pageSize
+
+    init(scope: LiveChannelScope, playlistPrefix: String, sort: ContentSortOption, onPlay: @escaping (LiveStream) -> Void) {
+        self.scope = scope
+        self.playlistPrefix = playlistPrefix
+        self.onPlay = onPlay
+        _streams = Query(LiveChannelQuery.descriptor(for: scope, sort: sort))
+    }
+
+    private var scopedStreams: [LiveStream] {
+        LiveChannelQuery.scoped(streams, scope: scope, playlistPrefix: playlistPrefix)
+            .excludingRestricted(restriction)
+    }
+
+    /// Clears a channel's watch timestamp so it drops out of the Recently
+    /// Watched list. The @Query-backed list updates once the change is saved.
+    private func removeFromRecentlyWatched(_ stream: LiveStream) {
+        stream.lastWatchedDate = nil
+        try? modelContext.save()
+    }
+
+    var body: some View {
+        let channels = scopedStreams
+        let visible = Array(channels.prefix(visibleCount))
+        ScrollView {
+            LazyVStack(spacing: 0) {
+                if channels.isEmpty {
+                    ContentUnavailableView(
+                        "No Channels",
+                        systemImage: "antenna.radiowaves.left.and.right",
+                        description: Text("This category has no channels")
+                    )
+                } else {
+                    ForEach(visible) { stream in
+                        Button {
+                            onPlay(stream)
+                        } label: {
+                            LiveStreamCardView(stream: stream, epg: epgByChannel[stream.epgChannelId ?? ""])
+                                .padding(.horizontal)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .recentlyWatchedRemoveMenu(scope == .recentlyWatched ? { removeFromRecentlyWatched(stream) } : nil)
+                        .onAppear {
+                            if stream.id == visible.last?.id, visibleCount < channels.count {
+                                visibleCount = min(visibleCount + LiveChannelQuery.pageSize, channels.count)
+                            }
+                        }
+
+                        Divider()
+                            .padding(.leading, 88)
+                    }
+                }
+            }
+        }
+        // Reload when the visible window or channel set changes, or a guide
+        // import settles — EPG is resolved only for the channels on screen.
+        .task(id: "\(channels.count)-\(visible.count)-\(epgSync.isSyncing)") {
+            await loadEPG(for: visible)
+        }
+    }
+
+    private func loadEPG(for channels: [LiveStream]) async {
+        let channelIds = Array(Set(channels.compactMap(\.epgChannelId).filter { !$0.isEmpty }))
+        guard !channelIds.isEmpty else {
+            epgByChannel = [:]
+            return
+        }
+        let container = modelContext.container
+        let now = Date()
+        epgByChannel = await Task.detached(priority: .userInitiated) {
+            ChannelEPGLoader.load(container: container, channelIds: channelIds, now: now)
+        }.value
+    }
+}
+
+#Preview("Empty") {
+    LiveTVView()
+        .modelContainer(for: Playlist.self, inMemory: true)
+}
+
+#Preview("With Data") {
+    LiveTVView()
+        .modelContainer(previewContainer())
+}
+
+#Preview("No Playlists") {
+    LiveTVView()
+}
