@@ -1,0 +1,5 @@
+# Sidecar + contract client deps (Linux). PyGObject (GTK4) is usually a
+# system package (apt install python3-gi gir1.2-gtk-4.0 gir1.2-gstreamer-1.0);
+# install it via the system package manager, not pip.
+httpx>=0.27
+websockets>=12.0
