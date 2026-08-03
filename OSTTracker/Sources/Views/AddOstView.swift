@@ -17,7 +17,7 @@ struct AddOstView: View {
     @FocusState private var sourceFocused: Bool
 
     /// Defaults the submitter to the roster's active person filter, so adding an
-    /// OST while filtered by someone attributes it to them out of the box.
+    /// OST while filtered by someone attributes it to them automatically.
     /// The filter can outlive the person it points at (deleted between the
     /// filter being captured and this sheet opening) — only seed a default
     /// that still resolves to a real roster entry.
