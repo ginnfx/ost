@@ -40,7 +40,7 @@ def _default_data_home() -> Path:
     """Per-OS user data directory (no macOS assumptions).
 
     macOS:    ~/Library/Application Support/<app>
-    Windows:  %APPDATA%\<app>   (fallback ~/AppData/Roaming/<app>)
+    Windows:  %APPDATA%\\<app>   (fallback ~/AppData/Roaming/<app>)
     Linux/BSD/other: $XDG_DATA_HOME/<app> (fallback ~/.local/share/<app>)
     """
     if sys.platform == "win32":

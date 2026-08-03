@@ -38,6 +38,13 @@ def test_import_stage_then_apply(fresh_db, tmp_path):
     _seed_competition(fresh_db)
     bundle = portable.export_bundle()
     try:
+        # Close the singleton first: Windows locks an open SQLite file, so the
+        # swap below has to happen with no connection holding it.
+        fresh_db.close()
+        from ost_tracker.db import connection
+
+        connection.set_db(None)
+
         # Wipe the live db to prove the staged import restores it.
         db_path = fresh_db.path
         (db_path.parent / "covers" / "seed.jpg").unlink()

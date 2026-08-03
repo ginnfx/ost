@@ -5,8 +5,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-CLIENT_DIR="$(dirname "$HERE")"          # clients/linux
-REPO_ROOT="$(dirname "$(dirname "$HERE")")"
+CLIENT_DIR="$(dirname "$HERE")"                 # clients/linux
+REPO_ROOT="$(dirname "$(dirname "$(dirname "$HERE")")")"   # repo root
 ARCH="${1:-$(uname -m)}"
 OUT="$CLIENT_DIR/out/app-$ARCH"
 RUNTIME_DIR="$CLIENT_DIR/runtime"
