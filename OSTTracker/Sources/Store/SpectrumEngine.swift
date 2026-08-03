@@ -26,6 +26,9 @@ nonisolated final class SpectrumEngine: @unchecked Sendable {
 
     private let fftSize = 1024
     private let log2n: vDSP_Length
+    // Reused across tap callbacks: consume() runs on the realtime audio thread,
+    // so nothing in it may allocate.
+    private var newBands = [Float](repeating: 0, count: bandCount)
     // nonisolated(unsafe): OpaquePointer isn't Sendable, so a plain `let` can't
     // be touched from deinit under strict concurrency. Safe: created in init,
     // used only on the single tap process thread, destroyed in deinit.
@@ -99,7 +102,7 @@ nonisolated final class SpectrumEngine: @unchecked Sendable {
             vDSP_vclr(&windowed[count], 1, vDSP_Length(fftSize - count))
         }
 
-        var newBands = [Float](repeating: 0, count: Self.bandCount)
+        for i in 0..<Self.bandCount { newBands[i] = 0 }
         realPart.withUnsafeMutableBufferPointer { real in
             imagPart.withUnsafeMutableBufferPointer { imag in
                 var split = DSPSplitComplex(realp: real.baseAddress!, imagp: imag.baseAddress!)
@@ -145,7 +148,10 @@ nonisolated final class SpectrumEngine: @unchecked Sendable {
         lock.unlock()
         guard lastUpdate > 0 else { return [Float](repeating: 0, count: Self.bandCount) }
         let decay = Float(exp(-4 * max(0, age - 0.12)))
-        return decay >= 0.999 ? copy : copy.map { $0 * decay }
+        guard decay < 0.999 else { return copy }
+        var scaled = copy
+        vDSP.multiply(decay, scaled, result: &scaled)
+        return scaled
     }
 
     /// A retained tap ready to drop into AVMutableAudioMixInputParameters, or
