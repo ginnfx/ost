@@ -74,6 +74,14 @@ class RosterPage(Page):
     def __init__(self, app) -> None:
         super().__init__("Roster")
         self.app = app
+        self._entries: list = []
+        self._revealed = True
+        self._people: list = []
+        self._search = self._entry("Search")
+        self._search.connect("changed", lambda *_: self.refresh())
+        self._filter = Gtk.DropDown()
+        self._filter.connect("notify::selected", lambda *_: self.refresh())
+        self.append(self._hbox(self._search, self._filter))
         self._list = self._list()
         self.append(self._scroll(self._list))
         self.append(self._button("Refresh", lambda _: self.refresh()))
@@ -81,26 +89,84 @@ class RosterPage(Page):
 
     def refresh(self) -> None:
         try:
-            entries = self.app.client.get_leaderboard()
-            self._fill_list(self._list, [
-                f"#{r.rank if r.rank is not None else '—':<4} "
-                f"{r.average if r.average is not None else '—':>6}  {r.ost.title}  ({r.ost.submitter_name or '?'})"
-                for r in entries
-            ])
-            self.status.set_text(f"{len(entries)} ranked")
+            self._entries = self.app.client.get_leaderboard()
+            self._revealed = self.app.client.get_reveal()
+            self._people = self.app.client.get_people()
+            self._filter.set_model(Gtk.StringList.new(
+                ["All submitters"] + [p.name for p in self._people]))
+            self._render()
         except Exception as exc:
             self.status.set_text(str(exc))
 
+    def _render(self) -> None:
+        query = self._search.get_text().strip()
+        idx = self._filter.get_selected()
+        submitter = None
+        if idx == Gtk.INVALID_LIST_POSITION or idx > 0:
+            if idx != Gtk.INVALID_LIST_POSITION and 0 < idx <= len(self._people):
+                submitter = self._people[idx - 1].name
+        visible = [
+            e for e in self._entries
+            if (not query or query.lower() in e.ost.title.lower())
+            and (submitter is None or e.ost.submitter_name == submitter)
+        ]
+        for child in list(self._list):
+            self._list.remove(child)
+        for entry in visible:
+            row = Gtk.ListBoxRow()
+            row.ost_id = entry.ost.id
+            row.set_child(self._card(entry))
+            self._list.append(row)
+        self.status.set_text(
+            f"{len(visible)} of {len(self._entries)} — reveal {'unlocked' if self._revealed else 'locked'}")
+
+    def _card(self, entry) -> Gtk.Box:
+        from . import covers
+
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        box.add_css_class("card")
+
+        picture = Gtk.Picture.new_for_pixbuf(covers.load(entry.ost.cover_image_path))
+        picture.set_size_request(96, 96)
+        box.append(picture)
+
+        title = Gtk.Label(label=entry.ost.title, xalign=0.0, hexpand=True, wrap=True)
+        submit = Gtk.Label(label=entry.ost.submitter_name or "?", xalign=0.0)
+        submit.add_css_class("dim-label")
+        score = Gtk.Label(label=f"{entry.average:.2f}" if entry.average is not None else "—", xalign=0.0)
+        text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, hexpand=True)
+        text.append(title)
+        text.append(submit)
+        text.append(score)
+        box.append(text)
+
+        badge = Gtk.Label(label=self._rank_text(entry.rank))
+        badge.add_css_class("rank-badge")
+        badge.add_css_class(self._rank_class(entry.rank))
+        box.append(badge)
+
+        details = Gtk.Button(label="Details")
+        details.connect("clicked", lambda _, e=entry: self._open_detail(e))
+        box.append(details)
+        return box
+
+    def _rank_text(self, rank) -> str:
+        return f"#{rank}" if self._revealed and rank is not None else "·"
+
+    def _rank_class(self, rank) -> str:
+        if not self._revealed or rank is None:
+            return "rank-other"
+        return {1: "rank-1", 2: "rank-2", 3: "rank-3"}.get(rank, "rank-other")
+
     def _on_activate(self, box: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
-        label = row.get_child()
-        title = label.get_text() if isinstance(label, Gtk.Label) else ""
-        try:
-            entries = self.app.client.get_leaderboard()
-            match = next((r for r in entries if r.ost.title in title), None)
-            if match:
-                self.app.play_ost(match.ost.id)
-        except Exception as exc:
-            self.status.set_text(str(exc))
+        ost_id = getattr(row, "ost_id", None)
+        if ost_id:
+            self.app.play_ost(ost_id)
+
+    def _open_detail(self, entry) -> None:
+        from .detail import DetailWindow
+
+        DetailWindow(self.app, entry).present()
 
 
 class PeoplePage(Page):
@@ -404,6 +470,13 @@ class SettingsPage(Page):
         self.app = app
         self._info = Gtk.Label(label="", xalign=0.0, wrap=True)
         self.append(self._info)
+        swatches = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        for hex_value in theme.PRESETS:
+            swatch = Gtk.Button(label=hex_value)
+            swatch.set_tooltip_text(hex_value)
+            swatch.connect("clicked", lambda _, h=hex_value: self._set_accent(h))
+            swatches.append(swatch)
+        self.append(self._hbox(Gtk.Label(label="Chrome accent:"), swatches))
         self.append(self._button("Refresh", lambda _: self.refresh()))
 
     def refresh(self) -> None:
@@ -412,6 +485,7 @@ class SettingsPage(Page):
             self._info.set_text(
                 "Data dir:  ~/.local/share/ost-tracker (or $XDG_DATA_HOME)\n"
                 f"Sidecar port:  {self.app.port}\n"
+                f"Chrome accent: {theme.accent()} (tap a swatch to change)\n"
                 f"Elimination threshold: {board.threshold} (edit on the Slices page)\n"
                 f"Elimination slice size: {board.slice_size}\n\n"
                 "OST Tracker for Linux — the Python sidecar does all the work;\n"
@@ -419,6 +493,10 @@ class SettingsPage(Page):
             )
         except Exception as exc:
             self._info.set_text(str(exc))
+
+    def _set_accent(self, hex_value: str) -> None:
+        theme.set_accent(hex_value)
+        self._info.set_text(f"Chrome accent set to {hex_value}")
 
 
 class CoverPage(Page):
