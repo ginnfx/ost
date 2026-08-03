@@ -7,11 +7,19 @@ namespace OstTracker;
 public sealed partial class MainWindow : Window
 {
     public static MainWindow? Instance { get; private set; }
+    public static Frame? ContentFrame { get; private set; }
 
     public MainWindow()
     {
         Instance = this;
         InitializeComponent();
+        ContentFrame = this.FindName("ContentFrame") as Frame;
+
+        // Bottom now-playing bar in the second grid row.
+        var bar = new Views.NowPlayingBar();
+        Grid.SetRow(bar, 1);
+        ((Grid)Content).Children.Add(bar);
+
         Closed += OnClosed;
     }
 
