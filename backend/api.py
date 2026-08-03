@@ -21,15 +21,18 @@ when its parent dies (ppid poll) so a crashed app never leaks a sidecar.
 from __future__ import annotations
 
 import asyncio
+import errno
 import json
 import logging
 import os
 import secrets
 import socket
 import sys
+import tempfile
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime
+from pathlib import Path
 from typing import Optional
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -43,8 +46,8 @@ _writable_site = os.environ.get("OST_WRITABLE_SITE")
 if _writable_site and os.path.isdir(_writable_site):
     sys.path.insert(0, _writable_site)
 
-from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import BackgroundTask, FileResponse, JSONResponse
 from pydantic import BaseModel
 
 from ost_tracker.db import history_repo, migrations, notes_repo, ost_repo, people_repo, rating_repo
@@ -52,6 +55,7 @@ from ost_tracker.db.models import HistoryEntry, Note, Ost, OstStats, Person, Rat
 from ost_tracker.services import batches as batches_service
 from ost_tracker.services import coverart
 from ost_tracker.services import elimination as elimination_service
+from ost_tracker.services import portable
 from ost_tracker.services.link_resolver import resolve_playback
 
 TOKEN = os.environ.get("OST_API_TOKEN") or secrets.token_hex(16)
@@ -499,17 +503,38 @@ def _spawn(target, *args) -> None:
 
 
 def _watchdog() -> None:
-    """Exit when the parent process dies (launchd re-parents us to pid 1)."""
+    """Exit when the parent process dies.
+
+    POSIX: an orphan is re-parented (ppid changes away from the original
+    parent), which the macOS/GTK hosts rely on. Windows: processes are not
+    re-parented, so probe the recorded parent pid for existence instead; the
+    WinUI host additionally enforces teardown with a Job Object, making this
+    a second layer there.
+    """
     import time
+
+    parent = os.getppid()
     while True:
-        if os.getppid() == 1:
-            os._exit(0)
         time.sleep(1.0)
+        if sys.platform == "win32":
+            try:
+                os.kill(parent, 0)
+            except OSError as exc:
+                # ESRCH (posix) / WinError 87 "invalid parameter" (win32)
+                # mean the process is gone; EPERM / WinError 5 mean it is
+                # still alive but not signalable.
+                if getattr(exc, "winerror", None) == 87 or getattr(exc, "errno", None) == errno.ESRCH:
+                    os._exit(0)
+        elif os.getppid() != parent:
+            os._exit(0)
 
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):
     hub.loop = asyncio.get_running_loop()
+    # A staged portable import (see /import/portable) is swapped in before the
+    # DB opens, so the running connection never fights the file.
+    await asyncio.to_thread(portable.apply_staged_import)
     # Database is thread-safe (single connection, RLock-guarded, see
     # connection.py) — run off the loop so a first-launch backfill can't
     # freeze socket accept while it churns through history rows.
@@ -830,6 +855,35 @@ def player_stop() -> PlaybackState:
     return state
 
 
+# --- portable competition bundle -------------------------------------------------
+
+
+@app.get("/export/portable")
+def export_portable() -> FileResponse:
+    """Download a zip of ost.db + covers/ so a competition can move platforms."""
+    bundle = portable.export_bundle()
+    return FileResponse(
+        bundle,
+        media_type="application/zip",
+        filename="ost-tracker-portable.zip",
+        background=BackgroundTask(bundle.unlink, missing_ok=True),
+    )
+
+
+@app.post("/import/portable", status_code=202)
+async def import_portable(bundle: UploadFile = File(...)) -> dict:
+    """Stage a portable zip; applied on the next launch (see lifespan)."""
+    fd, tmp_name = tempfile.mkstemp(suffix=".zip")
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        tmp.write_bytes(await bundle.read())
+        portable.stage_import(tmp)
+    finally:
+        tmp.unlink(missing_ok=True)
+    return {"staged": True, "applies_after": "restart"}
+
+
 # --- websocket ------------------------------------------------------------------
 
 
@@ -859,13 +913,15 @@ async def ws_endpoint(ws: WebSocket) -> None:
 def main() -> None:
     import uvicorn
 
-    # Become our own process-group leader so the Swift host can tear down the
-    # whole sidecar tree with one kill(-pgid). No-op/EPERM under a job-control
-    # shell that already made us a leader.
-    try:
-        os.setpgid(0, 0)
-    except OSError:
-        pass
+    # Become our own process-group leader so the Swift/GTK hosts can tear
+    # down the whole sidecar tree with one kill(-pgid). No-op/EPERM under a
+    # job-control shell that already made us a leader; absent on Windows,
+    # where the host kills the tree with a Job Object instead.
+    if hasattr(os, "setpgid"):
+        try:
+            os.setpgid(0, 0)
+        except OSError:
+            pass
 
     global _bound_port
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

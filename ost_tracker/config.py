@@ -1,14 +1,15 @@
 """Filesystem paths and app-wide constants.
 
-All persistent state (SQLite DB, cached cover art) lives under the macOS
-Application Support directory, never next to the executable. This keeps a
-packaged ``.app`` bundle read-only and the user's data safe across updates.
+All persistent state (SQLite DB, cached cover art) lives under the user's
+per-OS data directory, never next to the executable. This keeps packaged
+apps read-only and the user's data safe across updates.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from pathlib import Path
 from typing import Optional
 
@@ -35,17 +36,32 @@ COVER_RENDER_SIZE = 300
 COVER_STORE_SIZE = 600
 
 
+def _default_data_home() -> Path:
+    """Per-OS user data directory (no macOS assumptions).
+
+    macOS:    ~/Library/Application Support/<app>
+    Windows:  %APPDATA%\<app>   (fallback ~/AppData/Roaming/<app>)
+    Linux/BSD/other: $XDG_DATA_HOME/<app> (fallback ~/.local/share/<app>)
+    """
+    if sys.platform == "win32":
+        appdata = os.environ.get("APPDATA")
+        base = Path(appdata) if appdata else Path.home() / "AppData" / "Roaming"
+        return base / APP_FOLDER_NAME
+    if sys.platform == "darwin":
+        return Path.home() / "Library" / "Application Support" / APP_FOLDER_NAME
+    xdg = os.environ.get("XDG_DATA_HOME")
+    base = Path(xdg) if xdg else Path.home() / ".local" / "share"
+    return base / APP_FOLDER_NAME
+
+
 def app_support_dir() -> Path:
-    """Return (creating if needed) the app's Application Support directory.
+    """Return (creating if needed) the app's data directory.
 
     Honours ``OST_TRACKER_HOME`` so tests and dev runs can redirect all state
     to a scratch directory without touching the real user data.
     """
     override = os.environ.get("OST_TRACKER_HOME")
-    if override:
-        base = Path(override).expanduser()
-    else:
-        base = Path.home() / "Library" / "Application Support" / APP_FOLDER_NAME
+    base = Path(override).expanduser() if override else _default_data_home()
     base.mkdir(parents=True, exist_ok=True)
     return base
 
