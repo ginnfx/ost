@@ -52,6 +52,13 @@ Copy-Item -Recurse (Join-Path $Root "..\..\ost_tracker") (Join-Path $Out "ost_tr
 
 Write-Host "staged app at $Out"
 
+# 3b) Zip the whole app folder so Windows users get one runnable download
+# (the bare .exe can't run without the runtime + backend beside it).
+$Zip = Join-Path $Root "out\OstTracker-windows-$Arch.zip"
+Remove-Item -Force $Zip -ErrorAction SilentlyContinue
+Compress-Archive -Path (Join-Path $Out "*") -DestinationPath $Zip
+Write-Host "zip at $Zip"
+
 # 4) Optional MSIX bundle. Needs the MSIX Packaging Tools / Windows SDK on
 #    PATH (MakeAppx.exe) — run on a Windows box.
 if ($Msix) {

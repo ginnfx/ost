@@ -23,6 +23,7 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+      - run: brew install xcodegen
       - run: bash packaging/01_fetch_runtime.sh
       - run: bash packaging/02_install_deps.sh
       - run: cd OSTTracker && xcodegen generate
@@ -66,9 +67,9 @@ jobs:
         with:
           name: windows-${{ matrix.arch }}
           path: |
-            clients/windows/out/app-${{ matrix.arch }}/OSTTracker.exe
-            clients/windows/out/OSTTracker-*.msix
-            clients/windows/out/OSTTracker-*-setup.exe
+            clients/windows/out/OstTracker-windows-${{ matrix.arch }}.zip
+            clients/windows/out/OSTTracker-${{ matrix.arch }}-setup.exe
+            clients/windows/out/OstTracker-${{ matrix.arch }}.msix
 
   linux:
     name: Linux ${{ matrix.arch }}
@@ -95,8 +96,12 @@ jobs:
   ios:
     name: iOS (TestFlight ipa)
     runs-on: macos-14
+    # Needs the Apple Developer secret; without it the job fails but must not
+    # block the desktop release from drafting.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
+      - run: brew install xcodegen
       - name: Build + export ipa
         env:
           TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
