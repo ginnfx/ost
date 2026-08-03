@@ -58,7 +58,8 @@ def add_entry(
         ),
     )
     created = get_entry(new_id)
-    assert created is not None
+    if created is None:
+        raise RuntimeError(f"history entry {new_id} missing after insert")
     return created
 
 

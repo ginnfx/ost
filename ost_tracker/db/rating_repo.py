@@ -82,16 +82,30 @@ def ratings_for_ost(ost_id: int) -> list[Rating]:
         """,
         (ost_id,),
     )
-    return [
-        Rating(
-            ost_id=row["ost_id"],
-            rater_id=row["rater_id"],
-            rater_name=row["rater_name"],
-            score=row["score"],
-            updated_at=row["updated_at"],
-        )
-        for row in rows
-    ]
+    return [_row_to_rating(row) for row in rows]
+
+
+def all_ratings() -> list[Rating]:
+    """Every rating in one joined query (avoids the per-OST N+1)."""
+    rows = get_db().query(
+        """
+        SELECT r.ost_id, r.rater_id, p.name AS rater_name, r.score, r.updated_at
+        FROM ratings r
+        JOIN people p ON p.id = r.rater_id
+        ORDER BY r.ost_id, p.name COLLATE NOCASE
+        """
+    )
+    return [_row_to_rating(row) for row in rows]
+
+
+def _row_to_rating(row) -> Rating:
+    return Rating(
+        ost_id=row["ost_id"],
+        rater_id=row["rater_id"],
+        rater_name=row["rater_name"],
+        score=row["score"],
+        updated_at=row["updated_at"],
+    )
 
 
 def scores_for_ost(ost_id: int) -> list[float]:

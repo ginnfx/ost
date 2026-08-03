@@ -97,19 +97,42 @@ def config_file_path() -> Path:
     return app_support_dir() / "config.json"
 
 
+_config_cache: Optional[dict] = None
+_config_mtime: Optional[float] = None
+
+
 def load_config() -> dict:
+    """Read config.json, cached until the file's mtime changes. The cover
+    search and playback paths call this per request; re-reading the file each
+    time is a pointless disk hit on every keystroke."""
+    global _config_cache, _config_mtime
     p = config_file_path()
+    try:
+        mtime = p.stat().st_mtime if p.exists() else None
+    except OSError:
+        mtime = None
+    if _config_mtime == mtime and _config_cache is not None:
+        return _config_cache
     if p.exists():
         try:
             data = json.loads(p.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
+            _config_cache = data if isinstance(data, dict) else {}
         except (ValueError, OSError):
-            return {}
-    return {}
+            _config_cache = {}
+    else:
+        _config_cache = {}
+    _config_mtime = mtime
+    return _config_cache
 
 
 def save_config(cfg: dict) -> None:
+    global _config_cache, _config_mtime
     config_file_path().write_text(json.dumps(cfg, indent=2), encoding="utf-8")
+    _config_cache = dict(cfg)
+    try:
+        _config_mtime = config_file_path().stat().st_mtime
+    except OSError:
+        _config_mtime = None
 
 
 def get_bing_api_key() -> Optional[str]:

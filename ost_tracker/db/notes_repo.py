@@ -47,7 +47,8 @@ def add_note(title: str, note: str = "") -> Note:
         "INSERT INTO notes (title, note) VALUES (?, ?)", (title, note or "")
     )
     created = get_note(new_id)
-    assert created is not None
+    if created is None:
+        raise RuntimeError(f"note {new_id} missing after insert")
     return created
 
 
