@@ -96,6 +96,11 @@ def apply_staged_import() -> bool:
         return False
 
     db = config.database_path()
+    # Drop any stale WAL sidecars next to the destination: a half-checkpointed
+    # -wal/-shm pair from an earlier connection can wedge the new file on
+    # Windows when SQLite reopens it in WAL mode.
+    for sidecar in (Path(str(db) + "-wal"), Path(str(db) + "-shm")):
+        sidecar.unlink(missing_ok=True)
     if db.exists():
         os.replace(db, db.with_name("ost.db.prior"))
     os.replace(staging / "ost.db", db)
