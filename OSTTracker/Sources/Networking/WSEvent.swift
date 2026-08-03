@@ -22,7 +22,7 @@ nonisolated enum WSEvent: Sendable {
     case revealState(unlocked: Bool)
 }
 
-extension WSEvent: Decodable {
+nonisolated extension WSEvent: Decodable {
     private enum CodingKeys: String, CodingKey {
         case type, payload
     }
