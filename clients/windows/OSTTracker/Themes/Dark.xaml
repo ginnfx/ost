@@ -1,0 +1,54 @@
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Color x:Key="BgColor">#101014</Color>
+    <Color x:Key="BgRaisedColor">#18181E</Color>
+    <Color x:Key="CardSurfaceColor">#1C1C24</Color>
+    <Color x:Key="TextPrimaryColor">#F5F2EA</Color>
+    <Color x:Key="TextDimColor">#9B97A8</Color>
+    <Color x:Key="GoldColor">#F2B705</Color>
+    <Color x:Key="PinkColor">#FF3D81</Color>
+    <Color x:Key="RustColor">#E8541E</Color>
+    <Color x:Key="AccentColor">#20D760</Color>
+
+    <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}"/>
+    <SolidColorBrush x:Key="BgRaisedBrush" Color="{StaticResource BgRaisedColor}"/>
+    <SolidColorBrush x:Key="CardSurfaceBrush" Color="{StaticResource CardSurfaceColor}"/>
+    <SolidColorBrush x:Key="TextPrimaryBrush" Color="{StaticResource TextPrimaryColor}"/>
+    <SolidColorBrush x:Key="TextDimBrush" Color="{StaticResource TextDimColor}"/>
+    <SolidColorBrush x:Key="GoldBrush" Color="{StaticResource GoldColor}"/>
+    <SolidColorBrush x:Key="PinkBrush" Color="{StaticResource PinkColor}"/>
+    <SolidColorBrush x:Key="RustBrush" Color="{StaticResource RustColor}"/>
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}"/>
+
+    <Style TargetType="Page">
+        <Setter Property="Background" Value="{StaticResource BgBrush}"/>
+        <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+    </Style>
+
+    <Style x:Key="CardBorder" TargetType="Border">
+        <Setter Property="Background" Value="{StaticResource CardSurfaceBrush}"/>
+        <Setter Property="CornerRadius" Value="10"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="BorderBrush" Value="#33FFFFFF"/>
+    </Style>
+
+    <Style x:Key="RankBadge" TargetType="Border">
+        <Setter Property="CornerRadius" Value="14"/>
+        <Setter Property="Padding" Value="6,2"/>
+    </Style>
+
+    <Style x:Key="RankBadgeGold" TargetType="Border" BasedOn="{StaticResource RankBadge}">
+        <Setter Property="Background" Value="{StaticResource GoldBrush}"/>
+    </Style>
+    <Style x:Key="RankBadgePink" TargetType="Border" BasedOn="{StaticResource RankBadge}">
+        <Setter Property="Background" Value="{StaticResource PinkBrush}"/>
+    </Style>
+    <Style x:Key="RankBadgeRust" TargetType="Border" BasedOn="{StaticResource RankBadge}">
+        <Setter Property="Background" Value="{StaticResource RustBrush}"/>
+    </Style>
+    <Style x:Key="RankBadgeDim" TargetType="Border" BasedOn="{StaticResource RankBadge}">
+        <Setter Property="Background" Value="#33FFFFFF"/>
+    </Style>
+</ResourceDictionary>
