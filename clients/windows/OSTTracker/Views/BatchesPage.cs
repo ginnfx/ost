@@ -9,6 +9,7 @@ public sealed class BatchesPage : Page
     private readonly ListView _list = Ui.StringList("No batches yet — randomize to arrange the OSTs into days.");
     private readonly ComboBox _count = new() { PlaceholderText = "Days (1–8)" };
     private readonly TextBlock _status = new();
+    private bool _loaded;
 
     public BatchesPage()
     {
@@ -23,6 +24,7 @@ public sealed class BatchesPage : Page
         };
         _count.SelectionChanged += async (_, _) =>
         {
+            if (!_loaded) return;   // no accidental write while the page first renders
             if (_count.SelectedItem is string s && int.TryParse(s, out int n))
             {
                 await AppServices.Client!.PutBatchCount(n);
@@ -46,6 +48,7 @@ public sealed class BatchesPage : Page
                 .Select(g => $"Day {g.Day}: " + string.Join(", ", g.Slots.Select(s => s.Ost.Title)))
                 .ToList();
             _status.Text = batches.GeneratedAt is null ? "not yet generated" : $"generated {batches.GeneratedAt}";
+            _loaded = true;
         }
         catch (Exception ex)
         {

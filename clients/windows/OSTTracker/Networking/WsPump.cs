@@ -11,7 +11,6 @@ namespace OstTracker.Networking;
 public sealed class WsPump : IAsyncDisposable
 {
     public event Action<string, JsonElement>? EventReceived;
-    public event Action? ConnectionChanged;
 
     private readonly Uri _uri;
     private readonly string _token;
@@ -41,7 +40,6 @@ public sealed class WsPump : IAsyncDisposable
                 ws.Options.SetRequestHeader("X-OST-Token", _token);
                 ws.Options.KeepAliveInterval = TimeSpan.FromSeconds(20);
                 await ws.ConnectAsync(_uri, ct);
-                ConnectionChanged?.Invoke();
                 delayMs = 500;
                 await ReceiveLoopAsync(ws, ct);
             }

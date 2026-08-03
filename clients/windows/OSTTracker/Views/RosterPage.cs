@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using OstTracker.Networking;
+using OstTracker.Playback;
 
 namespace OstTracker.Views;
 
@@ -61,8 +62,14 @@ public sealed class RosterPage : Page
             var match = entries.FirstOrDefault(r => line.Contains(r.Ost.Title, StringComparison.Ordinal));
             if (match == null) return;
             var state = await AppServices.Client.Play(match.Ost.Id);
-            if (state.Status == "failed" && state.WatchUrl != null)
+            if (state.Status == "playing" && !string.IsNullOrEmpty(state.StreamUrl))
+            {
+                PlaybackService.Instance.Play(state.StreamUrl, state.WatchUrl);
+            }
+            else if (state.Status == "failed" && !string.IsNullOrEmpty(state.WatchUrl))
+            {
                 await Windows.System.Launcher.LaunchUriAsync(new Uri(state.WatchUrl));
+            }
         }
         catch (Exception ex)
         {
