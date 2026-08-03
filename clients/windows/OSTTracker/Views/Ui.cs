@@ -25,15 +25,9 @@ public static class Ui
 
     public static ListView StringList(string emptyText)
     {
-        var list = new ListView { SelectionMode = ListViewSelectionMode.None };
+        var list = new ListView { SelectionMode = ListViewSelectionMode.Single };
         list.ItemsSource = new[] { emptyText };
         return list;
-    }
-
-    public static void SetStatus(Page page, string message)
-    {
-        if (page.Content is StackPanel sp && sp.Children.Count > 0 && sp.Children[^1] is TextBlock tb && tb.Tag is null)
-            tb.Text = message;
     }
 
     public static Button Button(string label) => new() { Content = label };

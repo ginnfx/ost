@@ -57,4 +57,3 @@ public sealed record EliminationThresholdIn(int Threshold);
 public sealed record PlayIn(int OstId);
 public sealed record SeekIn(double Position);
 public sealed record CoverSetIn(string ImageUrl);
-public sealed record HistoryMatchQuery(string? Title = null, string? Source = null);
