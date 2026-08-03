@@ -36,3 +36,9 @@ build/
 .swiftpm/
 *.swiftmodule/
 DerivedData/
+
+# Reference checkouts + font source download — not part of the project.
+# (GlowEffectKit-main stays tracked: the app links it.)
+Lume-main/
+LiquidGlassReference-main/
+font/
