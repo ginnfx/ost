@@ -1,0 +1,126 @@
+name: release
+
+# Tag-triggered multi-platform release: builds the macOS app (universal),
+# the WinUI 3 client (x64 + arm64), the GTK4 client (x64 + arm64), and the
+# iOS app, then drafts a GitHub Release with all artifacts + checksums.
+#
+# Runner notes (verify against current GitHub labels when first running):
+#   macos-14 runs on Apple Silicon (arm64); a universal macOS build needs a
+#   Developer ID + notarization secrets (CODESIGN_IDENTITY / notary creds).
+#   windows-11-arm is the public ARM64 Windows runner; ubuntu-24.04-arm is
+#   the public ARM64 Linux runner.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    name: macOS universal
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash packaging/01_fetch_runtime.sh
+      - run: bash packaging/02_install_deps.sh
+      - run: cd OSTTracker && xcodegen generate
+      - name: Build universal Release
+        run: |
+          cd OSTTracker
+          xcodebuild -project OSTTracker.xcodeproj -scheme OSTTracker \
+            -configuration Release -derivedDataPath build \
+            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO build -quiet
+      - name: Package dmg
+        run: |
+          APP=OSTTracker/build/Build/Products/Release/OSTTracker.app
+          bash packaging/05_codesign.sh "$APP"
+          hdiutil create -volname OSTTracker -srcfolder "$APP" \
+            -ov -format UDZO out/OSTTracker-macOS-universal.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: out/*.dmg
+
+  windows:
+    name: Windows ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            os: windows-latest
+          - arch: arm64
+            os: windows-11-arm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build
+        shell: pwsh
+        run: ./clients/windows/packaging/build.ps1 -Arch ${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-${{ matrix.arch }}
+          path: |
+            clients/windows/out/app-${{ matrix.arch }}/OSTTracker.exe
+            clients/windows/out/OSTTracker-*.msix
+            clients/windows/out/OSTTracker-*-setup.exe
+
+  linux:
+    name: Linux ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            os: ubuntu-latest
+          - arch: aarch64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bundle
+        run: ./clients/linux/packaging/build.sh ${{ matrix.arch }}
+      - name: Tar bundle
+        run: tar -czf OSTTracker-linux-${{ matrix.arch }}.tar.gz -C clients/linux/out/app-${{ matrix.arch }} .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: OSTTracker-linux-${{ matrix.arch }}.tar.gz
+
+  ios:
+    name: iOS (TestFlight ipa)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build + export ipa
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: bash packaging/08_ios_build.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: packaging/runtime/export/*.ipa
+
+  release:
+    name: Draft GitHub Release
+    needs: [macos, windows, linux, ios]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: _artifacts
+          merge-multiple: true
+      - name: Checksums
+        run: |
+          cd _artifacts
+          sha256sum * > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: _artifacts/**

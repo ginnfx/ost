@@ -9,7 +9,17 @@ PYTHON_BIN="$PYTHON_DIR/bin/python3.11"
 
 # Pinned toolchain. Bump deliberately, never implicitly.
 PBS_TAG="20260623"
-PBS_ASSET="cpython-3.11.15+${PBS_TAG}-aarch64-apple-darwin-install_only.tar.gz"
+
+# Build architecture -> python-build-standalone triplet. macOS scripts default
+# to Apple Silicon; set OST_ARCH=x86_64 for an Intel build. The Windows/Linux
+# clients use their own scripts (clients/*/packaging) with win/linux triplets.
+OST_ARCH="${OST_ARCH:-aarch64}"
+case "$OST_ARCH" in
+  aarch64) PBS_TRIPLET="aarch64-apple-darwin" ;;
+  x86_64)  PBS_TRIPLET="x86_64-apple-darwin" ;;
+  *) echo "unknown OST_ARCH: $OST_ARCH" >&2; exit 1 ;;
+esac
+PBS_ASSET="cpython-3.11.15+${PBS_TAG}-${PBS_TRIPLET}-install_only.tar.gz"
 PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/${PBS_TAG}/${PBS_ASSET}"
 
 # Backend deps bundled into the signed runtime. yt-dlp is ALSO bundled as a
