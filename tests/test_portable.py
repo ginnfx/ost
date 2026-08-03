@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import zipfile
+from pathlib import Path
 
 from ost_tracker.db import ost_repo, people_repo
 from ost_tracker.services import portable
