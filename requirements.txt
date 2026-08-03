@@ -5,6 +5,7 @@
 # Sidecar API (backend/api.py), consumed by the SwiftUI frontend.
 fastapi>=0.115
 uvicorn[standard]>=0.30
+python-multipart>=0.0.9   # /import/portable (multipart upload)
 
 # Domain layer: cover-art HTTP + image caching.
 httpx>=0.27

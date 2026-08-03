@@ -25,7 +25,7 @@ PBS_URL="https://github.com/astral-sh/python-build-standalone/releases/download/
 # Backend deps bundled into the signed runtime. yt-dlp is ALSO bundled as a
 # fallback, but the live copy lives in the user-writable layer (see api.py
 # sys.path bootstrap) so it can be upgraded without re-signing.
-BUNDLE_DEPS=(httpx pillow fastapi "uvicorn[standard]" yt-dlp)
+BUNDLE_DEPS=(httpx pillow fastapi "uvicorn[standard]" python-multipart yt-dlp)
 
 # Signing. Override with a real identity for release:
 #   CODESIGN_IDENTITY="Developer ID Application: Name (TEAMID)" ./05_codesign.sh <app>
