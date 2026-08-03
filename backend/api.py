@@ -48,8 +48,9 @@ if _writable_site and os.path.isdir(_writable_site):
     sys.path.insert(0, _writable_site)
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import BackgroundTask, FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
+from starlette.background import BackgroundTask
 
 from ost_tracker.db import history_repo, migrations, notes_repo, ost_repo, people_repo, rating_repo, settings_repo
 from ost_tracker.db.models import HistoryEntry, Note, Ost, OstStats, Person, Rating
