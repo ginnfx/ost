@@ -1,20 +1,13 @@
-// Owns the Python FastAPI sidecar's lifecycle: spawn, handshake, teardown.
-// The sidecar makes itself a process-group leader (api.py main()), so
+// The macOS host owns the Python FastAPI sidecar's lifecycle: spawn, handshake,
+// teardown. The sidecar makes itself a process-group leader (api.py main()), so
 // teardown is one kill(-pgid, SIGTERM) with a SIGKILL backstop. Python also
 // runs a parent-death watchdog, so even a SIGKILL'd host never leaks it.
+//
+// iOS uses EmbeddedSidecar instead (sandbox forbids subprocesses).
+
+#if os(macOS)
 
 import Foundation
-
-nonisolated struct SidecarHandshake: Sendable {
-    let port: Int
-    let token: String
-}
-
-nonisolated enum SidecarError: Error {
-    case exitedBeforeHandshake
-    case handshakeTimeout
-    case malformedHandshake(String)
-}
 
 nonisolated struct SidecarConfiguration: Sendable {
     let pythonPath: String
@@ -86,7 +79,7 @@ final class SidecarProcess {
         let readTask = Task { [stdoutPipe] () -> SidecarHandshake in
             for try await line in stdoutPipe.fileHandleForReading.bytes.lines {
                 guard line.hasPrefix(Self.handshakePrefix) else { continue }
-                return try Self.parseHandshake(line)
+                return try SidecarHandshakeParser.parse(line)
             }
             throw SidecarError.exitedBeforeHandshake
         }
@@ -127,16 +120,7 @@ final class SidecarProcess {
     }
 
     nonisolated static func parseHandshake(_ line: String) throws -> SidecarHandshake {
-        var port: Int?
-        var token: String?
-        for field in line.split(separator: " ") {
-            if let value = field.dropPrefixIfPresent("port=") { port = Int(value) }
-            if let value = field.dropPrefixIfPresent("token=") { token = String(value) }
-        }
-        guard let port, let token, !token.isEmpty else {
-            throw SidecarError.malformedHandshake(line)
-        }
-        return SidecarHandshake(port: port, token: token)
+        try SidecarHandshakeParser.parse(line)
     }
 
     /// SIGTERM the whole sidecar process group, wait out the grace period,
@@ -162,8 +146,4 @@ final class SidecarProcess {
     }
 }
 
-private extension Substring {
-    nonisolated func dropPrefixIfPresent(_ prefix: String) -> Substring? {
-        hasPrefix(prefix) ? dropFirst(prefix.count) : nil
-    }
-}
+#endif  // os(macOS)

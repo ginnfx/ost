@@ -2,7 +2,9 @@
 // from here. Theme.verify() asserts the tokens at launch (DEBUG)
 // instead of trusting screenshots.
 
+#if os(macOS)
 import AppKit
+#endif
 import SwiftUI
 
 nonisolated enum Theme {
@@ -150,11 +152,18 @@ nonisolated enum Theme {
     @MainActor
     static func verify() {
         for (color, hex) in [(accent, accentHex), (gold, goldHex), (pink, pinkHex), (rust, rustHex)] {
+            #if os(macOS)
             let actual = NSColor(color).hexString
             precondition(actual == hex, "Theme drift: expected \(hex), got \(actual)")
+            #else
+            let actual = PlatformColor(color).srgbHexString
+            precondition(actual == hex, "Theme drift: expected \(hex), got \(actual)")
+            #endif
         }
         for face in fontFaces {
+            #if os(macOS)
             precondition(NSFont(name: face, size: 12) != nil, "Font face not registered: \(face)")
+            #endif
         }
         for preset in presets {
             precondition(isValidHex(preset.accentHex), "Malformed preset hex: \(preset.accentHex)")
@@ -220,6 +229,7 @@ nonisolated extension Color {
     }
 }
 
+#if os(macOS)
 nonisolated extension NSColor {
     var hexString: String {
         let c = usingColorSpace(.sRGB) ?? self
@@ -231,3 +241,4 @@ nonisolated extension NSColor {
         )
     }
 }
+#endif

@@ -50,7 +50,9 @@ final class AppStore {
 
     let player = PlayerSink()
 
+    #if os(macOS)
     private let sidecar = SidecarProcess()
+    #endif
     private(set) var client: BackendClient?
     private var eventPump: Task<Void, Never>?
     // Ordering token for leaderboard fetches: without it, two in-flight GETs can
@@ -79,11 +81,17 @@ final class AppStore {
         // Packaged builds refresh the writable yt-dlp layer in the background
         // on every launch; yt-dlp ages poorly and lives outside the
         // signed bundle. Dev builds use the repo venv untouched.
+        #if os(macOS)
         if SidecarConfiguration.packaged() != nil {
             Task.detached(priority: .utility) { try? await WritableLayer.update() }
         }
+        #endif
         do {
+            #if os(iOS)
+            let shake = try await EmbeddedSidecar.start()
+            #else
             let shake = try await sidecar.launch()
+            #endif
             let client = BackendClient(port: shake.port, token: shake.token)
             self.client = client
             try await client.waitUntilHealthy()
@@ -100,7 +108,9 @@ final class AppStore {
 
     func shutdown() {
         eventPump?.cancel()
+        #if os(macOS)
         sidecar.terminate()
+        #endif
     }
 
     func markRevealed() { hasRevealed = true }

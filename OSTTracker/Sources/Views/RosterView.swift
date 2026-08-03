@@ -4,7 +4,9 @@
 // (see RootView header for the glass policy). Card -> detail is a hero zoom
 // done with matchedGeometryEffect (navigationTransition(.zoom) is iOS-only).
 
+#if os(macOS)
 import GlowEffectKit
+#endif
 import SwiftUI
 
 struct RosterView: View {
