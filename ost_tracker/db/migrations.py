@@ -73,24 +73,35 @@ def backfill_cover_accents() -> int:
     return filled
 
 
-def _stage(existing: list[HistoryEntry], title: str, source, batch_label, sender):
+def _norm_title(value) -> str:
+    return (value or "").strip().lower()
+
+
+def _stage(existing: list[HistoryEntry], existing_index: dict, title: str, source, batch_label, sender):
     """Append a not-yet-committed row to a bulk-insert batch, checking against
     both what's already in the DB and what's already staged this run (so
     duplicates within the batch itself are caught too), then return the
-    normalized DB row tuple. Reuses ``history_repo.entry_matches`` — the
-    single definition of "duplicate" — instead of a second SQL round-trip
-    per candidate, which is what made startup migration slow."""
-    if any(history_repo.entry_matches(e, title, source) for e in existing):
+    normalized DB row tuple. ``existing_index`` maps normalized title -> entries
+    so the duplicate check is O(1) instead of a linear scan per candidate.
+    """
+    if _has_duplicate(existing_index, title, source):
         return None
     title_norm = title.strip()
     source_norm = (source or "").strip() or None
     batch_norm = (batch_label or "").strip() or None
     sender_norm = (sender or "").strip() or None
-    existing.append(
-        HistoryEntry(id=-1, title=title_norm, source=source_norm, batch_label=batch_norm,
-                     sender=sender_norm, created_at="")
-    )
+    entry = HistoryEntry(id=-1, title=title_norm, source=source_norm, batch_label=batch_norm,
+                         sender=sender_norm, created_at="")
+    existing.append(entry)
+    existing_index.setdefault(_norm_title(title_norm), []).append(entry)
     return (title_norm, source_norm, batch_norm, sender_norm)
+
+
+def _has_duplicate(existing_index: dict, title: str, source) -> bool:
+    for entry in existing_index.get(_norm_title(title), ()):
+        if history_repo.entry_matches(entry, title, source):
+            return True
+    return False
 
 
 def seed_history_from_batches() -> int:
@@ -100,10 +111,13 @@ def seed_history_from_batches() -> int:
     the ``run_pending`` guard flag normally makes this run exactly once.
     Returns how many rows were added."""
     existing = history_repo.list_history()
+    existing_index: dict = {}
+    for entry in existing:
+        existing_index.setdefault(_norm_title(entry.title), []).append(entry)
     rows = [
         row
         for entry in SEED_ENTRIES
-        if (row := _stage(existing, entry["title"], entry.get("source"),
+        if (row := _stage(existing, existing_index, entry["title"], entry.get("source"),
                            entry.get("batch_label"), entry.get("sender")))
         is not None
     ]
@@ -121,10 +135,13 @@ def backfill_history_from_current_osts() -> int:
     Skips any (title, source) already present. Returns how many rows were
     added."""
     existing = history_repo.list_history()
+    existing_index: dict = {}
+    for entry in existing:
+        existing_index.setdefault(_norm_title(entry.title), []).append(entry)
     rows = [
         row
         for ost in ost_repo.list_osts()
-        if (row := _stage(existing, ost.title, ost.source, CURRENT_RANKING_LABEL, ost.submitter_name))
+        if (row := _stage(existing, existing_index, ost.title, ost.source, CURRENT_RANKING_LABEL, ost.submitter_name))
         is not None
     ]
     if rows:
