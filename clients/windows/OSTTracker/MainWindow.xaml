@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="OstTracker.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="OST Tracker">
+
+    <Grid>
+        <NavigationView x:Name="Nav"
+                        IsBackButtonVisible="Collapsed"
+                        IsSettingsVisible="False"
+                        SelectionChanged="Nav_SelectionChanged"
+                        Loaded="Nav_Loaded">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Roster" Tag="roster" Icon="List"/>
+                <NavigationViewItem Content="People" Tag="people" Icon="Contact"/>
+                <NavigationViewItem Content="Entry" Tag="entry" Icon="Edit"/>
+                <NavigationViewItem Content="Stats" Tag="stats" Icon="ViewAll"/>
+                <NavigationViewItem Content="Batches" Tag="batches" Icon="Calendar"/>
+                <NavigationViewItem Content="Slices" Tag="slices" Icon="Cut"/>
+                <NavigationViewItem Content="Reveal" Tag="reveal" Icon="View"/>
+                <NavigationViewItem Content="History" Tag="history" Icon="History"/>
+                <NavigationViewItem Content="Cover" Tag="cover" Icon="Photo"/>
+                <NavigationViewItem Content="Notes" Tag="notes" Icon="Memo"/>
+                <NavigationViewItem Content="Settings" Tag="settings" Icon="Setting"/>
+            </NavigationView.MenuItems>
+            <Frame x:Name="ContentFrame"/>
+        </NavigationView>
+    </Grid>
+</Window>
