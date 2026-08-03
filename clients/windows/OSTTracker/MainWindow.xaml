@@ -6,7 +6,12 @@
     Title="OST Tracker">
 
     <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
         <NavigationView x:Name="Nav"
+                        Grid.Row="0"
                         IsBackButtonVisible="Collapsed"
                         IsSettingsVisible="False"
                         SelectionChanged="Nav_SelectionChanged"

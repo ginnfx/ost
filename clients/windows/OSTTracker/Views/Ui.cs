@@ -31,4 +31,13 @@ public static class Ui
     }
 
     public static Button Button(string label) => new() { Content = label };
+
+    public static StackPanel HStack(params UIElement[] children)
+    {
+        var box = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+        foreach (var child in children) box.Children.Add(child);
+        return box;
+    }
+
+    public static Brush DimBrush => (Brush)Application.Current.Resources["TextDimBrush"];
 }
