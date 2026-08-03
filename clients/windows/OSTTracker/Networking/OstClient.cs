@@ -77,9 +77,17 @@ public sealed class OstClient
         => GetAsync<List<HistoryEntry>>($"history/matches?title={Uri.EscapeDataString(title ?? "")}&source={Uri.EscapeDataString(source ?? "")}", ct);
 
     // ratings
-    public Task<List<Rating>> GetRatings(CancellationToken ct = default) => GetAsync<List<Rating>>("ratings", ct);
+    public Task<List<Rating>> GetRatings(int? raterId = null, CancellationToken ct = default)
+        => GetAsync<List<Rating>>(raterId.HasValue ? $"ratings?rater_id={raterId}" : "ratings", ct);
     public Task PutRating(int ostId, int raterId, double? score, CancellationToken ct = default)
         => SendAsync<object>(HttpMethod.Put, "ratings", new RatingIn(ostId, raterId, score), ct);
+    public Task PutRatingsBulk(IReadOnlyList<RatingIn> ratings, CancellationToken ct = default)
+        => SendAsync<object>(HttpMethod.Post, "ratings/bulk", new RatingUpsertList(ratings), ct);
+
+    // settings
+    public Task<RevealState> GetReveal(CancellationToken ct = default) => GetAsync<RevealState>("settings/reveal", ct);
+    public Task<RevealState> SetReveal(bool unlocked, CancellationToken ct = default)
+        => SendAsync<RevealState>(HttpMethod.Put, "settings/reveal", new RevealState(unlocked), ct);
 
     // notes
     public Task<List<Note>> GetNotes(CancellationToken ct = default) => GetAsync<List<Note>>("notes", ct);

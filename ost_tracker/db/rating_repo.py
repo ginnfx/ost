@@ -98,6 +98,48 @@ def all_ratings() -> list[Rating]:
     return [_row_to_rating(row) for row in rows]
 
 
+def ratings_for_rater(rater_id: int) -> list[Rating]:
+    """Every rating for one rater, single joined query (entry screens fetch
+    only the person they're entering for)."""
+    rows = get_db().query(
+        """
+        SELECT r.ost_id, r.rater_id, p.name AS rater_name, r.score, r.updated_at
+        FROM ratings r
+        JOIN people p ON p.id = r.rater_id
+        WHERE r.rater_id = ?
+        ORDER BY r.ost_id
+        """,
+        (rater_id,),
+    )
+    return [_row_to_rating(row) for row in rows]
+
+
+def bulk_apply(updates: list[tuple[int, int, float]], clears: list[tuple[int, int]]) -> int:
+    """Apply many upserts/clears in one transaction (bulk entry on the entry
+    screens). Scores are validated and normalized exactly like ``upsert_rating``;
+    raises ValueError on the first out-of-range score."""
+    normalized: list[tuple[int, int, object]] = []
+    for ost_id, rater_id, score in updates:
+        if not (MIN_SCORE <= score <= MAX_SCORE):
+            raise ValueError(f"Score must be between {MIN_SCORE} and {MAX_SCORE}, got {score}")
+        rounded = round(float(score), 2)
+        normalized.append((ost_id, rater_id, int(rounded) if rounded.is_integer() else rounded))
+    with get_db().transaction() as conn:
+        if normalized:
+            conn.executemany(
+                """
+                INSERT INTO ratings (ost_id, rater_id, score, updated_at)
+                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                ON CONFLICT(ost_id, rater_id)
+                DO UPDATE SET score = excluded.score, updated_at = CURRENT_TIMESTAMP
+                """,
+                normalized,
+            )
+        if clears:
+            conn.executemany("DELETE FROM ratings WHERE ost_id = ? AND rater_id = ?", clears)
+    return len(normalized) + len(clears)
+
+
 def _row_to_rating(row) -> Rating:
     return Rating(
         ost_id=row["ost_id"],

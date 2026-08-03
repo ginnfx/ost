@@ -48,6 +48,8 @@ public sealed record PersonIn(string Name);
 public sealed record OstIn(string Title, string? Source = null, int? SubmitterId = null, string? ExternalLink = null);
 public sealed record OstPatch(string? Title = null, string? Source = null, int? SubmitterId = null, string? ExternalLink = null);
 public sealed record RatingIn(int OstId, int RaterId, double? Score);
+public sealed record RatingUpsertList(IReadOnlyList<RatingIn> Ratings);
+public sealed record RevealState(bool Unlocked);
 public sealed record NoteIn(string Title, string? Note = null);
 public sealed record NotePatch(string? Title = null, string? Note = null);
 public sealed record BatchCountIn(int Count);
