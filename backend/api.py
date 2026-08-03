@@ -51,7 +51,7 @@ from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, We
 from fastapi.responses import BackgroundTask, FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from ost_tracker.db import history_repo, migrations, notes_repo, ost_repo, people_repo, rating_repo
+from ost_tracker.db import history_repo, migrations, notes_repo, ost_repo, people_repo, rating_repo, settings_repo
 from ost_tracker.db.models import HistoryEntry, Note, Ost, OstStats, Person, Rating
 from ost_tracker.services import batches as batches_service
 from ost_tracker.services import coverart
@@ -124,6 +124,10 @@ class RatingIn(BaseModel):
     ost_id: int
     rater_id: int
     score: Optional[float]  # 0–10, any decimal; null clears the cell
+
+
+class BulkRatingsIn(BaseModel):
+    ratings: list[RatingIn]
 
 
 class NoteOut(BaseModel):
@@ -520,7 +524,7 @@ def _cover_worker(ost_id: int, title: str, source: Optional[str]) -> None:
     result = coverart.fetch_cover(ost_id, title, source)
     if not result.found:
         return
-    ost_repo.set_cover(ost_id, str(result.path))
+    ost_repo.set_cover(ost_id, str(result.path), result.accent_hex)
     fresh = ost_repo.get_ost(ost_id)
     if fresh:
         hub.broadcast("coverArtReady", {
@@ -728,7 +732,7 @@ def set_ost_cover(ost_id: int, body: CoverSetIn) -> OstOut:
     result = coverart.import_cover_from_url(ost_id, body.image_url)
     if not result.found:
         raise HTTPException(422, "Could not download that image")
-    ost_repo.set_cover(ost_id, str(result.path))
+    ost_repo.set_cover(ost_id, str(result.path), result.accent_hex)
     fresh = ost_repo.get_ost(ost_id)
     if fresh is None:
         raise HTTPException(500, "OST was not updated")
@@ -745,8 +749,29 @@ def set_ost_cover(ost_id: int, body: CoverSetIn) -> OstOut:
 
 
 @app.get("/ratings")
-def get_ratings() -> list[RatingOut]:
+def get_ratings(rater_id: Optional[int] = Query(None)) -> list[RatingOut]:
+    if rater_id is not None:
+        return [_rating_out(r) for r in rating_repo.ratings_for_rater(rater_id)]
     return [_rating_out(r) for r in rating_repo.all_ratings()]
+
+
+@app.post("/ratings/bulk")
+def put_ratings_bulk(body: BulkRatingsIn) -> dict:
+    """Apply many upserts/clears in one request (bulk entry). One transaction,
+    one debounced leaderboard recompute — no per-row broadcast spam."""
+    updates: list[tuple[int, int, float]] = []
+    clears: list[tuple[int, int]] = []
+    for r in body.ratings:
+        if r.score is None:
+            clears.append((r.ost_id, r.rater_id))
+        else:
+            updates.append((r.ost_id, r.rater_id, r.score))
+    try:
+        applied = rating_repo.bulk_apply(updates, clears)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+    _broadcast_leaderboard()
+    return {"applied": applied}
 
 
 @app.put("/ratings")
@@ -763,6 +788,25 @@ def put_rating(body: RatingIn) -> dict:
     })
     _broadcast_leaderboard()
     return {"ost_id": body.ost_id, "rater_id": body.rater_id, "score": body.score}
+
+
+# --- settings ------------------------------------------------------------------
+
+
+class RevealIn(BaseModel):
+    unlocked: bool
+
+
+@app.get("/settings/reveal")
+def get_reveal() -> dict:
+    return {"unlocked": settings_repo.get_bool(settings_repo.REVEAL_UNLOCKED)}
+
+
+@app.put("/settings/reveal")
+def put_reveal(body: RevealIn) -> dict:
+    settings_repo.set_bool(settings_repo.REVEAL_UNLOCKED, body.unlocked)
+    hub.broadcast("revealState", {"unlocked": body.unlocked})
+    return {"unlocked": body.unlocked}
 
 
 # --- notes --------------------------------------------------------------------
