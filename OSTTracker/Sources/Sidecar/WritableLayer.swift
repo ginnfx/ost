@@ -1,6 +1,10 @@
 // The user-writable package layer: yt-dlp updates land in Application
 // Support, never inside the signed bundle. api.py prepends this directory to
 // sys.path (OST_WRITABLE_SITE) so it shadows the bundled fallback copy.
+// macOS-only: it needs the bundled `uv` binary and a writable Application
+// Support dir; iOS ships a fixed yt-dlp copy (see EmbeddedSidecar).
+
+#if os(macOS)
 
 import Foundation
 
@@ -59,3 +63,5 @@ enum WritableLayer {
         print("GATE writable_layer updated=true path=\(sitePackagesURL.path(percentEncoded: false))")
     }
 }
+
+#endif  // os(macOS)
