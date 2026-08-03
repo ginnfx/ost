@@ -201,6 +201,14 @@ nonisolated struct RatingUpsert: Encodable, Sendable {
     }
 }
 
+nonisolated struct RatingUpsertList: Encodable, Sendable {
+    let ratings: [RatingUpsert]
+}
+
+nonisolated struct RevealState: Codable, Sendable {
+    let unlocked: Bool
+}
+
 nonisolated struct NewNote: Encodable, Sendable {
     let title: String
     let note: String

@@ -622,6 +622,9 @@ final class AppStore {
             bumpCoverEpoch(ostID)
             scheduleLeaderboardRefresh()
             lastEventDescription = "coverArtReady(ost \(ostID))"
+        case .revealState(let unlocked):
+            hasRevealed = unlocked
+            lastEventDescription = "revealState(\(unlocked))"
         }
         print("GATE ws event=\(lastEventDescription)")
     }

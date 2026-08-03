@@ -110,10 +110,27 @@ actor BackendClient {
         try await send("POST", "/osts/\(ostID)/cover", body: CoverSet(imageUrl: imageURL))
     }
 
-    func ratings() async throws -> [Rating] { try await get("/ratings") }
+    func ratings(raterID: Int? = nil) async throws -> [Rating] {
+        if let raterID {
+            return try await get("/ratings?rater_id=\(raterID)")
+        }
+        return try await get("/ratings")
+    }
 
     func putRating(_ upsert: RatingUpsert) async throws {
         _ = try await run(request("PUT", "/ratings", body: try encoder.encode(upsert)))
+    }
+
+    func putRatingsBulk(_ upserts: [RatingUpsert]) async throws {
+        _ = try await run(request("POST", "/ratings/bulk", body: try encoder.encode(RatingUpsertList(ratings: upserts))))
+    }
+
+    func revealState() async throws -> RevealState {
+        try await get("/settings/reveal")
+    }
+
+    func setReveal(_ unlocked: Bool) async throws -> RevealState {
+        try await send("PUT", "/settings/reveal", body: RevealState(unlocked: unlocked))
     }
 
     func batches() async throws -> Batches { try await get("/batches") }

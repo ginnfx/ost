@@ -57,6 +57,7 @@ class CoverSource(str, Enum):
 class CoverResult:
     path: Optional[Path]
     source: CoverSource
+    accent_hex: Optional[str] = None
 
     @property
     def found(self) -> bool:
@@ -152,13 +153,13 @@ def _musicbrainz_lookup(client: httpx.Client, term: str) -> Optional[str]:
         return None
 
 
-def _download(client: httpx.Client, url: str, dest: Path) -> Optional[Path]:
+def _download(client: httpx.Client, url: str, dest: Path) -> tuple[Optional[Path], Optional[str]]:
     try:
         resp = client.get(url, follow_redirects=True, headers={"User-Agent": _USER_AGENT})
         resp.raise_for_status()
         return images.save_cover_from_bytes(resp.content, dest, COVER_STORE_SIZE)
     except (httpx.HTTPError, OSError, ValueError):
-        return None
+        return None, None
 
 
 def cover_path_for(ost_id: int) -> Path:
@@ -186,15 +187,15 @@ def fetch_cover(
         for term, tag in build_itunes_queries(title, source):
             art_url = _itunes_lookup(client, term)
             if art_url:
-                saved = _download(client, art_url, dest)
+                saved, accent_hex = _download(client, art_url, dest)
                 if saved:
-                    return CoverResult(path=saved, source=tag)
+                    return CoverResult(path=saved, source=tag, accent_hex=accent_hex)
 
         mb_url = _musicbrainz_lookup(client, f"{title} {source or ''}".strip())
         if mb_url:
-            saved = _download(client, mb_url, dest)
+            saved, accent_hex = _download(client, mb_url, dest)
             if saved:
-                return CoverResult(path=saved, source=CoverSource.MUSICBRAINZ)
+                return CoverResult(path=saved, source=CoverSource.MUSICBRAINZ, accent_hex=accent_hex)
 
         return CoverResult(path=None, source=CoverSource.NONE)
     finally:
@@ -209,8 +210,9 @@ def import_cover_from_url(ost_id: int, url: str, client: Optional[httpx.Client] 
     if client is None:
         client = httpx.Client(timeout=_TIMEOUT, headers={"User-Agent": _USER_AGENT})
     try:
-        saved = _download(client, url, dest)
-        return CoverResult(path=saved, source=CoverSource.NONE if saved is None else CoverSource.ITUNES)
+        saved, accent_hex = _download(client, url, dest)
+        return CoverResult(path=saved, source=CoverSource.NONE if saved is None else CoverSource.ITUNES,
+                           accent_hex=accent_hex)
     finally:
         if owns_client:
             client.close()
@@ -220,8 +222,8 @@ def import_cover_from_file(ost_id: int, src_path: Path) -> CoverResult:
     """Manual override: copy a local image file into the cover cache."""
     dest = cover_path_for(ost_id)
     try:
-        saved = images.save_cover_from_file(Path(src_path), dest, COVER_STORE_SIZE)
-        return CoverResult(path=saved, source=CoverSource.NONE)
+        saved, accent_hex = images.save_cover_from_file(Path(src_path), dest, COVER_STORE_SIZE)
+        return CoverResult(path=saved, source=CoverSource.NONE, accent_hex=accent_hex)
     except (OSError, ValueError):
         return CoverResult(path=None, source=CoverSource.NONE)
 

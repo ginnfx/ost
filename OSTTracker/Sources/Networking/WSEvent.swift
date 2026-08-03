@@ -19,6 +19,7 @@ nonisolated enum WSEvent: Sendable {
     case ratingUpdated(ostID: Int, raterID: Int, score: Double?)
     case leaderboardResorted([RankEntry])
     case coverArtReady(ostID: Int, path: String?, accentHex: String?)
+    case revealState(unlocked: Bool)
 }
 
 extension WSEvent: Decodable {
@@ -43,6 +44,10 @@ extension WSEvent: Decodable {
         let accentHex: String?
     }
 
+    private struct RevealPayload: Decodable {
+        let unlocked: Bool
+    }
+
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let type = try container.decode(String.self, forKey: .type)
@@ -60,6 +65,9 @@ extension WSEvent: Decodable {
         case "coverArtReady":
             let p = try container.decode(CoverPayload.self, forKey: .payload)
             self = .coverArtReady(ostID: p.ostId, path: p.path, accentHex: p.accentHex)
+        case "revealState":
+            let p = try container.decode(RevealPayload.self, forKey: .payload)
+            self = .revealState(unlocked: p.unlocked)
         default:
             throw DecodingError.dataCorruptedError(
                 forKey: .type, in: container,

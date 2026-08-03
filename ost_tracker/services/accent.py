@@ -93,9 +93,15 @@ def extract_accent(image_path: Path | str) -> Optional[str]:
     the caller then falls back to the fixed accent token."""
     try:
         with Image.open(image_path) as img:
-            dominant = _dominant_color(img)
+            return extract_accent_from_image(img)
     except (OSError, ValueError):
         return None
+
+
+def extract_accent_from_image(img: Image.Image) -> Optional[str]:
+    """Clamped accent for an already-decoded image — the cover pipeline passes
+    the fitted image straight through so it isn't decoded twice."""
+    dominant = _dominant_color(img)
     if dominant is None:
         return None
     return _rgb_to_hex(_clamp_to_legible(dominant))

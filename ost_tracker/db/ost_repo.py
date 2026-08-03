@@ -141,10 +141,13 @@ def _sync_history_entry(
     )
 
 
-def set_cover(ost_id: int, cover_image_path: Optional[str]) -> None:
+def set_cover(ost_id: int, cover_image_path: Optional[str], accent_hex: Optional[str] = None) -> None:
     """Set (or clear) the cached cover and its derived accent colour together,
-    so the accent can never go stale against a changed cover."""
-    accent_hex = accent.extract_accent(cover_image_path) if cover_image_path else None
+    so the accent can never go stale against a changed cover. When ``accent_hex``
+    is None the accent is derived from the file (used by the one-time backfill;
+    the live fetch paths pass the accent from the in-memory decode)."""
+    if accent_hex is None:
+        accent_hex = accent.extract_accent(cover_image_path) if cover_image_path else None
     get_db().execute(
         "UPDATE osts SET cover_image_path = ?, cover_accent_hex = ? WHERE id = ?",
         (cover_image_path, accent_hex, ost_id),

@@ -99,12 +99,15 @@ Notes:
 | POST   | /osts/{id}/resolve   | —                   | `{"started":true}` (202), progress on /ws |
 | GET    | /history             | —                   | `[HistoryEntry]`     |
 | GET    | /history/matches     | `?title=&source=`   | `[HistoryEntry]` (case/whitespace-insensitive match on title, and on source unless either side's source is blank/absent) |
-| GET    | /ratings             | —                   | `[Rating]`           |
+| GET    | /ratings             | `?rater_id=` (optional filter) | `[Rating]`           |
 | PUT    | /ratings             | `{ost_id, rater_id, score\|null}` (null clears) | echo |
+| POST   | /ratings/bulk        | `{ratings: [{ost_id, rater_id, score\|null}]}` | `{"applied": n}` — one transaction, one debounced leaderboard broadcast; no per-row `ratingUpdated` echo (entry screens already reflect locally) |
 | GET    | /notes               | —                   | `[Note]`             |
 | POST   | /notes               | `{title, note}`     | `Note` (201)         |
 | PATCH  | /notes/{id}          | `{title?, note?}`   | `Note`               |
 | DELETE | /notes/{id}          | —                   | 204                  |
+| GET    | /settings/reveal     | —                   | `{"unlocked": bool}` — the locked-reveal flag (persisted in `app_settings`) |
+| PUT    | /settings/reveal     | `{unlocked: bool}`  | `{"unlocked": bool}` + `revealState` broadcast |
 | GET    | /leaderboard         | —                   | `[RankEntry]`        |
 | GET    | /elimination         | —                   | `EliminationBoard`   |
 | PUT    | /elimination/threshold | `{threshold}` (1–20) | `EliminationBoard` |
@@ -133,3 +136,4 @@ are ignored (keepalive only).
 | ratingUpdated        | `{"ost_id", "rater_id", "score"\|null}`             |
 | leaderboardResorted  | `[RankEntry]`                                       |
 | coverArtReady        | `{"ost_id", "path", "accent_hex"}`                  |
+| revealState          | `{"unlocked": bool}`                                |

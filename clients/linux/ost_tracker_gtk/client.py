@@ -77,11 +77,26 @@ class Client:
 
     # --- ratings ----------------------------------------------------------------
 
-    def get_ratings(self) -> list[models.Rating]:
+    def get_ratings(self, rater_id: Optional[int] = None) -> list[models.Rating]:
+        if rater_id is not None:
+            return [models.Rating(**r) for r in self._get("ratings", rater_id=rater_id)]
         return [models.Rating(**r) for r in self._get("ratings")]
 
     def put_rating(self, ost_id: int, rater_id: int, score: Optional[float]) -> None:
         self._send("PUT", "ratings", {"ost_id": ost_id, "rater_id": rater_id, "score": score})
+
+    def put_ratings_bulk(self, rows: list[tuple[int, int, Optional[float]]]) -> None:
+        self._send("POST", "ratings/bulk", {
+            "ratings": [{"ost_id": o, "rater_id": r, "score": s} for o, r, s in rows]
+        })
+
+    # --- settings ---------------------------------------------------------------
+
+    def get_reveal(self) -> bool:
+        return bool(self._get("settings/reveal").get("unlocked"))
+
+    def set_reveal(self, unlocked: bool) -> None:
+        self._send("PUT", "settings/reveal", {"unlocked": unlocked})
 
     # --- notes ------------------------------------------------------------------
 
