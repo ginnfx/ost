@@ -10,6 +10,11 @@ Codable) mirrors them. Wire keys are snake_case; Swift decodes with
 - HTTP + one WebSocket on `127.0.0.1:<ephemeral>`.
 - Handshake: sidecar prints exactly one stdout line when ready:
   `OSTTRACKER_READY port=<port> token=<secret>`
+- iOS (in-process sidecar): the sandbox forbids subprocesses, so `backend/api.py`
+  runs on an embedded CPython thread inside the app instead of as a child. The
+  ready line is identical but written to a handshake file in the app container
+  (`<Documents>/sidecar-handshake.txt`), which the app polls; the token is
+  app-generated and injected via `OST_API_TOKEN` before interpreter init.
 - Every HTTP request and the `/ws` upgrade require header `X-OST-Token: <secret>`
   (401 / close 4401 otherwise). `/ws` also accepts `?token=` for dev tooling.
 - Timestamps: ISO-8601 UTC strings (`2026-07-15T21:14:20Z`).
@@ -112,6 +117,8 @@ Notes:
 | POST   | /player/pause        | —                   | `PlaybackState`      |
 | POST   | /player/seek         | `{position}`        | `PlaybackState`      |
 | POST   | /player/stop         | —                   | `PlaybackState`      |
+| GET    | /export/portable     | —                   | zip download (`ost-tracker-portable.zip`: `ost.db` + `covers/`, sqlite-backup snapshot) |
+| POST   | /import/portable     | multipart `bundle`  | `{"staged": true, "applies_after": "restart"}` — files are applied at next launch (startup swap before the DB opens) |
 
 ## WebSocket /ws
 
