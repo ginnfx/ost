@@ -10,6 +10,10 @@ import asyncio
 
 def test_sidecar_imports_and_boots(fresh_db, monkeypatch):
     monkeypatch.setenv("OST_API_TOKEN", "dev")
+    # The watchdog thread must not outlive the test: a stray daemon thread at
+    # interpreter shutdown crashes pytest on Windows (exit 1 after a clean
+    # summary). The production app spawns it via the real lifespan.
+    monkeypatch.setenv("OST_API_WATCHDOG", "0")
     import backend.api as api  # noqa: F401 — import must not raise
 
     # The lifespan startup path (portable import swap + migrations) must not
