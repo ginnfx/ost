@@ -6,7 +6,8 @@ import webbrowser
 import gi
 
 gi.require_version("Gst", "1.0")
-from gi.repository import Gst  # noqa: E402
+gi.require_version("GLib", "2.0")
+from gi.repository import GLib, Gst  # noqa: E402
 
 
 class Playback:
@@ -23,7 +24,7 @@ class Playback:
         self._bin.set_state(Gst.State.PLAYING)
         # Fallback when the stream won't play (yt-dlp missed): browser.
         if watch_url:
-            GLibTimeout().later(8.0, lambda: self._fallback(watch_url))
+            GLib.timeout_add(8000, lambda: self._fallback(watch_url))
 
     def _fallback(self, watch_url: str) -> None:
         if self._bin is not None and self._bin.get_state(0)[1] != Gst.State.PLAYING:
@@ -41,13 +42,3 @@ class Playback:
         if self._bin is not None:
             self._bin.set_state(Gst.State.NULL)
             self._bin = None
-
-
-class GLibTimeout:
-    """Minimal GLib.timeout_add helper kept separate from the Gst import."""
-
-    @staticmethod
-    def later(seconds: float, callback) -> None:
-        from gi.repository import GLib
-
-        GLib.timeout_add(int(seconds * 1000), callback)

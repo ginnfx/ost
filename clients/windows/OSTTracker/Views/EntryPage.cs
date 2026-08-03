@@ -15,6 +15,7 @@ public sealed class EntryPage : Page
     private List<Person> _people = new();
     private List<Ost> _osts = new();
     private Dictionary<int, double> _ratings = new();
+    private readonly HashSet<int> _saving = new();   // Enter + LostFocus can fire together
 
     public EntryPage()
     {
@@ -95,6 +96,7 @@ public sealed class EntryPage : Page
         int idx = _person.SelectedIndex;
         if (idx < 0) return;
         int ostId = (int)box.Tag;
+        if (!_saving.Add(ostId)) return;   // already in flight from the other event
         double? score = null;
         if (!string.IsNullOrWhiteSpace(box.Text) && double.TryParse(box.Text, out double parsed))
             score = parsed;
@@ -108,6 +110,10 @@ public sealed class EntryPage : Page
         catch (Exception ex)
         {
             _status.Text = ex.Message;
+        }
+        finally
+        {
+            _saving.Remove(ostId);
         }
     }
 }

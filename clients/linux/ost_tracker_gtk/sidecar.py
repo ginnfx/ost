@@ -59,6 +59,8 @@ class Sidecar:
     def __init__(self, config: SidecarConfig | None = None):
         self._config = config or SidecarConfig.resolve()
         self._proc: subprocess.Popen | None = None
+        self.port = 0
+        self.token = ""
 
     def start(self, timeout: float = 20.0) -> tuple[int, str]:
         env = dict(os.environ)
@@ -81,13 +83,9 @@ class Sidecar:
                 continue
             text = line.decode(errors="replace").strip()
             if text.startswith("OSTTRACKER_READY"):
-                port, token = _parse_handshake(text)
-                self.port, self.token = port, token
-                return port, token
+                self.port, self.token = _parse_handshake(text)
+                return self.port, self.token
         raise TimeoutError("sidecar handshake timed out")
-
-    port: int = 0
-    token: str = ""
 
     def stop(self) -> None:
         if self._proc is None or self._proc.poll() is not None:

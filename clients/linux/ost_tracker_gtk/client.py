@@ -64,20 +64,6 @@ class Client:
     def get_osts(self) -> list[models.Ost]:
         return [models.Ost(**o) for o in self._get("osts")]
 
-    def add_ost(self, title: str, source: Optional[str] = None,
-                submitter_id: Optional[int] = None, external_link: Optional[str] = None) -> models.Ost:
-        body = {"title": title, "source": source, "submitter_id": submitter_id, "external_link": external_link}
-        return models.Ost(**self._send("POST", "osts", body))
-
-    def patch_ost(self, ost_id: int, **fields) -> models.Ost:
-        return models.Ost(**self._send("PATCH", f"osts/{ost_id}", fields))
-
-    def delete_ost(self, ost_id: int) -> None:
-        self._send("DELETE", f"osts/{ost_id}")
-
-    def resolve_ost(self, ost_id: int) -> None:
-        self._send("POST", f"osts/{ost_id}/resolve")
-
     # --- history ----------------------------------------------------------------
 
     def get_history(self) -> list[models.HistoryEntry]:
@@ -127,8 +113,7 @@ class Client:
 
     # --- batches -----------------------------------------------------------------
 
-    def get_batches(self) -> models.Batches:
-        data = self._get("batches")
+    def _parse_batches(self, data: dict) -> models.Batches:
         return models.Batches(
             generated_at=data.get("generated_at"),
             batches=[
@@ -141,28 +126,19 @@ class Client:
             ],
         )
 
+    def get_batches(self) -> models.Batches:
+        return self._parse_batches(self._get("batches"))
+
     def randomize_batches(self) -> models.Batches:
-        return models.Batches(**self._send("POST", "batches/randomize"))
+        return self._parse_batches(self._send("POST", "batches/randomize"))
 
     def put_batch_count(self, count: int) -> models.Batches:
-        return models.Batches(**self._send("PUT", "batches/count", {"count": count}))
-
-    def arrange_batches(self, batches: list[list[int]]) -> models.Batches:
-        return models.Batches(**self._send("POST", "batches/arrange", {"batches": batches}))
-
-    def pin_batch(self, ost_id: int, pinned: bool) -> models.Batches:
-        return models.Batches(**self._send("POST", "batches/pin", {"ost_id": ost_id, "pinned": pinned}))
+        return self._parse_batches(self._send("PUT", "batches/count", {"count": count}))
 
     # --- player ------------------------------------------------------------------
 
     def play(self, ost_id: int) -> models.PlaybackState:
         return models.PlaybackState(**self._send("POST", "player/play", {"ost_id": ost_id}))
-
-    def pause(self) -> models.PlaybackState:
-        return models.PlaybackState(**self._send("POST", "player/pause"))
-
-    def stop(self) -> models.PlaybackState:
-        return models.PlaybackState(**self._send("POST", "player/stop"))
 
     # --- covers ------------------------------------------------------------------
 
@@ -199,10 +175,13 @@ class WsPump:
         while not self._stop.is_set():
             try:
                 with connect(self._uri, additional_headers={"X-OST-Token": self._token}) as ws:
-                    delay = 0.5
                     for message in ws:
                         if self._stop.is_set():
                             return
+                        # Reset the backoff only once traffic actually flows —
+                        # a server that accepts then immediately drops must not
+                        # keep us hammering at 0.5s.
+                        delay = 0.5
                         try:
                             env = json.loads(message)
                             self._on_event(env.get("type", ""), env.get("payload"))

@@ -15,7 +15,7 @@ public sealed class SidecarProcess : IDisposable
     public static SidecarProcess Instance { get; } = new();
 
     public int Port { get; private set; }
-    public string Token { get; private set; } = "";
+    private string _token = "";
 
     private Process? _process;
     private IntPtr _job = IntPtr.Zero;
@@ -86,7 +86,7 @@ public sealed class SidecarProcess : IDisposable
         lock (_gate)
         {
             if (_process is { HasExited: false })
-                return (Port, Token);
+                return (Port, _token);
         }
 
         var config = SidecarConfig.Resolve();
@@ -155,9 +155,11 @@ public sealed class SidecarProcess : IDisposable
                 buffer.Remove(0, newline + 1);
                 if (line.StartsWith("OSTTRACKER_READY"))
                 {
-                    (Port, Token) = ParseHandshake(line);
+                    var shake = ParseHandshake(line);
+                    Port = shake.Port;
+                    _token = shake.Token;
                     _ = Task.Run(() => DrainStdoutAsync());
-                    return (Port, Token);
+                    return shake;
                 }
             }
         }

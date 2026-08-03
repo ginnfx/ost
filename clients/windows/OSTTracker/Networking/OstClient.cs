@@ -70,10 +70,6 @@ public sealed class OstClient
 
     // osts
     public Task<List<Ost>> GetOsts(CancellationToken ct = default) => GetAsync<List<Ost>>("osts", ct);
-    public Task<Ost> AddOst(OstIn body, CancellationToken ct = default) => SendAsync<Ost>(HttpMethod.Post, "osts", body, ct);
-    public Task<Ost> PatchOst(int id, OstPatch body, CancellationToken ct = default) => SendAsync<Ost>(HttpMethod.Patch, $"osts/{id}", body, ct);
-    public Task DeleteOst(int id, CancellationToken ct = default) => SendNoBodyAsync(HttpMethod.Delete, $"osts/{id}", null, ct);
-    public Task ResolveOst(int id, CancellationToken ct = default) => SendNoBodyAsync(HttpMethod.Post, $"osts/{id}/resolve", null, ct);
 
     // history
     public Task<List<HistoryEntry>> GetHistory(CancellationToken ct = default) => GetAsync<List<HistoryEntry>>("history", ct);
@@ -101,10 +97,6 @@ public sealed class OstClient
     public Task<Batches> GetBatches(CancellationToken ct = default) => GetAsync<Batches>("batches", ct);
     public Task<Batches> RandomizeBatches(CancellationToken ct = default) => SendAsync<Batches>(HttpMethod.Post, "batches/randomize", null, ct);
     public Task<Batches> PutBatchCount(int count, CancellationToken ct = default) => SendAsync<Batches>(HttpMethod.Put, "batches/count", new BatchCountIn(count), ct);
-    public Task<Batches> ArrangeBatches(IReadOnlyList<IReadOnlyList<int>> batches, CancellationToken ct = default)
-        => SendAsync<Batches>(HttpMethod.Post, "batches/arrange", new BatchArrangeIn(batches), ct);
-    public Task<Batches> PinBatch(int ostId, bool pinned, CancellationToken ct = default)
-        => SendAsync<Batches>(HttpMethod.Post, "batches/pin", new BatchPinIn(ostId, pinned), ct);
 
     // player
     public Task<PlaybackState> Play(int ostId, CancellationToken ct = default) => SendAsync<PlaybackState>(HttpMethod.Post, "player/play", new PlayIn(ostId), ct);

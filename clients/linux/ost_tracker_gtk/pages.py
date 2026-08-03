@@ -236,6 +236,7 @@ class BatchesPage(Page):
     def __init__(self, app) -> None:
         super().__init__("Batches")
         self.app = app
+        self._loaded = False
         self._list = self._list()
         self.append(self._scroll(self._list))
         self.append(self._button("Randomize", lambda _: self._randomize()))
@@ -252,6 +253,7 @@ class BatchesPage(Page):
                 f"Day {g.day}: " + ", ".join(s.ost.title for s in g.slots) for g in batches.batches
             ])
             self.status.set_text("not yet generated" if batches.generated_at is None else f"generated {batches.generated_at}")
+            self._loaded = True
         except Exception as exc:
             self.status.set_text(str(exc))
 
@@ -260,6 +262,8 @@ class BatchesPage(Page):
         self.refresh()
 
     def _set_count(self) -> None:
+        if not self._loaded:   # no accidental write while the page first renders
+            return
         idx = self._count.get_selected()
         if idx == Gtk.INVALID_LIST_POSITION:
             return
