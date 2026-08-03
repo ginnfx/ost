@@ -20,7 +20,7 @@ permissions:
 jobs:
   macos:
     name: macOS universal
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - run: brew install xcodegen
@@ -95,7 +95,7 @@ jobs:
 
   ios:
     name: iOS (TestFlight ipa)
-    runs-on: macos-14
+    runs-on: macos-26
     # Needs the Apple Developer secret; without it the job fails but must not
     # block the desktop release from drafting.
     continue-on-error: true
