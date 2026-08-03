@@ -48,6 +48,8 @@ def test_import_stage_then_apply(fresh_db, tmp_path):
         # Wipe the live db to prove the staged import restores it.
         db_path = fresh_db.path
         (db_path.parent / "covers" / "seed.jpg").unlink()
+        for sidecar in (str(db_path) + "-wal", str(db_path) + "-shm"):
+            Path(sidecar).unlink(missing_ok=True)
         db_path.unlink()
 
         portable.stage_import(bundle)
@@ -55,7 +57,16 @@ def test_import_stage_then_apply(fresh_db, tmp_path):
         assert applied is True
         assert db_path.exists()
         assert (db_path.parent / "covers" / "seed.jpg").exists()
-        assert people_repo.list_people(), "data restored after import"
+        # Read the restored db without reopening it through the WAL-PRAGMA
+        # path (which wedges on Windows): an immutable read-only connect.
+        import sqlite3
+
+        ro = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True)
+        try:
+            n = ro.execute("SELECT COUNT(*) FROM people").fetchone()[0]
+        finally:
+            ro.close()
+        assert n > 0, "people restored after import"
         # Second apply is a no-op (nothing staged).
         assert portable.apply_staged_import() is False
     finally:
