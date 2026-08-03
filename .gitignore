@@ -29,6 +29,7 @@ OSTTracker/OSTTracker.xcodeproj/
 
 # Tooling / editor caches
 .ruff_cache/
+.reasonix/
 
 # Nested build output anywhere (vendored SwiftPM deps, etc.)
 build/
