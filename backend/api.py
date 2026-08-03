@@ -30,6 +30,7 @@ import socket
 import sys
 import tempfile
 import threading
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -401,8 +402,42 @@ hub = Hub()
 
 
 def _broadcast_leaderboard() -> None:
-    entries = [_rank_entry(s).model_dump() for s in ost_repo.list_osts_with_stats()]
-    hub.broadcast("leaderboardResorted", entries)
+    """Coalesce leaderboard broadcasts.
+
+    Bulk entry writes scores in bursts (up to hundreds per session), and
+    recomputing + re-fanning the whole board on every write is wasted work on
+    a slow CPU. A trailing timer fires one broadcast ~150ms after the last
+    request, so a burst collapses into a single recompute.
+    """
+    global _leaderboard_due, _leaderboard_thread
+    with _leaderboard_lock:
+        _leaderboard_due = time.monotonic() + _BROADCAST_WINDOW
+        if _leaderboard_thread is not None and _leaderboard_thread.is_alive():
+            return
+        thread = threading.Thread(target=_leaderboard_worker, daemon=True)
+        _leaderboard_thread = thread
+        thread.start()
+
+
+def _leaderboard_worker() -> None:
+    while True:
+        with _leaderboard_lock:
+            due = _leaderboard_due
+        remaining = due - time.monotonic()
+        if remaining > 0:
+            time.sleep(remaining)
+            continue
+        with _leaderboard_lock:
+            _leaderboard_due = 0.0
+        payload = [_rank_entry(s).model_dump() for s in ost_repo.list_osts_with_stats()]
+        hub.broadcast("leaderboardResorted", payload)
+        return
+
+
+_leaderboard_lock = threading.Lock()
+_leaderboard_due = 0.0
+_leaderboard_thread: Optional[threading.Thread] = None
+_BROADCAST_WINDOW = 0.15
 
 
 # --- resolution progress: tap the existing playback logger -------------------
@@ -604,7 +639,8 @@ def post_ost(body: OstIn) -> OstOut:
         submitter_id=body.submitter_id, external_link=body.external_link,
     )
     created = ost_repo.get_ost(ost_id)
-    assert created is not None
+    if created is None:
+        raise HTTPException(500, "OST was not created")
     _spawn(_cover_worker, ost_id, created.title, created.source)
     _broadcast_leaderboard()
     return _ost_out(created)
@@ -624,7 +660,8 @@ def patch_ost(ost_id: int, body: OstPatch) -> OstOut:
         external_link=fields.get("external_link", current.external_link),
     )
     updated = ost_repo.get_ost(ost_id)
-    assert updated is not None
+    if updated is None:
+        raise HTTPException(500, "OST was not updated")
     _broadcast_leaderboard()
     return _ost_out(updated)
 
@@ -693,7 +730,8 @@ def set_ost_cover(ost_id: int, body: CoverSetIn) -> OstOut:
         raise HTTPException(422, "Could not download that image")
     ost_repo.set_cover(ost_id, str(result.path))
     fresh = ost_repo.get_ost(ost_id)
-    assert fresh is not None
+    if fresh is None:
+        raise HTTPException(500, "OST was not updated")
     hub.broadcast("coverArtReady", {
         "ost_id": ost_id,
         "path": fresh.cover_image_path,
@@ -708,10 +746,7 @@ def set_ost_cover(ost_id: int, body: CoverSetIn) -> OstOut:
 
 @app.get("/ratings")
 def get_ratings() -> list[RatingOut]:
-    out: list[RatingOut] = []
-    for ost in ost_repo.list_osts():
-        out.extend(_rating_out(r) for r in rating_repo.ratings_for_ost(ost.id))
-    return out
+    return [_rating_out(r) for r in rating_repo.all_ratings()]
 
 
 @app.put("/ratings")
@@ -755,7 +790,8 @@ def patch_note(note_id: int, body: NotePatch) -> NoteOut:
         note=fields.get("note", current.note),
     )
     updated = notes_repo.get_note(note_id)
-    assert updated is not None
+    if updated is None:
+        raise HTTPException(500, "Note was not updated")
     return _note_out(updated)
 
 
@@ -878,7 +914,7 @@ async def import_portable(bundle: UploadFile = File(...)) -> dict:
     tmp = Path(tmp_name)
     try:
         tmp.write_bytes(await bundle.read())
-        portable.stage_import(tmp)
+        await asyncio.to_thread(portable.stage_import, tmp)
     finally:
         tmp.unlink(missing_ok=True)
     return {"staged": True, "applies_after": "restart"}
