@@ -42,6 +42,38 @@ targets:
       - name: Install to /Applications
         script: "\"${SRCROOT}/../packaging/07_install_to_applications.sh\""
         basedOnDependencyAnalysis: false
+  OSTTrackerIOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "16.0"
+    sources:
+      - Sources
+      - path: Fonts
+        type: folder
+        buildPhase: resources
+    dependencies:
+      - sdk: AudioToolbox.framework
+      - sdk: CoreText.framework
+      - sdk: UIKit.framework
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: com.brajanzalta.OSTTracker.ios
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
+        INFOPLIST_KEY_UIBackgroundModes: audio
+        INFOPLIST_KEY_ATSApplicationFontsPath: "Fonts"
+        CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: ""   # set locally or in CI (fastlane/xcodebuild -allowProvisioningUpdates)
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "6.2"
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        ARCHS: arm64
+        # Embedded CPython staged by packaging/08_ios_build.sh
+        FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../packaging/runtime/ios"
+        HEADER_SEARCH_PATHS: "$(SRCROOT)/../packaging/runtime/ios/include"
+        OTHER_LDFLAGS: "$(inherited) -framework Python"
   OSTTrackerTests:
     type: bundle.unit-test
     platform: macOS
@@ -63,3 +95,7 @@ schemes:
     test:
       targets:
         - OSTTrackerTests
+  OSTTrackerIOS:
+    build:
+      targets:
+        OSTTrackerIOS: all
