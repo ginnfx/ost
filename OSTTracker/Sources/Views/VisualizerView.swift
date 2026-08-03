@@ -216,7 +216,7 @@ private struct SpectrumRing: View {
         let coverSize = diameter * 0.5
         let innerRadius = diameter * 0.30
         let maxLength = diameter * 0.17
-        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !isPlaying)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { timeline in
             let now = timeline.date.timeIntervalSinceReferenceDate
             ZStack {
                 Canvas { context, size in
@@ -248,7 +248,6 @@ private struct SpectrumRing: View {
                             y: center.y + Foundation.sin(angle) * (innerRadius + length)
                         ))
                     }
-                    context.addFilter(.shadow(color: accent.opacity(0.5), radius: 6))
                     context.stroke(
                         path,
                         with: .linearGradient(

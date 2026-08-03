@@ -59,6 +59,9 @@ final class AppStore {
     // land out of issue order and a stale response clobbers a fresher one.
     private var leaderboardFetchSeq = 0
     private var leaderboardRefreshTask: Task<Void, Never>?
+    // Last time a leaderboardResorted push landed on /ws. rate() skips the
+    // HTTP re-fetch when a push for the same write is likely on its way.
+    private var lastBoardEventAt = Date.distantPast
     private var eliminationRefreshTask: Task<Void, Never>?
     // Same last-issued-wins guard for the elimination board, which is fetched
     // right behind every leaderboard change.
@@ -161,9 +164,13 @@ final class AppStore {
         setLocalScore(ostID: ostID, raterID: raterID, score: score)
         do {
             try await client.putRating(RatingUpsert(ostId: ostID, raterId: raterID, score: score))
-            // Authoritative stats/rank come from the server (no rating math in Swift).
-            // Re-fetch over HTTP so they update even if /ws is disconnected.
-            await refreshLeaderboard()
+            // The server broadcasts leaderboardResorted for this write; when the
+            // socket is up that push re-renders the board. Only fall back to an
+            // HTTP re-fetch when the push hasn't landed (socket down) so a burst
+            // of entry taps doesn't double-fetch every time.
+            if Date().timeIntervalSince(lastBoardEventAt) > 1.5 {
+                await refreshLeaderboard()
+            }
         } catch {
             // Server rejected the write — roll the optimistic change back and surface it.
             setLocalScore(ostID: ostID, raterID: raterID, score: previous)
@@ -198,13 +205,17 @@ final class AppStore {
         }
     }
 
-    func pause() async { _ = try? await client?.pause() }
+    func pause() async {
+        do { _ = try await client?.pause() } catch { reportError("Couldn't pause (\\(error.localizedDescription)).") }
+    }
 
-    func stop() async { _ = try? await client?.stop() }
+    func stop() async {
+        do { _ = try await client?.stop() } catch { reportError("Couldn't stop (\\(error.localizedDescription)).") }
+    }
 
     func seek(to seconds: Double) async {
         player.seek(to: seconds)
-        _ = try? await client?.seek(position: seconds)
+        do { _ = try await client?.seek(position: seconds) } catch { reportError("Couldn't seek (\\(error.localizedDescription)).") }
     }
 
     /// Returns false when the backend rejected the add, so the sheet can stay
@@ -600,6 +611,7 @@ final class AppStore {
             lastEventDescription = "ratingUpdated(ost \(ostID), rater \(raterID))"
         case .leaderboardResorted(let entries):
             applyLeaderboard(entries)   // views animate the re-sort + ▲/▼ chips
+            lastBoardEventAt = Date()
             // This push is fresher than any GET issued before it landed —
             // advance the token so an in-flight fetch can't overwrite it.
             leaderboardFetchSeq += 1

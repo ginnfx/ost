@@ -775,8 +775,24 @@ extension CoverImage {
     static func cachedCover(path: String, epoch: Int) -> NSImage? {
         let key = "\(path)#\(epoch)" as NSString
         if let hit = cache.object(forKey: key) { return hit }
-        guard let image = NSImage(contentsOfFile: path) else { return nil }
+        guard let image = decodeAtDisplaySize(path) else { return nil }
         cache.setObject(image, forKey: key)
         return image
+    }
+
+    /// Downsample-on-decode via ImageIO instead of NSImage(contentsOfFile:),
+    /// which fully decodes the stored 600px JPEG every time it misses the
+    /// cache. Thumbnail decode reads only what's needed for the render size —
+    /// noticeably cheaper on slow disks and old CPUs.
+    private static func decodeAtDisplaySize(_ path: String) -> NSImage? {
+        let url = URL(fileURLWithPath: path)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 600,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
 }
