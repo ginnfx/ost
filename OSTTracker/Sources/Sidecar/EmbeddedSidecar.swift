@@ -57,8 +57,8 @@ nonisolated enum EmbeddedSidecar {
 
         // Poll the handshake file (the server may still be binding — the
         // caller's waitUntilHealthy() covers that race).
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
+        let deadline = ContinuousClock.now + timeout
+        while ContinuousClock.now < deadline {
             if let data = try? Data(contentsOf: handshakeURL),
                let line = String(data: data, encoding: .utf8),
                line.hasPrefix("OSTTRACKER_READY") {

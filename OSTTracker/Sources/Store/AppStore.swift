@@ -206,16 +206,16 @@ final class AppStore {
     }
 
     func pause() async {
-        do { _ = try await client?.pause() } catch { reportError("Couldn't pause (\\(error.localizedDescription)).") }
+        do { _ = try await client?.pause() } catch { reportError("Couldn't pause (\(error.localizedDescription)).") }
     }
 
     func stop() async {
-        do { _ = try await client?.stop() } catch { reportError("Couldn't stop (\\(error.localizedDescription)).") }
+        do { _ = try await client?.stop() } catch { reportError("Couldn't stop (\(error.localizedDescription)).") }
     }
 
     func seek(to seconds: Double) async {
         player.seek(to: seconds)
-        do { _ = try await client?.seek(position: seconds) } catch { reportError("Couldn't seek (\\(error.localizedDescription)).") }
+        do { _ = try await client?.seek(position: seconds) } catch { reportError("Couldn't seek (\(error.localizedDescription)).") }
     }
 
     /// Returns false when the backend rejected the add, so the sheet can stay
@@ -232,8 +232,10 @@ final class AppStore {
             return false
         }
         // Show the new card (and its seeded self-rating) immediately, /ws or not.
-        await resync()
-        await refreshHistory()
+        async let syncDone: Void = resync()
+        async let histDone: Void = refreshHistory()
+        await syncDone
+        await histDone
         return true
     }
 

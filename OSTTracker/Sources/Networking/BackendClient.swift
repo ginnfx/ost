@@ -72,12 +72,20 @@ actor BackendClient {
     // MARK: - Health
 
     func waitUntilHealthy(timeout: Duration = .seconds(10)) async throws {
-        let deadline = ContinuousClock.now + timeout
-        while ContinuousClock.now < deadline {
-            if let _ = try? await run(request("GET", "/health")) { return }
-            try await Task.sleep(for: .milliseconds(100))
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                while true {
+                    if (try? await self.run(self.request("GET", "/health"))) != nil { return }
+                    try await Task.sleep(for: .milliseconds(100))
+                }
+            }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw BackendError.healthTimeout
+            }
+            try await group.next()
+            group.cancelAll()
         }
-        throw BackendError.healthTimeout
     }
 
     // MARK: - REST (1:1 with the contract)
@@ -225,7 +233,7 @@ actor BackendClient {
                         // still exit the loop and trigger the reconnect path.
                         do {
                             continuation.yield(try decoder.decode(WSEvent.self, from: data))
-                        } catch let error as DecodingError {
+                        } catch {
                             print("GATE ws skipped undecodable event: \(error)")
                         }
                     }
