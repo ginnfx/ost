@@ -16,22 +16,18 @@ IOS_RUNTIME="$HERE/runtime/ios"
 TEAM_ID="${TEAM_ID:-}"
 
 # --- 1) Embedded CPython for iOS ----------------------------------------------
-# python-build-standalone publishes aarch64-apple-ios builds; the install_only
-# asset carries the stdlib + a static libpython. If a framework layout is
-# needed instead, fall back to BeeWare python-ios-support.
+# BeeWare Python-Apple-support ships Python.xcframework (dynamic, arm64 device
+# + arm64+x86_64 simulator slice), which Xcode embeds and signs automatically.
+# python-build-standalone does not publish iOS builds, so we use BeeWare instead.
+BEEWARE_TAG="3.11-b9"
+BEEWARE_ASSET="Python-3.11-iOS-support.b9.tar.gz"
+BEEWARE_URL="https://github.com/beeware/Python-Apple-support/releases/download/${BEEWARE_TAG}/${BEEWARE_ASSET}"
 mkdir -p "$IOS_RUNTIME"
-if [ ! -d "$IOS_RUNTIME/Python.framework" ] && [ ! -f "$IOS_RUNTIME/lib/libpython3.11.a" ]; then
-  TAG="20260623"
-  ASSET="cpython-3.11.15+${TAG}-aarch64-apple-ios-install_only.tar.gz"
-  URL="https://github.com/astral-sh/python-build-standalone/releases/download/${TAG}/${ASSET}"
-  echo "fetching $ASSET"
-  curl -L -o "$HERE/runtime/$ASSET" "$URL"
-  mkdir -p "$IOS_RUNTIME"
-  tar -xzf "$HERE/runtime/$ASSET" -C "$IOS_RUNTIME" --strip-components=1
-  # Layout expected by the Xcode target: lib/libpython3.11.a + include/ headers.
-  # (python-build-standalone ships python/lib — adjust paths if the layout
-  # differs on the pinned tag; BeeWare's python-ios-support yields a framework
-  # that plugs into FRAMEWORK_SEARCH_PATHS instead.)
+if [ ! -d "$IOS_RUNTIME/Python.xcframework" ]; then
+  echo "fetching $BEEWARE_ASSET"
+  curl -L -o "$HERE/runtime/$BEEWARE_ASSET" "$BEEWARE_URL"
+  tar -xzf "$HERE/runtime/$BEEWARE_ASSET" -C "$IOS_RUNTIME"
+  rm -f "$HERE/runtime/$BEEWARE_ASSET"
 fi
 
 # --- 2) Generate the Xcode project ---------------------------------------------
