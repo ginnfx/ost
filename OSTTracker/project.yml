@@ -58,6 +58,10 @@ targets:
       - sdk: AudioToolbox.framework
       - sdk: CoreText.framework
       - sdk: UIKit.framework
+      # BeeWare Python-Apple-support 3.11-b9 — staged by packaging/08_ios_build.sh.
+      # Dynamic framework must be embedded so the dylib is present at runtime.
+      - framework: ../packaging/runtime/ios/Python.xcframework
+        embed: true
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -68,16 +72,12 @@ targets:
         INFOPLIST_KEY_UIBackgroundModes: audio
         INFOPLIST_KEY_ATSApplicationFontsPath: "Fonts"
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""   # set locally or in CI (fastlane/xcodebuild -allowProvisioningUpdates)
+        DEVELOPMENT_TEAM: ""   # set locally: open project in Xcode → Signing & Capabilities → select your team
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.2"
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         ARCHS: arm64
-        # Embedded CPython staged by packaging/08_ios_build.sh
-        FRAMEWORK_SEARCH_PATHS: "$(SRCROOT)/../packaging/runtime/ios"
-        HEADER_SEARCH_PATHS: "$(SRCROOT)/../packaging/runtime/ios/include"
-        OTHER_LDFLAGS: "$(inherited) -framework Python"
   OSTTrackerTests:
     type: bundle.unit-test
     platform: macOS
