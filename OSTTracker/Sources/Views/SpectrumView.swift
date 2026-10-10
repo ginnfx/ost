@@ -10,12 +10,12 @@ struct SpectrumView: View {
     let accent: Color
     var isPlaying = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
+    @AppStorage(Theme.visualizerKey) private var visualizerEnabled = true
     @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
     @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     private var active: Bool {
-        isPlaying && fxEnabled && !reduceMotion && motionSelection != MotionMode.minimal.rawValue
+        isPlaying && visualizerEnabled && !reduceMotion && motionSelection != MotionMode.minimal.rawValue
     }
 
     var body: some View {
