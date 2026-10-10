@@ -57,7 +57,7 @@ private struct AttractSlide: View {
 
             VStack(spacing: 18) {
                 CoverImage(path: entry.ost.coverImagePath, epoch: epoch)
-                    .aspectRatio(1, contentMode: .fill)
+                    .scaledToFit()
                     .frame(width: 320, height: 320)
                     .clipShape(RoundedRectangle(cornerRadius: 7))
                 if isNowPlaying {

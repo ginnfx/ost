@@ -1,6 +1,4 @@
-// Floating transport chrome, rendered in Liquid Glass like the rest of the
-// app's chrome and panels (see RootView header for the glass policy).
-// Reads playbackState/resolution from the store; audio itself runs in PlayerSink.
+// Playback controls read store state; PlayerSink owns the audio stream.
 
 import SwiftUI
 
@@ -93,8 +91,6 @@ struct NowPlayingBar: View {
         }
     }
 
-    /// The playing OST's cover accent drives the spectrum gradient, matching
-    /// the accent treatment on its card and detail view.
     private var accentColor: Color {
         Theme.accent
     }
@@ -103,11 +99,6 @@ struct NowPlayingBar: View {
         "\(format(store.player.position)) / \(format(store.player.duration))"
     }
 
-    // Play/pause and stop carry .interactive() glass specifically so they
-    // respond to press/touch state (scale + illumination), while the bar itself
-    // is plain .regular glass. They live inside the bar's GlassEffectContainer,
-    // so the per-button glass shares the bar's sampling region instead of
-    // stacking as glass-on-glass.
     private var transport: some View {
         HStack(spacing: 10) {
             Button {
@@ -171,7 +162,7 @@ private struct VinylArtwork: View {
 
     var body: some View {
         CoverImage(path: path, epoch: epoch)
-            .aspectRatio(1, contentMode: .fill)
+            .scaledToFit()
             .frame(width: 40, height: 40)
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }

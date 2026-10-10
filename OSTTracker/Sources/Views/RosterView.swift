@@ -1,12 +1,6 @@
-// The character-select roster: 50 chamfered cards, diamond rank badges,
-// mono scores, hover glow, staggered reveal, live re-sort. Cards stay SOLID
-// content surfaces; glass is reserved for chrome and the detail overlay panel
-// (see RootView header for the glass policy). Card -> detail is a hero zoom
-// done with matchedGeometryEffect (navigationTransition(.zoom) is iOS-only).
+// Ranked artwork grid with searchable entries, batch/slice views, keyboard
+// navigation, and a shared-artwork detail transition.
 
-#if os(macOS)
-import GlowEffectKit
-#endif
 import SwiftUI
 
 struct RosterView: View {
@@ -373,7 +367,11 @@ struct RosterView: View {
             isPlaying: playingOstID == id,
             rankDelta: store.rankDeltas[id],
             isKeyboardCursor: gridFocused && cursorIndex == index,
-            batchLabel: batchLabel(for: id)
+            batchLabel: batchLabel(for: id),
+            onPlay: {
+                SoundKit.shared.play(.playStart)
+                Task { await store.play(ostID: id) }
+            }
         )
         .id(id)
         .matchedGeometryEffect(
@@ -552,6 +550,7 @@ struct RosterCard: View {
     var isKeyboardCursor: Bool = false
     /// "B1·3" batch-key chip, non-nil only while the roster is in Batch sort.
     var batchLabel: String? = nil
+    var onPlay: () -> Void = {}
 
     @State private var isHovered = false
     private var accent: Color { Theme.accent }
@@ -604,15 +603,34 @@ struct RosterCard: View {
     }
 
     private var cover: some View {
-        Color.clear
-            .aspectRatio(1, contentMode: .fit)
-            .overlay { CoverImage(path: entry.ost.coverImagePath, epoch: coverEpoch).scaledToFill() }
-            .clipped()
-            .overlay(alignment: .bottomTrailing) {
+        Theme.bgRaised
+            .aspectRatio(0.85, contentMode: .fit)
+            .overlay {
+                CoverImage(path: entry.ost.coverImagePath, epoch: coverEpoch)
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .overlay(alignment: .bottomLeading) {
                 if let phase = resolutionPhase {
                     ResolutionBadge(phase: phase).padding(6)
                 }
             }
+            #if os(macOS)
+            .overlay(alignment: .bottomTrailing) {
+                if isHovered || isPlaying {
+                    Button(action: onPlay) {
+                        Image(systemName: isPlaying ? "waveform" : "play.fill")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.bg)
+                            .frame(width: 36, height: 36)
+                            .background(Theme.accent, in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isPlaying ? "Play this OST again" : "Play \(entry.ost.title)")
+                    .padding(10)
+                }
+            }
+            #endif
     }
 
     private var info: some View {

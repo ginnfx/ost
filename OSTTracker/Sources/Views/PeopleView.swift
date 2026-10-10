@@ -25,6 +25,13 @@ struct PeopleView: View {
                     .font(.ostDisplay(12, weight: .semibold))
             }
             VStack(spacing: 0) {
+                    if store.people.isEmpty {
+                        Text("No people yet")
+                            .font(.ostBody(13))
+                            .foregroundStyle(Theme.textDim)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(16)
+                    }
                     ForEach(store.people) { person in
                         HStack(spacing: 10) {
                             Text(person.name).font(.ostBody(14)).foregroundStyle(Theme.textPrimary)
@@ -38,6 +45,7 @@ struct PeopleView: View {
                             }
                             .buttonStyle(.plain)
                             .help("Delete \(person.name)")
+                            .accessibilityLabel("Delete \(person.name)")
                         }
                         .padding(12)
                         .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
@@ -48,7 +56,7 @@ struct PeopleView: View {
         }
         .padding(24)
         .frame(maxWidth: 560, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .center)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .confirmationDialog(
             pendingDelete.map { "Delete \($0.name)?" } ?? "",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
