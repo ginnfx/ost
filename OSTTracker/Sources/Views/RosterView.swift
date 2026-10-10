@@ -1,5 +1,5 @@
 // Ranked artwork grid with searchable entries, batch/slice views, keyboard
-// navigation, and a shared-artwork detail transition.
+// navigation, and an OST detail panel.
 
 import SwiftUI
 
@@ -9,7 +9,6 @@ struct RosterView: View {
     @Binding var submitterFilter: Int?
     @State private var selectedOstID: Int?
     @State private var search = ""
-    @Namespace private var hero
     @FocusState private var searchFocused: Bool
     // Keyboard character-select: roving cursor over the grid (W3C APG roving
     // focus pattern — arrows move, Return opens, Space plays, Esc clears).
@@ -203,7 +202,7 @@ struct RosterView: View {
                     .onTapGesture { close() }
                     .transition(.opacity)
 
-                DetailView(store: store, ostID: id, heroNamespace: hero, onClose: close)
+                DetailView(store: store, ostID: id, onClose: close)
                     .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(Theme.separator, lineWidth: 1))
                     .clipShape(RoundedRectangle(cornerRadius: 9))
@@ -387,7 +386,6 @@ struct RosterView: View {
             rankDelta: store.rankDeltas[id],
             isKeyboardCursor: gridFocused && cursorIndex == index,
             batchLabel: batchLabel(for: id),
-            heroNamespace: hero,
             onPlay: {
                 let playing = store.playback?.ostId == id && store.playback?.status == .playing
                 SoundKit.shared.play(playing ? .pause : .playStart)
@@ -571,7 +569,6 @@ struct RosterCard: View {
     var isKeyboardCursor: Bool = false
     /// "B1·3" batch-key chip, non-nil only while the roster is in Batch sort.
     var batchLabel: String? = nil
-    let heroNamespace: Namespace.ID
     var onPlay: () -> Void = {}
 
     @State private var isHovered = false
@@ -634,11 +631,6 @@ struct RosterCard: View {
                 CoverImage(path: entry.ost.coverImagePath, epoch: coverEpoch)
                     .scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .matchedGeometryEffect(
-                        id: "artwork-\(entry.ost.id)",
-                        in: heroNamespace,
-                        isSource: true
-                    )
             }
             .overlay(alignment: .bottomLeading) {
                 if let phase = resolutionPhase {

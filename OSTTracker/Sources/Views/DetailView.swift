@@ -1,4 +1,4 @@
-// Hero-zoom destination for one OST: big cover, stats from Python, playback
+// Detail view for one OST: big cover, stats from Python, playback
 // controls, and the full 0–10 rating strip per person. Every number that
 // appears here was computed server-side.
 
@@ -7,7 +7,6 @@ import SwiftUI
 struct DetailView: View {
     let store: AppStore
     let ostID: Int
-    let heroNamespace: Namespace.ID
     var onClose: () -> Void = {}
 
     @State private var showCoverPicker = false
@@ -98,7 +97,6 @@ struct DetailView: View {
     private func heroCover(_ entry: RankEntry) -> some View {
         CoverImage(path: entry.ost.coverImagePath, epoch: store.coverEpoch(for: entry.ost.id))
             .scaledToFit()
-            .matchedGeometryEffect(id: "artwork-\(entry.ost.id)", in: heroNamespace, isSource: false)
             .clipShape(RoundedRectangle(cornerRadius: 7))
             .overlay(alignment: .bottomTrailing) {
                 Button { showCoverPicker = true } label: {
