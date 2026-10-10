@@ -38,8 +38,8 @@ struct SettingsView: View {
         .task { roundStatus = await AppStore.shared.roundStatus() }
         .sheet(item: $retireChallenge) { challenge in
             VStack(alignment: .leading, spacing: 16) {
-                Text("Retire this rating?").font(.title2.bold())
-                Text("All current OSTs will move to History. Ratings and the batch arrangement are saved so this round can be restored while the next one is empty. People and notes stay in place.")
+                Text("Retire this ranking?").font(.title2.bold())
+                Text("Current OSTs move to History. You can restore their ratings and batches while the roster is empty. People and notes stay.")
                     .font(.callout)
                 Text("Type \(challenge.word) to confirm")
                     .font(.headline.monospaced())
@@ -49,7 +49,7 @@ struct SettingsView: View {
                 HStack {
                     Button("Cancel") { retireChallenge = nil; typedWord = "" }
                     Spacer()
-                    Button("Retire & begin new rating", role: .destructive) {
+                    Button("Retire ranking", role: .destructive) {
                         roundActionInFlight = true
                         Task {
                             let succeeded = await AppStore.shared.retireRound(challengeId: challenge.challengeId, word: typedWord)
@@ -82,7 +82,7 @@ struct SettingsView: View {
             Stepper(value: thresholdBinding, in: 1...20) {
                 LabeledContent("Eliminate at", value: "\(threshold) OSTs out")
             }
-            Text("How many of a person's OSTs have to fall before they're knocked out in the roster's slice view.")
+            Text("Number of fallen OSTs needed to eliminate a person in Slices.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -98,9 +98,9 @@ struct SettingsView: View {
     }
 
     private var roundManagement: some View {
-        Section("Rating rounds") {
-            LabeledContent("Current rating", value: "\(roundStatus?.currentName ?? "None") · \(roundStatus?.activeOstCount ?? 0) OSTs")
-            Button("Retire current rating…") {
+        Section("Rankings") {
+            LabeledContent("Current ranking", value: "\(roundStatus?.currentName ?? "None") · \(roundStatus?.activeOstCount ?? 0) OSTs")
+            Button("Retire current ranking…") {
                 Task {
                     typedWord = ""
                     retireChallenge = await AppStore.shared.retireChallenge()
@@ -125,7 +125,7 @@ struct SettingsView: View {
                     }
                 }
             }
-            Text("Restore is available while the current rating is empty. Retire a new rating first to switch back to an older one.")
+            Text("Restore requires an empty current ranking.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -141,7 +141,7 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.segmented)
-            Text("Minimal keeps screens still. Subtle uses quick transitions. Cinematic gives artwork and navigation more movement. macOS Reduce Motion takes priority.")
+            Text("macOS Reduce Motion overrides this setting.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             LabeledContent("Accent theme") {

@@ -67,7 +67,7 @@ struct DetailView: View {
                     }
                 }
             } message: {
-                Text("All of its ratings go with it. This can't be undone.")
+                Text("Its ratings will also be deleted. This can't be undone.")
             }
             // `self.` is required: `entry` is shadowed above by the
             // unwrapped local, but the live optional lookup is what must be
@@ -159,10 +159,10 @@ struct DetailView: View {
     // every raised surface on the detail panel reads as one material.
     private func stats(_ entry: RankEntry) -> some View {
         HStack(spacing: 14) {
-            stat("AVG", entry.average.map { String(format: "%.2f", $0) } ?? "—", accent(entry))
-            stat("MIN", entry.minimum.map(\.scoreLabel) ?? "—", Theme.textDim)
-            stat("MAX", entry.maximum.map(\.scoreLabel) ?? "—", Theme.textDim)
-            stat("σ", entry.stddev.map { String(format: "%.2f", $0) } ?? "—", Theme.textDim)
+            stat("AVG", entry.average.map { String(format: "%.2f", $0) } ?? "n/a", accent(entry))
+            stat("MIN", entry.minimum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
+            stat("MAX", entry.maximum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
+            stat("σ", entry.stddev.map { String(format: "%.2f", $0) } ?? "n/a", Theme.textDim)
             stat("VOTES", "\(entry.ratingCount)", Theme.textDim)
         }
     }
@@ -237,7 +237,7 @@ struct RatingRow: View {
                     .foregroundStyle(Theme.accent)
             }
             Spacer()
-            TextField("—", text: $text)
+            TextField("Score", text: $text)
                 .textFieldStyle(.plain)
                 .font(.ostMono(20, weight: .bold))
                 .multilineTextAlignment(.center)

@@ -80,7 +80,7 @@ struct AddOstView: View {
                 HStack(spacing: 4) {
                     Image(systemName: "person.crop.circle.badge.exclamationmark")
                         .foregroundStyle(Theme.rust)
-                    Text("No people yet — add everyone on the People tab first.")
+                    Text("Add someone in People before adding an OST.")
                         .font(.ostBody(11)).foregroundStyle(Theme.textDim)
                 }
             } else {
@@ -91,7 +91,7 @@ struct AddOstView: View {
                     }
                     Picker("", selection: $submitterID) {
                         // Placeholder only — Add stays disabled until a person is chosen.
-                        Text("— choose a person —").tag(Int?.none)
+                        Text("Choose a person").tag(Int?.none)
                         ForEach(store.people) { person in
                             Text(person.name).tag(Int?.some(person.id))
                         }
@@ -103,7 +103,7 @@ struct AddOstView: View {
 
             field("External link", text: $link, placeholder: "YouTube / Spotify URL (optional)")
 
-            Text("Cover art is fetched automatically after adding. The submitter is auto-scored 10 (self-rating).")
+            Text("Cover art is fetched after adding. The submitter gets a score of 10.")
                 .font(.ostBody(11)).foregroundStyle(Theme.textDim)
 
             HStack {
@@ -146,7 +146,7 @@ struct AddOstView: View {
     private func historyConflictMessage(_ entry: HistoryEntry) -> String {
         var detail = entry.batchLabel ?? "a past ranking"
         if let sender = entry.sender { detail += " (submitted by \(sender))" }
-        return "Already used before, in \(detail)."
+        return "Already in \(detail)."
     }
 
     // Source field with a franchise-autofill dropdown: as you type, distinct

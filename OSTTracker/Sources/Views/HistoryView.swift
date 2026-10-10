@@ -87,8 +87,6 @@ struct HistoryView: View {
             .sheet(item: $renameTarget) { target in
                 VStack(alignment: .leading, spacing: 16) {
                     Text("Rename ranking").font(.title2.bold())
-                    Text("This changes the heading for every OST in this history group.")
-                        .font(.callout).foregroundStyle(.secondary)
                     TextField("Ranking name", text: $proposedName)
                         .textFieldStyle(.roundedBorder)
                     HStack {

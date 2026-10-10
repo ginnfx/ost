@@ -69,35 +69,35 @@ struct StatsView: View {
                                 StatTile(
                                     superlative: "TOUGHEST RATER",
                                     value: String(format: "%.2f", harsh.average),
-                                    subject: "\(harsh.person.name) — lowest average given"
+                                    subject: harsh.person.name
                                 )
                             }
                             if let generous = mostGenerousRater {
                                 StatTile(
                                     superlative: "MOST GENEROUS RATER",
                                     value: String(format: "%.2f", generous.average),
-                                    subject: "\(generous.person.name) — highest average given"
+                                    subject: generous.person.name
                                 )
                             }
                             if let most = mostRated {
                                 StatTile(
                                     superlative: "MOST RATED",
                                     value: "\(most.ratingCount)",
-                                    subject: "\(most.ost.title) — votes cast"
+                                    subject: most.ost.title
                                 )
                             }
                             if let curator = topCurator {
                                 StatTile(
                                     superlative: "BEST SUBMITTER",
                                     value: String(format: "%.2f", curator.average),
-                                    subject: "\(curator.person.name) — avg of \(curator.count) picks"
+                                    subject: "\(curator.person.name), \(curator.count) picks"
                                 )
                             }
                             if let prolific = mostProlificSubmitter {
                                 StatTile(
                                     superlative: "MOST PROLIFIC SUBMITTER",
                                     value: "\(prolific.count)",
-                                    subject: "\(prolific.person.name) — OSTs submitted"
+                                    subject: prolific.person.name
                                 )
                             }
                         }
@@ -170,7 +170,7 @@ struct StatsView: View {
     private var overviewMetrics: [OverviewMetric] {
         [
             OverviewMetric(label: "OSTS TRACKED", value: "\(totalOsts)"),
-            OverviewMetric(label: "OVERALL AVERAGE", value: overallAverage.map { String(format: "%.2f", $0) } ?? "—"),
+            OverviewMetric(label: "OVERALL AVERAGE", value: overallAverage.map { String(format: "%.2f", $0) } ?? "n/a"),
             OverviewMetric(label: "RATINGS IN", value: "\(Int((coverage * 100).rounded()))%"),
             OverviewMetric(label: "PERFECT 10s", value: "\(perfectTenCount)"),
             OverviewMetric(label: "AVG VOTES / OST", value: String(format: "%.1f", avgVotesPerOst)),

@@ -85,7 +85,7 @@ private struct TallyChip: View {
             )
         )
         .help(tally.eliminatedHere
-              ? "\(tally.name) is out — \(tally.totalOut) OSTs down"
+              ? "\(tally.name) is out after \(tally.totalOut) OSTs"
               : "\(tally.name): \(tally.remaining) still standing")
     }
 }

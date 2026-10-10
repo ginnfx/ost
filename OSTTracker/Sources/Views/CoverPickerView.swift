@@ -70,7 +70,7 @@ struct CoverPickerView: View {
             HStack { Spacer(); ProgressView().controlSize(.large); Spacer() }
                 .frame(height: 200)
         } else if candidates.isEmpty {
-            Text("No candidates found. Paste an image URL above instead.")
+            Text("No cover found. Paste an image URL above.")
                 .font(.ostBody(12)).foregroundStyle(Theme.textDim)
                 .frame(maxWidth: .infinity, minHeight: 120)
         } else {
