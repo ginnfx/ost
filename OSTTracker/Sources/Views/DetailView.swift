@@ -96,7 +96,7 @@ struct DetailView: View {
 
     private func heroCover(_ entry: RankEntry) -> some View {
         CoverImage(path: entry.ost.coverImagePath, epoch: store.coverEpoch(for: entry.ost.id))
-            .aspectRatio(1, contentMode: .fill)
+            .scaledToFit()
             .clipShape(RoundedRectangle(cornerRadius: 7))
             .overlay(alignment: .bottomTrailing) {
                 Button { showCoverPicker = true } label: {

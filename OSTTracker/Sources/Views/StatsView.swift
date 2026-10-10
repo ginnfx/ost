@@ -1,7 +1,4 @@
-// big board: competition-wide stats computed client-side off already-loaded
-// store data (leaderboard + scores + people). Four layers, page title down to
-// card caption: page ("THE BOARD") > section label (OVERVIEW, SUPERLATIVES,
-// ...) > card caption (mono, describes exactly what the card shows) > content.
+// Competition-wide stats computed from loaded leaderboard, scores, and people.
 // Self-ratings (submitter auto-10s) excluded from rater/curator stats so
 // numbers say something true about taste, not bookkeeping.
 
@@ -12,16 +9,25 @@ struct StatsView: View {
 
     var body: some View {
         if store.leaderboard.isEmpty {
-            ContentUnavailableView(
-                "No stats yet", systemImage: "chart.bar",
-                description: Text("Stats appear once OSTs are added and rated.")
-            )
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Stats")
+                    .font(.ostDisplay(22, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text(store.roundInfo?.needsStart == true
+                     ? "Start a new ranking in Roster to see its stats."
+                     : "Add an OST to see ranking stats here.")
+                    .font(.ostBody(13))
+                    .foregroundStyle(Theme.textDim)
+                Spacer()
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
-                    Text("THE BOARD")
-                        .font(.ostDisplay(15, weight: .semibold))
-                        .foregroundStyle(Theme.accent)
+                    Text("Stats")
+                        .font(.ostDisplay(22, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
 
                     VStack(alignment: .leading, spacing: 12) {
                         sectionLabel("OVERVIEW")
@@ -36,7 +42,7 @@ struct StatsView: View {
                                     superlative: "MOST DIVISIVE",
                                     value: String(format: "σ %.2f", divisive.stddev ?? 0),
                                     subject: divisive.ost.title,
-                                    tint: Theme.pink
+                                    tint: Theme.rust
                                 )
                             }
                             if let consensus = consensusPick {
@@ -52,7 +58,7 @@ struct StatsView: View {
                                     superlative: "HIGHEST RATED",
                                     value: String(format: "%.2f", top.average ?? 0),
                                     subject: top.ost.title,
-                                    tint: Theme.gold
+                                    tint: Theme.accent
                                 )
                             }
                             if let low = lowestRated {
@@ -76,7 +82,7 @@ struct StatsView: View {
                                     superlative: "MOST GENEROUS RATER",
                                     value: String(format: "%.2f", generous.average),
                                     subject: "\(generous.person.name) — highest average given",
-                                    tint: Theme.gold
+                                    tint: Theme.accent
                                 )
                             }
                             if let most = mostRated {
@@ -92,7 +98,7 @@ struct StatsView: View {
                                     superlative: "BEST SUBMITTER",
                                     value: String(format: "%.2f", curator.average),
                                     subject: "\(curator.person.name) — avg of \(curator.count) picks",
-                                    tint: Theme.pink
+                                    tint: Theme.accent
                                 )
                             }
                             if let prolific = mostProlificSubmitter {
