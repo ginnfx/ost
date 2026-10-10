@@ -137,7 +137,7 @@ nonisolated enum Theme {
     // MARK: Sound and spectrum settings
 
     static let uiSoundVolume: Float = 0.35    // UI blips sit well under the OST
-    /// Controls spectrum movement in the compact player and visualizer.
+    /// Controls audio-reactive movement in the player and visualizer.
     static let fxDefaultsKey = "reactiveFXEnabled"
     static let fxIntensityKey = "fxIntensity"
 
