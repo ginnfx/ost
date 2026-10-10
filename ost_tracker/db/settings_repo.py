@@ -7,6 +7,8 @@ from typing import Optional
 from ost_tracker.db.connection import get_db
 
 REVEAL_UNLOCKED = "reveal_unlocked"
+ACTIVE_ROUND_NAME = "active_round_name"
+ROUND_STATE = "round_state"
 
 
 def get_setting(key: str, default: Optional[str] = None) -> Optional[str]:

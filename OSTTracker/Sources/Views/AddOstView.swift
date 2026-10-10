@@ -21,10 +21,14 @@ struct AddOstView: View {
     /// The filter can outlive the person it points at (deleted between the
     /// filter being captured and this sheet opening) — only seed a default
     /// that still resolves to a real roster entry.
-    init(store: AppStore, defaultSubmitterID: Int? = nil) {
+    init(store: AppStore, defaultSubmitterID: Int? = nil,
+         initialTitle: String = "", initialSource: String = "", initialLink: String = "") {
         self.store = store
         let validDefault = store.people.contains { $0.id == defaultSubmitterID } ? defaultSubmitterID : nil
         _submitterID = State(initialValue: validDefault)
+        _title = State(initialValue: initialTitle)
+        _source = State(initialValue: initialSource)
+        _link = State(initialValue: initialLink)
     }
 
     // Delegates to AddOstRules (see that type for the rule rationale) so the
@@ -105,11 +109,10 @@ struct AddOstView: View {
             HStack {
                 Spacer()
                 Button("Cancel") { dismiss() }
-                    .buttonStyle(.glass)
+                    .buttonStyle(.bordered)
                     .font(.ostDisplay(12, weight: .semibold))
                 Button("Add") { submit() }
-                    .buttonStyle(.glass)
-                    .tint(canSubmit ? Theme.accent : Theme.textDim)
+                    .buttonStyle(.borderedProminent)
                     .font(.ostDisplay(13, weight: .semibold))
                     .disabled(!canSubmit)
             }
@@ -155,7 +158,7 @@ struct AddOstView: View {
                 .textFieldStyle(.plain)
                 .font(.ostBody(14))
                 .padding(8)
-                .glassEffect(.regular, in: ChamferedRect(cut: 8))
+                .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
                 .focused($sourceFocused)
             if sourceFocused, !sourceSuggestions.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
@@ -177,8 +180,7 @@ struct AddOstView: View {
                 }
                 // Dark tint keeps the suggestion rows legible over whatever the
                 // sheet's automatic glass happens to refract behind them.
-                .glassEffect(.regular.tint(Color.black.opacity(0.25)), in: ChamferedRect(cut: 8))
-                .overlay(ChamferedRect(cut: 8).stroke(Theme.accent.opacity(0.3), lineWidth: 1))
+                .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
             }
         }
     }
@@ -190,7 +192,7 @@ struct AddOstView: View {
                 .textFieldStyle(.plain)
                 .font(.ostBody(14))
                 .padding(8)
-                .glassEffect(.regular, in: ChamferedRect(cut: 8))
+                .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
         }
     }
 

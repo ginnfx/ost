@@ -22,29 +22,35 @@ def _row_to_note(row: sqlite3.Row) -> Note:
         title=row["title"],
         note=row["note"] or "",
         created_at=row["created_at"],
+        source=row["source"],
+        artist=row["artist"],
+        external_link=row["external_link"],
     )
 
 
 def list_notes() -> list[Note]:
     rows = get_db().query(
-        "SELECT id, title, note, created_at FROM notes ORDER BY created_at DESC, id DESC"
+        "SELECT id, title, note, source, artist, external_link, created_at FROM notes ORDER BY created_at DESC, id DESC"
     )
     return [_row_to_note(r) for r in rows]
 
 
 def get_note(note_id: int) -> Optional[Note]:
     row = get_db().query_one(
-        "SELECT id, title, note, created_at FROM notes WHERE id = ?", (note_id,)
+        "SELECT id, title, note, source, artist, external_link, created_at FROM notes WHERE id = ?", (note_id,)
     )
     return _row_to_note(row) if row else None
 
 
-def add_note(title: str, note: str = "") -> Note:
+def add_note(title: str, note: str = "", source: Optional[str] = None,
+             artist: Optional[str] = None, external_link: Optional[str] = None) -> Note:
     title = (title or "").strip()
     if not title:
         raise ValueError("Note title cannot be empty")
     new_id = get_db().execute(
-        "INSERT INTO notes (title, note) VALUES (?, ?)", (title, note or "")
+        "INSERT INTO notes (title, note, source, artist, external_link) VALUES (?, ?, ?, ?, ?)",
+        (title, note or "", (source or "").strip() or None,
+         (artist or "").strip() or None, (external_link or "").strip() or None),
     )
     created = get_note(new_id)
     if created is None:

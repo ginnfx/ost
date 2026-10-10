@@ -47,11 +47,17 @@ targets:
   OSTTrackerIOS:
     type: application
     platform: iOS
-    deploymentTarget: "16.0"
+    deploymentTarget: "26.0"
     sources:
       - Sources
       - Assets.xcassets
       - path: Fonts
+        type: folder
+        buildPhase: resources
+      - path: ../backend
+        type: folder
+        buildPhase: resources
+      - path: ../ost_tracker
         type: folder
         buildPhase: resources
     dependencies:
@@ -72,12 +78,14 @@ targets:
         INFOPLIST_KEY_UIBackgroundModes: audio
         INFOPLIST_KEY_ATSApplicationFontsPath: "Fonts"
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: ""   # set locally: open project in Xcode → Signing & Capabilities → select your team
+        DEVELOPMENT_TEAM: "5W29Q45NKL"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.2"
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         ARCHS: arm64
+        "HEADER_SEARCH_PATHS[sdk=iphoneos*]": "$(SRCROOT)/../packaging/runtime/ios/Python.xcframework/ios-arm64/Python.framework/Headers"
+        "HEADER_SEARCH_PATHS[sdk=iphonesimulator*]": "$(SRCROOT)/../packaging/runtime/ios/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers"
   OSTTrackerTests:
     type: bundle.unit-test
     platform: macOS

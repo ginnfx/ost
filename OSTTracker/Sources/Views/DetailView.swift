@@ -79,48 +79,56 @@ struct DetailView: View {
         }
     }
 
-    private func hero(_ entry: RankEntry) -> some View {
+    @ViewBuilder private func hero(_ entry: RankEntry) -> some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 14) {
+            heroCover(entry).frame(maxWidth: .infinity).frame(height: 200)
+            heroMeta(entry)
+        }
+        #else
         HStack(alignment: .top, spacing: 20) {
-            CoverImage(path: entry.ost.coverImagePath, epoch: store.coverEpoch(for: entry.ost.id))
-                .aspectRatio(1, contentMode: .fill)
-                .frame(width: 220, height: 220)
-                .clipShape(ChamferedRect())
-                .overlay(ChamferedRect().stroke(accent(entry).opacity(0.6), lineWidth: 1.5))
-                .overlay(alignment: .bottomTrailing) {
-                    Button { showCoverPicker = true } label: {
-                        Image(systemName: "photo.on.rectangle.angled")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(Theme.textPrimary)
-                            .padding(8)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular.tint(accent(entry).opacity(0.3)).interactive(), in: .circle)
-                    .padding(8)
-                    .help("Change cover art")
-                }
-                // Bass thump while THIS ost is the one playing.
-                .musicPulse(
-                    spectrum: store.player.spectrum, isPlaying: isThisPlaying,
-                    amount: Theme.coverThump
-                )
+            heroCover(entry).frame(width: 220, height: 220)
+            heroMeta(entry)
+            Spacer(minLength: 0)
+        }
+        #endif
+    }
 
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 12) {
-                    DiamondBadge(rank: entry.rank, size: 44)
-                    Text(entry.ost.title)
-                        .font(.ostDisplay(26, weight: .bold))
+    private func heroCover(_ entry: RankEntry) -> some View {
+        CoverImage(path: entry.ost.coverImagePath, epoch: store.coverEpoch(for: entry.ost.id))
+            .aspectRatio(1, contentMode: .fill)
+            .clipShape(RoundedRectangle(cornerRadius: 7))
+            .overlay(alignment: .bottomTrailing) {
+                Button { showCoverPicker = true } label: {
+                    Image(systemName: "photo.on.rectangle.angled")
+                        .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
+                        .padding(8)
                 }
-                if let source = entry.ost.source {
-                    Text(source).font(.ostBody(14)).foregroundStyle(Theme.textDim)
-                }
-                if let submitter = entry.ost.submitterName {
-                    Text("submitted by \(submitter)")
-                        .font(.ostBody(12)).foregroundStyle(accent(entry))
-                }
-                Spacer(minLength: 8)
-                playButton(entry)
+                .buttonStyle(.plain)
+                .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 6))
+                .padding(8)
+                .help("Change cover art")
             }
+    }
+
+    private func heroMeta(_ entry: RankEntry) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                DiamondBadge(rank: entry.rank, size: 44)
+                Text(entry.ost.title)
+                    .font(.ostDisplay(22, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let source = entry.ost.source {
+                Text(source).font(.ostBody(14)).foregroundStyle(Theme.textDim)
+            }
+            if let submitter = entry.ost.submitterName {
+                Text("submitted by \(submitter)")
+                    .font(.ostBody(12)).foregroundStyle(Theme.textDim)
+            }
+            playButton(entry)
         }
     }
 
@@ -134,8 +142,7 @@ struct DetailView: View {
                     .font(.ostDisplay(13, weight: .semibold))
                     .padding(.horizontal, 10).padding(.vertical, 3)
             }
-            .buttonStyle(.glass)
-            .tint(accent(entry))
+            .buttonStyle(.borderedProminent)
 
             if let phase = store.resolutionPhase[entry.ost.id] {
                 Text(phase.rawValue)
@@ -167,7 +174,7 @@ struct DetailView: View {
         .padding(.vertical, 10)
         // Faint dark tint guarantees tile boundaries stay visible even where the
         // panel's glass stack bottoms out on the near-black backdrop.
-        .glassEffect(.regular.tint(Color.black.opacity(0.25)), in: ChamferedRect(cut: 10))
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 6))
     }
 
     private func ratingGrid(_ entry: RankEntry) -> some View {
@@ -194,7 +201,7 @@ struct DetailView: View {
     }
 
     private func accent(_ entry: RankEntry) -> Color {
-        entry.ost.coverAccentHex.map { Color(hex: $0) } ?? Theme.pink
+        Theme.accent
     }
 }
 
@@ -241,6 +248,9 @@ struct RatingRow: View {
                     isFocused ? accent : (score == nil ? Color.white.opacity(0.14) : accent.opacity(0.55)),
                     lineWidth: 1))
                 .focused($isFocused)
+                #if os(iOS)
+                .keyboardType(.decimalPad)
+                #endif
                 .onSubmit { commit() }
                 .onAppear { text = score.map(\.scoreLabel) ?? "" }
                 .onChange(of: score) { _, newValue in

@@ -20,7 +20,7 @@ nonisolated enum Theme {
     // on the selection so a change re-renders the tree with fresh colors.
     static let presetKey = "themePresetID"
     static let customAccentKey = "customAccentHex"
-    static let defaultAccentHex = "#20D760"
+    static let defaultAccentHex = "#69B58D"
 
     struct ThemePreset: Identifiable, Hashable {
         let id: String
@@ -29,7 +29,7 @@ nonisolated enum Theme {
     }
 
     static let presets: [ThemePreset] = [
-        .init(id: "emerald", name: "Emerald", accentHex: "#20D760"),
+        .init(id: "emerald", name: "Emerald", accentHex: "#69B58D"),
         .init(id: "amber", name: "Amber", accentHex: "#F5A623"),
         .init(id: "magenta", name: "Magenta", accentHex: "#FF3D81"),
         .init(id: "ice", name: "Ice", accentHex: "#4FC3F7"),
@@ -67,11 +67,12 @@ nonisolated enum Theme {
     static let rust = Color(hex: rustHex)
 
     // Dark UI base (background layers, not brand tokens).
-    static let bg = Color(hex: "#101014")
-    static let bgRaised = Color(hex: "#18181E")
-    static let cardSurface = Color(hex: "#1C1C24")
-    static let textPrimary = Color(hex: "#F5F2EA")
-    static let textDim = Color(hex: "#9B97A8")
+    static let bg = Color(hex: "#17191A")
+    static let bgRaised = Color(hex: "#202324")
+    static let cardSurface = Color(hex: "#25292A")
+    static let separator = Color(hex: "#3A3F40")
+    static let textPrimary = Color(hex: "#F1F2EF")
+    static let textDim = Color(hex: "#B8BEBC")
 
     // MARK: Geometry
 

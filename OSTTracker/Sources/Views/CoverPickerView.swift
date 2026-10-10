@@ -55,10 +55,9 @@ struct CoverPickerView: View {
             HStack(spacing: 8) {
                 TextField("https://…", text: $manualURL)
                     .textFieldStyle(.plain).font(.ostBody(13)).padding(8)
-                    .glassEffect(.regular, in: ChamferedRect(cut: 8))
+                    .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
                 Button("Use") { apply(manualURL) }
-                    .buttonStyle(.glass)
-                    .tint(accent)
+                    .buttonStyle(.borderedProminent)
                     .font(.ostDisplay(12, weight: .semibold))
                     .disabled(manualURL.trimmingCharacters(in: .whitespaces).isEmpty || applying)
             }

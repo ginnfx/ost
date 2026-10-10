@@ -29,12 +29,7 @@ struct BatchesView: View {
                         }, onTogglePin: { slot in
                             Task { await store.setPin(ostID: slot.ost.id, pinned: !slot.pinned) }
                         })
-                        .transition(.asymmetric(
-                            insertion: .scale(scale: 0.96).combined(with: .opacity),
-                            removal: .opacity
-                        ))
                     }
-                    .animation(Theme.resortAnimation, value: store.batches)
                 }
             }
             .padding(20)
@@ -60,8 +55,8 @@ struct BatchesView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("BATCHES")
                     .font(.ostDisplay(15, weight: .semibold))
-                    .foregroundStyle(Theme.accent)
-                Text("Private key — raters hear audio only · drag to arrange, right-click to pin")
+                    .foregroundStyle(Theme.textPrimary)
+                Text("Private order for listening sessions. Drag to arrange; right-click to pin.")
                     .font(.ostMono(10))
                     .foregroundStyle(Theme.textDim)
                     .kerning(0.6)
@@ -94,11 +89,8 @@ struct BatchesView: View {
                         .font(.ostMono(12, weight: .bold))
                         .foregroundStyle(n == store.batches.count ? Theme.bg : Theme.textPrimary)
                         .frame(width: 28, height: 26)
-                        .background(
-                            ChamferedRect(cut: 7).fill(
-                                n == store.batches.count ? Theme.accent : Theme.cardSurface
-                            )
-                        )
+                .background(n == store.batches.count ? Theme.accent : Theme.cardSurface,
+                            in: RoundedRectangle(cornerRadius: 5))
                 }
                 .buttonStyle(.plain)
             }
@@ -121,7 +113,7 @@ struct BatchesView: View {
             .foregroundStyle(Theme.bg)
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
-            .background(ChamferedRect().fill(Theme.accent))
+            .background(Theme.accent, in: RoundedRectangle(cornerRadius: 6))
             .opacity(isRandomizing ? 0.5 : 1)
         }
         .buttonStyle(.plain)
@@ -140,8 +132,7 @@ struct BatchesView: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background(ChamferedRect().fill(Theme.cardSurface))
-        .overlay(ChamferedRect().stroke(Theme.accent.opacity(0.25), lineWidth: 1.5))
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
         .padding(.top, 40)
     }
 
@@ -200,7 +191,7 @@ private struct BatchSection: View {
             HStack(spacing: 8) {
                 Text("DAY \(group.day) · BATCH \(group.index)")
                     .font(.ostMono(11, weight: .medium))
-                    .foregroundStyle(Theme.accent)
+                    .foregroundStyle(Theme.textPrimary)
                     .kerning(1.2)
                 Text("\(group.slots.count) OSTs")
                     .font(.ostMono(10))
@@ -213,7 +204,7 @@ private struct BatchSection: View {
                         .draggable(String(slot.ost.id)) {
                             BatchRow(slot: slot)  // drag preview
                                 .frame(width: 320)
-                                .background(ChamferedRect().fill(Theme.cardSurface))
+                                .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
                         }
                         .dropDestination(for: String.self) { items, _ in
                             handleDrop(items, at: index)
@@ -236,8 +227,7 @@ private struct BatchSection: View {
                     }
             }
             .padding(.vertical, 4)
-            .background(ChamferedRect().fill(Theme.cardSurface))
-            .overlay(ChamferedRect().stroke(Theme.accent.opacity(0.18), lineWidth: 1.5))
+            .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
         }
     }
 
@@ -255,7 +245,7 @@ private struct BatchRow: View {
         HStack(spacing: 12) {
             Text("OST \(slot.slot)")
                 .font(.ostMono(11, weight: .bold))
-                .foregroundStyle(slot.pinned ? Theme.pink : Theme.accent)
+                .foregroundStyle(Theme.textDim)
                 .frame(width: 58, alignment: .leading)
 
             VStack(alignment: .leading, spacing: 2) {
@@ -275,14 +265,14 @@ private struct BatchRow: View {
 
             Text((slot.ost.submitterName ?? "—").uppercased())
                 .font(.ostMono(12, weight: .bold))
-                .foregroundStyle(Theme.accent)
+                .foregroundStyle(Theme.textDim)
                 .kerning(0.8)
                 .lineLimit(1)
                 .layoutPriority(1)
 
             Image(systemName: slot.pinned ? "pin.fill" : "line.3.horizontal")
                 .font(.system(size: 11))
-                .foregroundStyle(slot.pinned ? Theme.pink : Theme.textDim.opacity(0.6))
+                .foregroundStyle(slot.pinned ? Theme.accent : Theme.textDim)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)

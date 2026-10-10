@@ -22,6 +22,9 @@ class Note:
     title: str
     note: str
     created_at: str
+    source: Optional[str] = None
+    artist: Optional[str] = None
+    external_link: Optional[str] = None
 
 
 @dataclass(frozen=True)

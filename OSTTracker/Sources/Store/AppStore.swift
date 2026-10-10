@@ -28,6 +28,7 @@ final class AppStore {
     /// Every OST ever ranked, past or current — the dedup exclusion list.
     /// Read-only display data; the hard block itself is enforced server-side.
     private(set) var history: [HistoryEntry] = []
+    private(set) var roundInfo: RoundStatus?
     private(set) var scores: [Int: [Int: Double]] = [:]     // ost -> rater -> score (0–10 decimal)
     private(set) var playback: PlaybackState?
     private(set) var resolutionPhase: [Int: ResolutionPhase] = [:]
@@ -128,10 +129,12 @@ final class AppStore {
         // leaves the roster's slice mode empty until the next refresh.
         async let elimination = client.elimination()
         async let history = client.history()
+        async let roundInfo = client.roundStatus()
         self.people = try await people
         self.leaderboard = Self.rosterOrder(try await board)
         self.elimination = try? await elimination
         self.history = (try? await history) ?? []
+        self.roundInfo = try? await roundInfo
         self.notes = try await notes
         self.scores = Self.index(try await ratings)
         let batchData = try await batches
@@ -197,6 +200,10 @@ final class AppStore {
     }
 
     func play(ostID: Int) async {
+        #if os(iOS)
+        reportError("Playback is not supported on iOS yet.")
+        return
+        #endif
         guard let client else { return }
         do {
             _ = try await client.play(ostID: ostID)
@@ -339,13 +346,24 @@ final class AppStore {
         return true
     }
 
-    func addNote(title: String, body: String) async {
-        guard let client else { return }
+    func searchCatalog(_ query: String) async throws -> [CatalogTrack] {
+        guard let client else { return [] }
+        return try await client.searchCatalog(query)
+    }
+
+    @discardableResult
+    func addNote(title: String, body: String, source: String? = nil,
+                 artist: String? = nil, externalLink: String? = nil) async -> Bool {
+        guard let client else { return false }
         do {
-            let note = try await client.addNote(NewNote(title: title, note: body))
+            let note = try await client.addNote(NewNote(
+                title: title, note: body, source: source, artist: artist, externalLink: externalLink
+            ))
             notes = [note] + notes
+            return true
         } catch {
             reportError("Couldn't save that note (\(error.localizedDescription)).")
+            return false
         }
     }
 
@@ -566,12 +584,73 @@ final class AppStore {
         await refreshLeaderboard()
         await refreshBatches()
         if let ratings = try? await client.ratings() { scores = Self.index(ratings) }
+        if let status = try? await client.roundStatus() { roundInfo = status }
         print("GATE ws resynced osts=\(leaderboard.count)")
+    }
+
+    func roundStatus() async -> RoundStatus? {
+        guard let client else { return nil }
+        do {
+            let status = try await client.roundStatus()
+            roundInfo = status
+            return status
+        }
+        catch { reportError("Couldn't load retired rounds (\(error.localizedDescription))."); return nil }
+    }
+
+    @discardableResult
+    func startRound(name: String) async -> Bool {
+        guard let client else { return false }
+        do { roundInfo = try await client.startRound(name: name) }
+        catch { reportError("Couldn't start that ranking (\(error.localizedDescription))."); return false }
+        hasRevealed = false
+        return true
+    }
+
+    func retireChallenge() async -> RetireChallenge? {
+        guard let client else { return nil }
+        do { return try await client.retireChallenge() }
+        catch { reportError("Couldn't start retirement confirmation (\(error.localizedDescription))."); return nil }
+    }
+
+    @discardableResult
+    func retireRound(challengeId: String, word: String) async -> Bool {
+        guard let client else { return false }
+        do { try await client.retireRound(challengeId: challengeId, word: word) }
+        catch { reportError("Couldn't retire the round (\(error.localizedDescription))."); return false }
+        player.reset()
+        playback = nil
+        hasRevealed = false
+        do { try await refreshAll(client) }
+        catch { reportError("Round retired; refresh the app to reload its new state.") }
+        return true
+    }
+
+    @discardableResult
+    func restoreRound(id: Int) async -> Bool {
+        guard let client else { return false }
+        do { try await client.restoreRound(id: id) }
+        catch { reportError("Couldn't restore that round (\(error.localizedDescription))."); return false }
+        player.reset()
+        playback = nil
+        do { try await refreshAll(client) }
+        catch { reportError("Round restored; refresh the app to reload its state.") }
+        return true
     }
 
     private func refreshHistory() async {
         guard let client, let history = try? await client.history() else { return }
         self.history = history
+    }
+
+    @discardableResult
+    func renameHistoryLabel(from oldLabel: String, to newLabel: String) async -> Bool {
+        guard let client else { return false }
+        do { try await client.renameHistoryLabel(from: oldLabel, to: newLabel) }
+        catch { reportError("Couldn't rename that ranking (\(error.localizedDescription))."); return false }
+        await refreshHistory()
+        _ = await roundStatus()
+        return true
     }
 
     /// Reload the batch key (non-throwing). New OSTs are slid into the existing

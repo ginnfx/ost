@@ -59,6 +59,10 @@ class Database:
             ("osts", "playback_watch_url", "TEXT"),
             ("ost_history", "batch_label", "TEXT"),
             ("ost_history", "sender", "TEXT"),
+            ("retired_rounds", "name", "TEXT"),
+            ("notes", "source", "TEXT"),
+            ("notes", "artist", "TEXT"),
+            ("notes", "external_link", "TEXT"),
         ]
         for table, column, col_type in added_columns:
             existing = {

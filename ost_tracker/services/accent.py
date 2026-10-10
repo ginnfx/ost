@@ -18,7 +18,11 @@ import colorsys
 from pathlib import Path
 from typing import Optional
 
-from PIL import Image
+try:
+    from PIL import Image
+    _HAS_PIL = True
+except ImportError:
+    _HAS_PIL = False
 
 # Quantisation shape: small enough to be fast on every cover write, large
 # enough that a two-tone cover keeps its subject and background separate.
@@ -56,7 +60,7 @@ def _hsv_to_rgb(hsv: tuple[float, float, float]) -> tuple[int, int, int]:
     return round(r * 255), round(g * 255), round(b * 255)
 
 
-def _dominant_color(img: Image.Image) -> Optional[tuple[int, int, int]]:
+def _dominant_color(img: "Image.Image") -> Optional[tuple[int, int, int]]:
     small = img.convert("RGB")
     small.thumbnail((_SAMPLE_SIZE, _SAMPLE_SIZE))
     paletted = small.quantize(colors=_PALETTE_COLORS)
@@ -89,18 +93,22 @@ def _clamp_to_legible(rgb: tuple[int, int, int]) -> tuple[int, int, int]:
 
 def extract_accent(image_path: Path | str) -> Optional[str]:
     """Return a clamped ``#rrggbb`` accent for the image, or None when the
-    cover has no usable colour (grey/black art, missing or unreadable file) —
-    the caller then falls back to the fixed accent token."""
+    cover has no usable colour (grey/black art, missing or unreadable file, or
+    PIL unavailable) — the caller falls back to the fixed accent token."""
+    if not _HAS_PIL:
+        return None
     try:
-        with Image.open(image_path) as img:
+        with Image.open(image_path) as img:  # type: ignore[union-attr]
             return extract_accent_from_image(img)
     except (OSError, ValueError):
         return None
 
 
-def extract_accent_from_image(img: Image.Image) -> Optional[str]:
+def extract_accent_from_image(img: "Image.Image") -> Optional[str]:
     """Clamped accent for an already-decoded image — the cover pipeline passes
     the fitted image straight through so it isn't decoded twice."""
+    if not _HAS_PIL:
+        return None
     dominant = _dominant_color(img)
     if dominant is None:
         return None

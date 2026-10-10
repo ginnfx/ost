@@ -8,24 +8,22 @@ import SwiftUI
 struct AttractOverlay: View {
     let store: AppStore
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var slideIndex = 0
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            Theme.bg.ignoresSafeArea()
             if let entry = currentEntry {
                 AttractSlide(
                     entry: entry,
                     epoch: store.coverEpoch(for: entry.ost.id),
-                    isNowPlaying: store.nowPlayingEntry?.id == entry.id,
-                    drift: !reduceMotion
+                    isNowPlaying: store.nowPlayingEntry?.id == entry.id
                 )
                 .id("\(entry.ost.id)-\(slideIndex)")
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 1.5), value: slideIndex)
+        .animation(.easeInOut(duration: 0.25), value: slideIndex)
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))
@@ -52,40 +50,20 @@ private struct AttractSlide: View {
     let entry: RankEntry
     let epoch: Int
     let isNowPlaying: Bool
-    let drift: Bool
-
-    @State private var drifted = false
-
-    private var accent: Color {
-        entry.ost.coverAccentHex.map { Color(hex: $0) } ?? Theme.accent
-    }
 
     var body: some View {
         ZStack {
-            CoverImage(path: entry.ost.coverImagePath, epoch: epoch)
-                .scaledToFill()
-                .blur(radius: 40)
-                .opacity(0.35)
-                .ignoresSafeArea()
-                // Rasterize the fullscreen gaussian once into an offscreen
-                // buffer so the animating foreground doesn't force the blur to
-                // recompute every frame (major idle-GPU savings).
-                .drawingGroup()
-            Color.black.opacity(0.6).ignoresSafeArea()
+            Theme.bg.ignoresSafeArea()
 
             VStack(spacing: 18) {
                 CoverImage(path: entry.ost.coverImagePath, epoch: epoch)
                     .aspectRatio(1, contentMode: .fill)
                     .frame(width: 320, height: 320)
-                    .clipShape(ChamferedRect())
-                    .overlay(ChamferedRect().stroke(accent.opacity(0.5), lineWidth: 1.5))
-                    .shadow(color: accent.opacity(0.35), radius: 40)
-                    // Ken Burns drift: one slow 10s swell per slide.
-                    .scaleEffect(drifted ? 1.05 : 1.0)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
                 if isNowPlaying {
                     Text("NOW PLAYING")
                         .font(.ostMono(11, weight: .medium))
-                        .foregroundStyle(accent)
+                        .foregroundStyle(Theme.textDim)
                         .kerning(2)
                 }
                 Text(entry.ost.title)
@@ -100,10 +78,6 @@ private struct AttractSlide: View {
                 }
             }
             .padding(40)
-        }
-        .onAppear {
-            guard drift else { return }
-            withAnimation(.easeInOut(duration: 10)) { drifted = true }
         }
     }
 }

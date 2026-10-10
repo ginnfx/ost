@@ -30,10 +30,7 @@ struct StatsView: View {
 
                     VStack(alignment: .leading, spacing: 12) {
                         sectionLabel("SUPERLATIVES")
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 250, maximum: 360), spacing: Theme.gridSpacing)],
-                            spacing: Theme.gridSpacing
-                        ) {
+                        VStack(spacing: 0) {
                             if let divisive = mostDivisive {
                                 StatTile(
                                     superlative: "MOST DIVISIVE",
@@ -320,45 +317,25 @@ private struct StatTile: View {
     let subject: String
     let tint: Color
 
-    @State private var displayValue = "0"
-    @State private var isHovered = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        HStack(alignment: .firstTextBaseline, spacing: 16) {
             Text(superlative)
-                .font(.ostMono(10, weight: .medium))
+                .font(.ostBody(11, weight: .medium))
                 .foregroundStyle(Theme.textDim)
-                .kerning(1.2)
-            Text(displayValue)
-                .font(.ostMono(34, weight: .bold))
-                .foregroundStyle(tint)
-                .contentTransition(.numericText())
+                .frame(width: 170, alignment: .leading)
             Text(subject)
                 .font(.ostBody(12))
                 .foregroundStyle(Theme.textPrimary)
-                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Text(value)
+                .font(.ostMono(14, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(ChamferedRect().fill(Theme.cardSurface))
-        .overlay(ChamferedRect().stroke(tint.opacity(isHovered ? 0.75 : 0.35), lineWidth: 1.5))
-        .shadow(color: tint.opacity(isHovered ? 0.3 : 0), radius: 14, y: 6)
-        .scaleEffect(isHovered ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
-        .onHover { hovering in
-            if hovering, !isHovered { SoundKit.shared.play(.hoverTick) }
-            isHovered = hovering
-        }
-        .onAppear {
-            withAnimation(.spring(response: 0.65, dampingFraction: 0.8).delay(0.05)) {
-                displayValue = value
-            }
-        }
-        .onChange(of: value) { _, newValue in
-            withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
-                displayValue = newValue
-            }
-        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(Theme.cardSurface)
+        .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
     }
 }
 
@@ -391,8 +368,7 @@ private struct OverviewStripCard: View {
             }
         }
         .padding(16)
-        .background(ChamferedRect().fill(Theme.cardSurface))
-        .overlay(ChamferedRect().stroke(Theme.accent.opacity(0.25), lineWidth: 1.5))
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
@@ -400,15 +376,11 @@ private struct OverviewMetricColumn: View {
     let metric: OverviewMetric
     let index: Int
 
-    @State private var displayValue = "0"
-    @State private var isHovered = false
-
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(displayValue)
+            Text(metric.value)
                 .font(.ostMono(22, weight: .bold))
-                .foregroundStyle(isHovered ? Theme.accent : Theme.textPrimary)
-                .contentTransition(.numericText())
+                .foregroundStyle(Theme.textPrimary)
             Text(metric.label)
                 .font(.ostMono(10, weight: .medium))
                 .foregroundStyle(Theme.textDim)
@@ -417,18 +389,6 @@ private struct OverviewMetricColumn: View {
                 .minimumScaleFactor(0.8)
         }
         .padding(.vertical, 2)
-        .contentShape(Rectangle())
-        .scaleEffect(isHovered ? 1.05 : 1.0, anchor: .leading)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
-        .onHover { isHovered = $0 }
-        .onAppear {
-            withAnimation(Theme.resortAnimation.delay(Double(index) * Theme.revealStagger)) {
-                displayValue = metric.value
-            }
-        }
-        .onChange(of: metric.value) { _, newValue in
-            withAnimation(Theme.resortAnimation) { displayValue = newValue }
-        }
     }
 }
 
@@ -448,41 +408,28 @@ private struct BarRow: View {
     let data: BarRowData
     let index: Int
 
-    @State private var animatedValue: Double = 0
-    @State private var isHovered = false
-
-    private var tint: Color {
-        switch data.value {
-        case ..<6: Theme.rust
-        case 6..<8: Theme.accent
-        default: Theme.gold
-        }
-    }
-
     var body: some View {
         HStack(spacing: 12) {
             Text(data.label)
-                .font(.ostBody(12, weight: isHovered ? .semibold : .medium))
+                .font(.ostBody(12, weight: .medium))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)
                 .frame(width: 110, alignment: .leading)
 
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    RoundedRectangle(cornerRadius: 3)
+                    Rectangle()
                         .fill(Theme.bg)
-                    RoundedRectangle(cornerRadius: 3)
-                        .fill(tint)
-                        .brightness(isHovered ? 0.1 : 0)
-                        .frame(width: geo.size.width * CGFloat(min(max(animatedValue, 0), 10) / 10))
+                    Rectangle()
+                        .fill(Theme.accent)
+                        .frame(width: geo.size.width * CGFloat(min(max(data.value, 0), 10) / 10))
                 }
             }
-            .frame(height: isHovered ? 13 : 10)
+            .frame(height: 8)
 
-            Text(String(format: "%.2f", animatedValue))
-                .font(.ostMono(12, weight: .bold))
-                .foregroundStyle(tint)
-                .contentTransition(.numericText(value: animatedValue))
+            Text(String(format: "%.2f", data.value))
+                .font(.ostMono(12, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
                 .frame(width: 44, alignment: .trailing)
 
             Text(data.detail)
@@ -492,24 +439,6 @@ private struct BarRow: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
-        .background(
-            RoundedRectangle(cornerRadius: 6)
-                .fill(Theme.textDim.opacity(isHovered ? 0.08 : 0))
-        )
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.25, dampingFraction: 0.75), value: isHovered)
-        .onHover { hovering in
-            if hovering, !isHovered { SoundKit.shared.play(.hoverTick) }
-            isHovered = hovering
-        }
-        .onAppear {
-            withAnimation(Theme.resortAnimation.delay(Double(index) * Theme.revealStagger)) {
-                animatedValue = data.value
-            }
-        }
-        .onChange(of: data.value) { _, newValue in
-            withAnimation(Theme.resortAnimation) { animatedValue = newValue }
-        }
     }
 }
 
@@ -541,8 +470,7 @@ private struct RankedBarChartCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(ChamferedRect().fill(Theme.cardSurface))
-        .overlay(ChamferedRect().stroke(Theme.accent.opacity(0.25), lineWidth: 1.5))
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
     }
 }
 
@@ -555,36 +483,20 @@ private struct HistogramBar: View {
     let isMode: Bool
     let index: Int
 
-    @State private var animatedCount: Double = 0
-    @State private var isHovered = false
-
     var body: some View {
         VStack(spacing: 6) {
-            Text("\(Int(animatedCount.rounded()))")
-                .font(.ostMono(9, weight: isHovered ? .bold : .regular))
-                .foregroundStyle(isHovered ? Theme.textPrimary : Theme.textDim)
-                .contentTransition(.numericText(value: animatedCount))
+            Text("\(count)")
+                .font(.ostMono(10))
+                .foregroundStyle(Theme.textDim)
                 .opacity(count > 0 ? 1 : 0.4)
-            RoundedRectangle(cornerRadius: 3)
-                .fill(isMode ? Theme.accent : Theme.accent.opacity(isHovered ? 0.6 : 0.35))
-                .frame(height: max(4, CGFloat(animatedCount) / CGFloat(maxCount) * 120))
-                .scaleEffect(x: isHovered ? 1.15 : 1.0, anchor: .bottom)
+            Rectangle()
+                .fill(isMode ? Theme.accent : Theme.textDim.opacity(0.45))
+                .frame(height: max(4, CGFloat(count) / CGFloat(maxCount) * 120))
             Text("\(score)")
                 .font(.ostMono(10, weight: .bold))
-                .foregroundStyle(isHovered ? Theme.accent : Theme.textPrimary)
+                .foregroundStyle(Theme.textPrimary)
         }
         .frame(maxWidth: .infinity)
-        .contentShape(Rectangle())
-        .animation(.spring(response: 0.25, dampingFraction: 0.7), value: isHovered)
-        .onHover { isHovered = $0 }
-        .onAppear {
-            withAnimation(Theme.resortAnimation.delay(Double(index) * Theme.revealStagger)) {
-                animatedCount = Double(count)
-            }
-        }
-        .onChange(of: count) { _, newValue in
-            withAnimation(Theme.resortAnimation) { animatedCount = Double(newValue) }
-        }
     }
 }
 
@@ -613,7 +525,6 @@ private struct DistributionCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(ChamferedRect().fill(Theme.cardSurface))
-        .overlay(ChamferedRect().stroke(Theme.accent.opacity(0.25), lineWidth: 1.5))
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
     }
 }

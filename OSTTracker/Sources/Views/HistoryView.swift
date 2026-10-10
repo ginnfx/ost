@@ -1,7 +1,5 @@
-// Read-only list of every OST ever ranked, past or current — the exclusion
-// list Add-OST checks against. All data (title/source/batch/sender) arrives
-// precomputed from Python; this view only displays and client-side filters
-// what's already loaded in the store.
+// Every OST ever ranked, past or current. Ranking headings can be renamed;
+// the backend updates the entire history group and linked retired round.
 
 import SwiftUI
 
@@ -9,6 +7,9 @@ struct HistoryView: View {
     let store: AppStore
     @State private var search = ""
     @State private var debouncedSearch = ""
+    @State private var renameTarget: HistoryRenameTarget?
+    @State private var proposedName = ""
+    @State private var isSavingName = false
     @FocusState private var searchFocused: Bool
 
     var body: some View {
@@ -30,24 +31,66 @@ struct HistoryView: View {
                     } else {
                         ForEach(groupedHistory, id: \.label) { group in
                             VStack(alignment: .leading, spacing: 10) {
-                                Text(group.label.uppercased())
-                                    .font(.ostDisplay(13, weight: .semibold))
-                                    .foregroundStyle(Theme.accent)
+                                HStack(spacing: 9) {
+                                    Text(group.label)
+                                        .font(.ostDisplay(13, weight: .semibold))
+                                        .foregroundStyle(Theme.accent)
+                                    if group.label == store.roundInfo?.currentName && store.roundInfo?.needsStart == false {
+                                        Text("In progress")
+                                            .font(.ostBody(11, weight: .medium))
+                                            .foregroundStyle(Theme.accent)
+                                    }
+                                    if group.label != Self.currentRankingLabel && group.label != "Unlabeled" {
+                                        Button {
+                                            proposedName = group.label
+                                            renameTarget = HistoryRenameTarget(label: group.label)
+                                        } label: {
+                                            Image(systemName: "pencil")
+                                                .font(.system(size: 11))
+                                        }
+                                        .buttonStyle(.plain)
+                                        .foregroundStyle(Theme.textDim)
+                                        .help("Rename ranking")
+                                    }
+                                }
 
-                                LazyVGrid(
-                                    columns: [GridItem(.adaptive(minimum: 240, maximum: 340), spacing: Theme.gridSpacing)],
-                                    spacing: Theme.gridSpacing
-                                ) {
+                                LazyVStack(spacing: 0) {
                                     ForEach(group.entries) { entry in
                                         HistoryCard(entry: entry)
                                     }
                                 }
+                                .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
                             }
                         }
                     }
                 }
                 .padding(20)
                 .padding(.bottom, 90)   // clear the now-playing bar
+            }
+            .sheet(item: $renameTarget) { target in
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Rename ranking").font(.title2.bold())
+                    Text("This changes the heading for every OST in this history group.")
+                        .font(.callout).foregroundStyle(.secondary)
+                    TextField("Ranking name", text: $proposedName)
+                        .textFieldStyle(.roundedBorder)
+                    HStack {
+                        Button("Cancel") { renameTarget = nil }
+                        Spacer()
+                        Button("Save name") {
+                            isSavingName = true
+                            Task {
+                                let saved = await store.renameHistoryLabel(from: target.label, to: proposedName)
+                                isSavingName = false
+                                if saved { renameTarget = nil }
+                            }
+                        }
+                        .disabled(proposedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                                  || proposedName.count > 80 || isSavingName)
+                    }
+                }
+                .padding(24)
+                .frame(maxWidth: 420)
             }
         }
     }
@@ -59,10 +102,9 @@ struct HistoryView: View {
                 .textFieldStyle(.plain).font(.ostBody(13))
                 .focused($searchFocused)
         }
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .glassEffect(.regular, in: ChamferedRect(cut: 8))
+        .padding(.horizontal, 10).padding(.vertical, 8)
+        .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
         .frame(maxWidth: searchFocused || !search.isEmpty ? 320 : 240)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: searchFocused)
         // Debounced so a full filter+group+sort of the history array doesn't
         // run on the main thread every keystroke — same pattern as
         // AddOstView's title debounce, shorter since this is local work.
@@ -74,8 +116,8 @@ struct HistoryView: View {
         }
     }
 
-    /// Filtered entries grouped by batch label, most recent ranking first
-    /// (Current Ranking, then Batch N descending). Purely a display ordering —
+    /// Filtered entries grouped by batch label, with the live ranking first.
+    /// Purely a display ordering —
     /// no business rule lives here.
     private var groupedHistory: [(label: String, entries: [HistoryEntry])] {
         let query = debouncedSearch.trimmingCharacters(in: .whitespaces)
@@ -83,6 +125,7 @@ struct HistoryView: View {
             entry.title.localizedCaseInsensitiveContains(query)
                 || (entry.source?.localizedCaseInsensitiveContains(query) ?? false)
                 || (entry.sender?.localizedCaseInsensitiveContains(query) ?? false)
+                || (entry.batchLabel?.localizedCaseInsensitiveContains(query) ?? false)
         }
         var byLabel: [String: [HistoryEntry]] = [:]
         for entry in filtered {
@@ -90,49 +133,49 @@ struct HistoryView: View {
         }
         return byLabel
             .map { (label: $0.key, entries: $0.value.sorted { $0.title.lowercased() < $1.title.lowercased() }) }
-            .sorted { Self.recencyKey(for: $0.label) > Self.recencyKey(for: $1.label) }
+            .sorted { recencyKey(for: $0) > recencyKey(for: $1) }
     }
 
     /// Mirrors ost_repo.CURRENT_RANKING_LABEL on the Python side — the batch
     /// label every OST in the live, in-progress ranking is recorded under.
     private static let currentRankingLabel = "Current Ranking"
 
-    /// Higher = more recent. "Current Ranking" always sorts first; batch
-    /// labels sort by their leading number ("Batch 4: …" > "Batch 1: …").
-    private static func recencyKey(for label: String) -> Int {
-        if label == currentRankingLabel { return .max }
-        guard label.hasPrefix("Batch "),
-              let numberPart = label.dropFirst("Batch ".count).split(separator: ":").first,
-              let n = Int(numberPart)
-        else { return 0 }
-        return n
+    /// Entry IDs keep the ranking order stable even after its label changes.
+    private func recencyKey(for group: (label: String, entries: [HistoryEntry])) -> Int {
+        if group.label == store.roundInfo?.currentName && store.roundInfo?.needsStart == false { return .max }
+        return group.entries.map(\.id).max() ?? 0
     }
+}
+
+private struct HistoryRenameTarget: Identifiable {
+    let label: String
+    var id: String { label }
 }
 
 private struct HistoryCard: View {
     let entry: HistoryEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        HStack(spacing: 16) {
             Text(entry.title)
-                .font(.ostBody(14, weight: .semibold))
+                .font(.ostBody(13, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
-                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
             if let source = entry.source, !source.isEmpty {
                 Text(source)
                     .font(.ostBody(12))
                     .foregroundStyle(Theme.textDim)
-                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let sender = entry.sender, !sender.isEmpty {
                 Text(sender)
-                    .font(.ostMono(11))
-                    .foregroundStyle(Theme.accent)
+                    .font(.ostBody(11))
+                    .foregroundStyle(Theme.textDim)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(ChamferedRect().fill(Theme.cardSurface))
-        .overlay(ChamferedRect().stroke(Theme.accent.opacity(0.2), lineWidth: 1))
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
     }
 }

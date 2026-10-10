@@ -6,6 +6,7 @@
 #if os(macOS)
 import AppKit
 #endif
+import Foundation
 import Observation
 
 @Observable
@@ -29,6 +30,11 @@ final class AttractModeController {
     private var idleThreshold: CFAbsoluteTime {
         let raw = UserDefaults.standard.object(forKey: Self.idleSecondsKey) as? Double
         return raw ?? Self.defaultIdleSeconds
+    }
+
+    func resetActivity() {
+        lastActivity = CFAbsoluteTimeGetCurrent()
+        if isActive { isActive = false }
     }
 
     func start() {

@@ -35,6 +35,9 @@ CREATE TABLE IF NOT EXISTS notes (
     id         INTEGER PRIMARY KEY,
     title      TEXT NOT NULL,
     note       TEXT,
+    source     TEXT,
+    artist     TEXT,
+    external_link TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -56,6 +59,17 @@ CREATE TABLE IF NOT EXISTS ost_history (
 CREATE TABLE IF NOT EXISTS app_settings (
     key   TEXT PRIMARY KEY,
     value TEXT
+);
+
+-- Reversible snapshots of retired rounds. Covers stay on disk; OST paths in
+-- the snapshot continue to point at the same files when a round is restored.
+CREATE TABLE IF NOT EXISTS retired_rounds (
+    id          INTEGER PRIMARY KEY,
+    retired_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ost_count   INTEGER NOT NULL,
+    payload     TEXT NOT NULL,
+    name        TEXT,
+    restored_at TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_history_title ON ost_history(title COLLATE NOCASE);

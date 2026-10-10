@@ -16,9 +16,6 @@ struct RosterView: View {
     @State private var selectedOstID: Int?
     @State private var search = ""
     @Namespace private var hero
-    // Shared sampling namespace for the toolbar's grouped glass (filter + search)
-    // so they morph together — and expand — instead of reading as disconnected chips.
-    @Namespace private var toolbarGlass
     @FocusState private var searchFocused: Bool
     // Keyboard character-select: roving cursor over the grid (W3C APG roving
     // focus pattern — arrows move, Return opens, Space plays, Esc clears).
@@ -32,8 +29,17 @@ struct RosterView: View {
     // so what's left on screen is only what still needs typing in. Deliberately
     // ephemeral @State (like `search`) — it's a working view, not a saved one.
     @State private var fullyRatedOnly = false
+    @State private var showStartRanking = false
+    @State private var newRankingName = ""
+    @State private var isStartingRanking = false
 
+    // Tighter minimum on iOS so portrait phones get 2 columns (~160pt each);
+    // macOS's wider windows naturally land on more columns at 180pt minimum.
+    #if os(iOS)
+    private let columns = [GridItem(.adaptive(minimum: 160, maximum: 220), spacing: Theme.gridSpacing)]
+    #else
     private let columns = [GridItem(.adaptive(minimum: 180, maximum: 230), spacing: Theme.gridSpacing)]
+    #endif
     /// Mirrors EliminationSidebar's fixed frame; the grid subtracts it in slice mode.
     private static let sidebarWidth: CGFloat = 250
 
@@ -160,7 +166,9 @@ struct RosterView: View {
             ZStack {
             VStack(spacing: 0) {
                 toolbar
-                if sortMode == .slices, let board = store.elimination {
+                if store.leaderboard.isEmpty {
+                    emptyRoster
+                } else if sortMode == .slices, let board = store.elimination {
                     HStack(alignment: .top, spacing: 14) {
                         // The grid keeps the sidebar's width out of its column math.
                         grid(width: geo.size.width - Self.sidebarWidth - 34)
@@ -181,19 +189,10 @@ struct RosterView: View {
                     .onTapGesture { close() }
                     .transition(.opacity)
 
-                // GlassEffectContainer gives the panel's glass and the glass
-                // elements INSIDE DetailView (stat tiles, rating boxes) one
-                // shared sampling region — stacked glass without it renders
-                // invisible (same rule as the header chrome).
-                GlassEffectContainer {
-                    DetailView(store: store, ostID: id, onClose: close)
-                        // Glass panel floating over the dimmed roster. The dark tint
-                        // keeps text/stat contrast while the material still samples
-                        // the grid behind it — consistent with the rest of the chrome.
-                        .glassEffect(.regular.tint(Color.black.opacity(0.55)), in: ChamferedRect())
-                        .overlay(ChamferedRect().stroke(Theme.accent.opacity(0.35), lineWidth: 1.5))
-                        .clipShape(ChamferedRect())
-                }
+                DetailView(store: store, ostID: id, onClose: close)
+                    .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 9))
+                    .overlay(RoundedRectangle(cornerRadius: 9).stroke(Theme.separator, lineWidth: 1))
+                    .clipShape(RoundedRectangle(cornerRadius: 9))
                 .frame(maxWidth: 920, maxHeight: 800)
                 .matchedGeometryEffect(id: "hero-\(id)", in: hero)
                 .scaleEffect(detailScale)
@@ -201,13 +200,70 @@ struct RosterView: View {
                 .zIndex(1)
             }
             }
-            .animation(.spring(response: 0.45, dampingFraction: 0.82), value: selectedOstID)
+            .animation(.easeOut(duration: 0.2), value: selectedOstID)
             .onChange(of: hasSlices) { _, has in
                 // Never strand the picker on an option it no longer offers (e.g.
                 // the last rating was cleared away).
                 if !has, sortMode == .slices { sortMode = .rank }
             }
         }
+        .sheet(isPresented: $showStartRanking) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Start a new ranking").font(.title2.bold())
+                Text("Name this ranking. People and notes carry over; scores start fresh. New tracks appear in History as you add them.")
+                    .font(.callout).foregroundStyle(.secondary)
+                TextField("e.g. Autumn 2026", text: $newRankingName)
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Cancel") { showStartRanking = false }
+                    Spacer()
+                    Button("Start ranking") {
+                        isStartingRanking = true
+                        Task {
+                            let started = await store.startRound(name: newRankingName)
+                            isStartingRanking = false
+                            if started { showStartRanking = false; newRankingName = "" }
+                        }
+                    }
+                    .disabled(newRankingName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                              || newRankingName.count > 80 || isStartingRanking)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 430)
+        }
+    }
+
+    private var emptyRoster: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if store.roundInfo?.needsStart == true {
+                Text("Ranking retired")
+                    .font(.ostDisplay(20, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("The previous roster is in History. Start a new ranking when you are ready to add tracks.")
+                    .font(.ostBody(13))
+                    .foregroundStyle(Theme.textDim)
+                Button("Start new ranking") {
+                    newRankingName = ""
+                    showStartRanking = true
+                }
+                .buttonStyle(.borderedProminent)
+            } else if let name = store.roundInfo?.currentName {
+                Text(name)
+                    .font(.ostDisplay(20, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("This ranking is ready. Use Add OST to add the first track; it will appear in History right away.")
+                    .font(.ostBody(13))
+                    .foregroundStyle(Theme.textDim)
+            } else {
+                Text("Loading roster…")
+                    .font(.ostBody(13))
+                    .foregroundStyle(Theme.textDim)
+            }
+        }
+        .frame(maxWidth: 460, alignment: .leading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
     }
 
     private func close() {
@@ -220,90 +276,89 @@ struct RosterView: View {
         store.playback?.status == .playing ? store.playback?.ostId : nil
     }
 
-    // Submitter filter + title search are grouped in one GlassEffectContainer
-    // sharing `toolbarGlass`, each tagged with a glassEffectID. Because they sit
-    // in a shared sampling region, the search field's width change (on focus /
-    // non-empty query) MORPHS the two glass shapes together rather than snapping
-    // between disconnected chips. Animate `searchFocused` to see the morph.
-    private var toolbar: some View {
-        GlassEffectContainer(spacing: 12) {
-            HStack(spacing: 12) {
-                Picker("", selection: $submitterFilter) {
-                    Text("All submitters").tag(Int?.none)
-                    ForEach(store.people) { person in
-                        Text(person.name).tag(Int?.some(person.id))
+    // Filter and search stay at the same place while switching sort modes.
+    private var toolbarContent: some View {
+        HStack(spacing: 12) {
+            Picker("", selection: $submitterFilter) {
+                Text("All submitters").tag(Int?.none)
+                ForEach(store.people) { person in
+                    Text(person.name).tag(Int?.some(person.id))
+                }
+            }
+            .labelsHidden()
+            .tint(Theme.accent)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 6))
+            .frame(maxWidth: 190)
+
+            HStack(spacing: 6) {
+                Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.textDim)
+                TextField("Search title…", text: $search)
+                    .textFieldStyle(.plain).font(.ostBody(13))
+                    .focused($searchFocused)
+            }
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 6))
+            .frame(maxWidth: searchFocused || !search.isEmpty ? 300 : 200)
+
+            if !store.people.isEmpty {
+                Button {
+                    fullyRatedOnly.toggle()
+                    SoundKit.shared.play(fullyRatedOnly ? .select : .dismiss)
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: fullyRatedOnly ? "checkmark.circle.fill" : "circle.dashed")
+                            .font(.system(size: 11))
+                        Text("Fully rated")
+                            .font(.ostMono(11, weight: .medium))
+                    }
+                    .foregroundStyle(fullyRatedOnly ? Theme.accent : Theme.textDim)
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                }
+                .buttonStyle(.plain)
+                .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 6))
+                .help("Hide OSTs missing any of the \(requiredRatings) ratings")
+            }
+
+            if submitterFilter != nil || !search.isEmpty || fullyRatedOnly {
+                Text("\(displayedEntries.count) shown")
+                    .font(.ostMono(10)).foregroundStyle(Theme.textDim)
+                Button("Clear") { submitterFilter = nil; search = ""; fullyRatedOnly = false }
+                    .buttonStyle(.plain).font(.ostMono(11, weight: .medium)).foregroundStyle(Theme.accent)
+            }
+            Spacer()
+            if !store.batches.isEmpty || hasSlices {
+                Picker("", selection: $sortMode) {
+                    Text("Rank").tag(RosterSort.rank)
+                    if !store.batches.isEmpty {
+                        Text("Batch").tag(RosterSort.batch)
+                    }
+                    if hasSlices {
+                        Text("Slices").tag(RosterSort.slices)
                     }
                 }
                 .labelsHidden()
+                .pickerStyle(.segmented)
                 .tint(Theme.accent)
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .glassEffect(.regular, in: ChamferedRect(cut: 8))
-                .glassEffectID("filter", in: toolbarGlass)
-                .frame(maxWidth: 190)
-
-                HStack(spacing: 6) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.textDim)
-                    TextField("Search title…", text: $search)
-                        .textFieldStyle(.plain).font(.ostBody(13))
-                        .focused($searchFocused)
-                }
-                .padding(.horizontal, 10).padding(.vertical, 6)
-                .glassEffect(.regular, in: ChamferedRect(cut: 8))
-                .glassEffectID("search", in: toolbarGlass)
-                .frame(maxWidth: searchFocused || !search.isEmpty ? 300 : 200)
-
-                // Completeness filter. Only meaningful once there are raters to
-                // be missing, so it stays out of the chrome until then.
-                if !store.people.isEmpty {
-                    Button {
-                        fullyRatedOnly.toggle()
-                        SoundKit.shared.play(fullyRatedOnly ? .select : .dismiss)
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: fullyRatedOnly ? "checkmark.circle.fill" : "circle.dashed")
-                                .font(.system(size: 11))
-                            Text("Fully rated")
-                                .font(.ostMono(11, weight: .medium))
-                        }
-                        .foregroundStyle(fullyRatedOnly ? Theme.accent : Theme.textDim)
-                        .padding(.horizontal, 10).padding(.vertical, 6)
-                    }
-                    .buttonStyle(.plain)
-                    .glassEffect(.regular, in: ChamferedRect(cut: 8))
-                    .glassEffectID("complete", in: toolbarGlass)
-                    .help("Hide OSTs missing any of the \(requiredRatings) ratings")
-                }
-
-                if submitterFilter != nil || !search.isEmpty || fullyRatedOnly {
-                    Text("\(displayedEntries.count) shown")
-                        .font(.ostMono(10)).foregroundStyle(Theme.textDim)
-                    Button("Clear") { submitterFilter = nil; search = ""; fullyRatedOnly = false }
-                        .buttonStyle(.plain).font(.ostMono(11, weight: .medium)).foregroundStyle(Theme.accent)
-                }
-                Spacer()
-                // Batch sort is a host-only view of the private key (only once
-                // batches exist); slices need a ranked board to cut up.
-                if !store.batches.isEmpty || hasSlices {
-                    Picker("", selection: $sortMode) {
-                        Text("Rank").tag(RosterSort.rank)
-                        if !store.batches.isEmpty {
-                            Text("Batch").tag(RosterSort.batch)
-                        }
-                        if hasSlices {
-                            Text("Slices").tag(RosterSort.slices)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .tint(Theme.accent)
-                    .frame(width: store.batches.isEmpty || !hasSlices ? 150 : 210)
-                    .help("Order cards by competition rank, by the private batch key, or by elimination slice")
-                }
+                .frame(width: store.batches.isEmpty || !hasSlices ? 150 : 210)
+                .help("Order cards by competition rank, by the private batch key, or by elimination slice")
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: searchFocused)
-        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: search.isEmpty)
-        .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 4)
+    }
+
+    private var toolbar: some View {
+        // On iPhone the full control row is wider than the screen — wrap it in
+        // a horizontal scroll so nothing clips and all controls stay reachable.
+        #if os(iOS)
+        ScrollView(.horizontal, showsIndicators: false) {
+            toolbarContent
+                .padding(.horizontal, 20)
+        }
+        .padding(.top, 12).padding(.bottom, 4)
+        #else
+        toolbarContent
+            .padding(.horizontal, 20).padding(.top, 12).padding(.bottom, 4)
+        #endif
     }
 
     /// One roster cell at its flat position in displayedEntries — shared by the
@@ -314,10 +369,8 @@ struct RosterView: View {
         RosterCard(
             entry: entry,
             resolutionPhase: store.resolutionPhase[id],
-            revealIndex: store.hasRevealed ? nil : index,
             coverEpoch: store.coverEpoch(for: id),
             isPlaying: playingOstID == id,
-            spectrum: store.player.spectrum,
             rankDelta: store.rankDeltas[id],
             isKeyboardCursor: gridFocused && cursorIndex == index,
             batchLabel: batchLabel(for: id)
@@ -398,12 +451,6 @@ struct RosterView: View {
                 // Whoosh only on genuine re-sorts, not the initial load.
                 guard !old.isEmpty, old != new else { return }
                 SoundKit.shared.play(.resort)
-            }
-            .task {
-                try? await Task.sleep(for: .seconds(
-                    Double(store.leaderboard.count) * Theme.revealStagger + 0.6
-                ))
-                store.markRevealed()
             }
             .focusable()
             .focusEffectDisabled()
@@ -496,12 +543,9 @@ struct RosterView: View {
 struct RosterCard: View {
     let entry: RankEntry
     let resolutionPhase: ResolutionPhase?
-    /// Non-nil during the first-load reveal sequence: drives the stagger.
-    let revealIndex: Int?
     let coverEpoch: Int
-    /// True while this card's OST is the one playing: beat glow + bass pulse.
+    /// True while this card's OST is the one playing.
     let isPlaying: Bool
-    let spectrum: SpectrumEngine
     /// Non-nil right after a re-sort moved this card (positive = climbed).
     let rankDelta: Int?
     /// Keyboard roving cursor is parked here: always-visible focus ring.
@@ -510,35 +554,27 @@ struct RosterCard: View {
     var batchLabel: String? = nil
 
     @State private var isHovered = false
-    @State private var revealed = false
-    @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
-
-    private var accent: Color {
-        entry.ost.coverAccentHex.map { Color(hex: $0) } ?? Theme.pink
-    }
+    private var accent: Color { Theme.accent }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             cover
             info
         }
-        .background(ChamferedRect().fill(Theme.cardSurface))
-        .overlay(ChamferedRect().stroke(
-            accent.opacity(isHovered || isKeyboardCursor ? 0.9 : 0.35), lineWidth: 1.5
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(
+            isKeyboardCursor ? Theme.textPrimary : (isHovered ? Theme.textDim : Theme.separator), lineWidth: 1
         ))
         .overlay {
             // Focus-visible ring, distinct from the hover treatment: the system
             // ring is too faint on this dark theme, so draw our own.
             if isKeyboardCursor {
-                ChamferedRect().stroke(Color.white.opacity(0.85), lineWidth: 2)
+                RoundedRectangle(cornerRadius: 7).stroke(Theme.textPrimary, lineWidth: 1)
             }
         }
         .overlay {
-            if isPlaying, fxEnabled {
-                BeatStroke(spectrum: spectrum, accent: accent)
-            } else if isPlaying {
-                // FX off: still mark the playing card, just statically.
-                ChamferedRect().stroke(accent.opacity(0.8), lineWidth: 2)
+            if isPlaying {
+                RoundedRectangle(cornerRadius: 7).stroke(Theme.accent, lineWidth: 2)
             }
         }
         .overlay(alignment: .topLeading) {
@@ -559,38 +595,12 @@ struct RosterCard: View {
                     .foregroundStyle(Theme.bg)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
-                    .background(ChamferedRect(cut: 5).fill(Theme.accent))
+                    .background(Theme.accent, in: RoundedRectangle(cornerRadius: 4))
                     .offset(x: 10, y: -10)
-                    .transition(.scale(scale: 0.5).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: rankDelta)
-        .animation(.spring(response: 0.35, dampingFraction: 0.7), value: batchLabel)
-        .clipShape(ChamferedRect())
-        .compositingGroup()
-        .modifier(HoverGlow(isActive: isHovered || isKeyboardCursor, accent: accent))
-        .scaleEffect(isHovered || isKeyboardCursor ? 1.02 : 1.0)
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isHovered)
-        .animation(.easeOut(duration: 0.1), value: isKeyboardCursor)
-        .musicPulse(onlyWhen: isPlaying, spectrum: spectrum, amount: Theme.beatPulse)
-        .onHover { hovering in
-            if hovering, !isHovered { SoundKit.shared.play(.hoverTick) }
-            isHovered = hovering
-        }
-        .opacity(revealed ? 1 : 0)
-        .offset(y: revealed ? 0 : 24)
-        .onAppear {
-            guard let index = revealIndex else {
-                revealed = true
-                return
-            }
-            withAnimation(
-                .spring(response: 0.5, dampingFraction: 0.8)
-                    .delay(Double(index) * Theme.revealStagger)
-            ) {
-                revealed = true
-            }
-        }
+        .clipShape(RoundedRectangle(cornerRadius: 7))
+        .onHover { isHovered = $0 }
     }
 
     private var cover: some View {
@@ -603,12 +613,6 @@ struct RosterCard: View {
                     ResolutionBadge(phase: phase).padding(6)
                 }
             }
-            .overlay(
-                LinearGradient(
-                    colors: [.clear, accent.opacity(0.28)],
-                    startPoint: .center, endPoint: .bottom
-                )
-            )
     }
 
     private var info: some View {
@@ -626,7 +630,7 @@ struct RosterCard: View {
             Spacer()
             Text(entry.average.map { String(format: "%.2f", $0) } ?? "—")
                 .font(.ostMono(17, weight: .bold))
-                .foregroundStyle(accent)
+                .foregroundStyle(Theme.textPrimary)
                 .contentTransition(.numericText(value: entry.average ?? 0))
                 .animation(.easeOut(duration: 0.6), value: entry.average)
         }
@@ -690,7 +694,11 @@ struct CoverImage: View {
 
     var body: some View {
         if let path, let image = Self.cachedCover(path: path, epoch: epoch) {
+            #if os(macOS)
             Image(nsImage: image).resizable()
+            #else
+            Image(uiImage: image).resizable()
+            #endif
         } else {
             ZStack {
                 Theme.bgRaised
@@ -699,27 +707,6 @@ struct CoverImage: View {
                     .foregroundStyle(Theme.textDim)
             }
         }
-    }
-}
-
-/// Bass-driven accent stroke worn by the currently-playing card. A TimelineView
-/// leaf — only this stroke re-renders per frame, never the card body.
-private struct BeatStroke: View {
-    let spectrum: SpectrumEngine
-    let accent: Color
-
-    @State private var pulse = AudioPulse()
-    // HIG: Reduce Motion disables ambient/looping animation entirely — matches
-    // the guard every sibling TimelineView (SpectrumView, VinylArtwork, etc.) uses.
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { _ in
-            let env = reduceMotion ? AudioEnvelopes() : pulse.update(bands: spectrum.snapshot())
-            ChamferedRect()
-                .stroke(accent.opacity(0.35 + 0.6 * env.bass), lineWidth: 1.5 + 2.0 * env.bass)
-        }
-        .allowsHitTesting(false)
     }
 }
 
@@ -740,29 +727,8 @@ private struct RankDeltaChip: View {
     }
 }
 
-/// GlowEffectKit's modifier costs real per-update time even while INACTIVE —
-/// with 50 cards it showed up in idle Instruments samples. Attach it only
-/// while a card is actually glowing.
-private struct HoverGlow: ViewModifier {
-    let isActive: Bool
-    let accent: Color
-
-    func body(content: Content) -> some View {
-        if isActive {
-            content.glowEffect(
-                isActive: true,
-                shape: ChamferedRect(),
-                duration: Theme.hoverGlowDuration,
-                glowColors: [accent, Theme.accent],
-                lineWidth: 3
-            )
-        } else {
-            content
-        }
-    }
-}
-
 extension CoverImage {
+    #if os(macOS)
     /// Decoded covers keyed by path#epoch. NSImage(contentsOfFile:) is a
     /// synchronous main-thread disk read + decode — uncached it re-ran on
     /// structural re-renders and stuttered the initial reveal.
@@ -795,4 +761,31 @@ extension CoverImage {
         guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
         return NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))
     }
+    #else
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 150
+        return cache
+    }()
+
+    static func cachedCover(path: String, epoch: Int) -> UIImage? {
+        let key = "\(path)#\(epoch)" as NSString
+        if let hit = cache.object(forKey: key) { return hit }
+        guard let image = decodeAtDisplaySize(path) else { return nil }
+        cache.setObject(image, forKey: key)
+        return image
+    }
+
+    private static func decodeAtDisplaySize(_ path: String) -> UIImage? {
+        let url = URL(fileURLWithPath: path)
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: 600,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else { return nil }
+        return UIImage(cgImage: cg)
+    }
+    #endif
 }

@@ -25,3 +25,11 @@ i made this for osts but you can repurpose it for any other music related media
 ## Running it
 
 Grab the build for your OS from the Releases tab. macOS and Windows get installers, Linux gets a tarball, iOS builds go to TestFlight. Your data lives in the app data folder for your system, so updates never touch it.
+
+## macOS startup troubleshooting
+
+If the app reports a sidecar handshake failure, the embedded Python backend may
+have exited before it could start. Rebuild with `./install.sh --deps --launch`
+to refresh the bundled dependencies. The installer now checks for
+`python-multipart`, which the portable import endpoint requires at startup.
+Your competition database remains in `~/Library/Application Support/ost-tracker`.

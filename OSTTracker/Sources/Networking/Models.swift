@@ -41,6 +41,17 @@ nonisolated struct Note: Codable, Sendable, Identifiable, Hashable {
     let title: String
     let note: String
     let createdAt: String
+    let source: String?
+    let artist: String?
+    let externalLink: String?
+}
+
+nonisolated struct CatalogTrack: Codable, Sendable, Identifiable, Hashable {
+    let id: Int
+    let title: String
+    let artist: String
+    let collection: String
+    let storeUrl: String?
 }
 
 nonisolated struct RankEntry: Codable, Sendable, Identifiable, Hashable {
@@ -212,6 +223,9 @@ nonisolated struct RevealState: Codable, Sendable {
 nonisolated struct NewNote: Encodable, Sendable {
     let title: String
     let note: String
+    let source: String?
+    let artist: String?
+    let externalLink: String?
 }
 
 nonisolated struct NotePatch: Encodable, Sendable {
