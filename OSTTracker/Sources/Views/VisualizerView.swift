@@ -1,9 +1,4 @@
-// Party mode: fullscreen takeover for when a track is just PLAYING. Blurred
-// cover ambience (dynamic color on decoration, fixed high-contrast text over a
-// dark scrim), a radial spectrum ring around spinning cover art, and — when
-// LRCLIB has synced lyrics for the track — a Spotify-style lyric panel with
-// the ring docked to the side. Esc or the close button leaves; clicking empty
-// backdrop leaves; Space toggles play/pause. Reduce Motion: no spin, no drift.
+// Fullscreen cassette visualizer with optional synced lyrics.
 
 import SwiftUI
 
@@ -15,7 +10,7 @@ struct VisualizerView: View {
     @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
     @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
     @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
-    @State private var spin = VinylSpin()
+    @State private var spin = ReelSpin()
     @State private var lyrics: [LyricLine]?
     @State private var lyricsOstID: Int?   // which track the current lines belong to
 
@@ -95,10 +90,11 @@ struct VisualizerView: View {
     private func centeredLayout(scale: CGFloat) -> some View {
         VStack(spacing: 28 * scale) {
             Spacer(minLength: 20)
-            SpectrumRing(
-                store: store, accent: accent, diameter: 470 * scale,
-                spin: spin, isPlaying: isPlaying, reduceMotion: stillArtwork, intensity: fxIntensity
+            PocketDeck(
+                store: store, accent: accent, spin: spin,
+                isPlaying: isPlaying, still: stillArtwork, intensity: fxIntensity
             )
+            .frame(width: 470 * scale, height: 320 * scale)
             titleBlock(compact: false, scale: scale)
             Spacer(minLength: 20)
         }
@@ -124,10 +120,11 @@ struct VisualizerView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             VStack(spacing: 20 * scale) {
-                SpectrumRing(
-                    store: store, accent: accent, diameter: 330 * scale,
-                    spin: spin, isPlaying: isPlaying, reduceMotion: stillArtwork, intensity: fxIntensity
+                PocketDeck(
+                    store: store, accent: accent, spin: spin,
+                    isPlaying: isPlaying, still: stillArtwork, intensity: fxIntensity
                 )
+                .frame(width: 330 * scale, height: 225 * scale)
                 if let average = entry?.average {
                     Text(String(format: "%.2f", average))
                         .font(.ostMono(16 * scale, weight: .bold))
@@ -187,93 +184,5 @@ struct VisualizerView: View {
                     .foregroundStyle(accent)
             }
         }
-    }
-}
-
-/// The radial spectrum: 24 bands mirrored into 48 spokes around a spinning
-/// vinyl cover. Fixed diameter so the ring and cover always stay proportional
-/// regardless of window size (the free-floating version let the ring outgrow
-/// the cover on large displays).
-private struct SpectrumRing: View {
-    let store: AppStore
-    let accent: Color
-    let diameter: CGFloat
-    let spin: VinylSpin
-    let isPlaying: Bool
-    let reduceMotion: Bool
-    let intensity: Double
-
-    var body: some View {
-        let coverSize = diameter * 0.5
-        let innerRadius = diameter * 0.30
-        let maxLength = diameter * 0.17
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying || reduceMotion)) { timeline in
-            let now = timeline.date.timeIntervalSinceReferenceDate
-            ZStack {
-                Canvas { context, size in
-                    guard !reduceMotion else { return }
-                    var bands = store.player.spectrum.snapshot()
-                    let isLive = bands.contains { $0 > 0.004 }
-                    if !isLive {
-                        guard isPlaying else { return }
-                        // Same synthetic shimmer fallback as SpectrumView.
-                        bands = (0..<SpectrumEngine.bandCount).map { i in
-                            let phase = Double(i) * 0.55
-                            let wave = sin(now * 2.1 + phase) * 0.5 + sin(now * 3.7 - phase * 0.8) * 0.5
-                            return Float(0.06 + 0.05 * (wave * 0.5 + 0.5))
-                        }
-                    }
-                    let center = CGPoint(x: size.width / 2, y: size.height / 2)
-                    let spokes = bands + bands.reversed()   // symmetric ring
-                    let baseRotation = reduceMotion ? 0 : now * 0.15
-                    var path = Path()
-                    for (i, raw) in spokes.enumerated() {
-                        let level = CGFloat(pow(Double(raw), 0.8))
-                        let angle = baseRotation + Double(i) / Double(spokes.count) * 2 * .pi
-                        let length = max(3, level * maxLength * CGFloat(intensity))
-                        path.move(to: CGPoint(
-                            x: center.x + Foundation.cos(angle) * innerRadius,
-                            y: center.y + Foundation.sin(angle) * innerRadius
-                        ))
-                        path.addLine(to: CGPoint(
-                            x: center.x + Foundation.cos(angle) * (innerRadius + length),
-                            y: center.y + Foundation.sin(angle) * (innerRadius + length)
-                        ))
-                    }
-                    context.stroke(
-                        path,
-                        with: .color(Theme.accent),
-                        style: StrokeStyle(lineWidth: 4, lineCap: .round)
-                    )
-                }
-
-                CoverImage(
-                    path: store.nowPlayingEntry?.ost.coverImagePath,
-                    epoch: store.coverEpoch(for: store.nowPlayingEntry?.ost.id)
-                )
-                .aspectRatio(1, contentMode: .fill)
-                .frame(width: coverSize, height: coverSize)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 2))
-                .overlay(Circle().fill(Color.black.opacity(0.85)).frame(width: coverSize * 0.07, height: coverSize * 0.07))
-                .rotationEffect(.degrees(spin.angle(at: timeline.date, spinning: isPlaying && !reduceMotion)))
-            }
-        }
-        .frame(width: diameter, height: diameter)
-    }
-}
-
-/// Freeze-in-place platter physics, shared across both layouts so the record
-/// doesn't jump when lyrics arrive and the ring re-docks.
-final class VinylSpin {
-    private var angleDegrees: Double = 0
-    private var lastDate: Date?
-
-    func angle(at date: Date, spinning: Bool) -> Double {
-        defer { lastDate = date }
-        guard spinning, let last = lastDate else { return angleDegrees }
-        let dt = min(0.5, date.timeIntervalSince(last))
-        angleDegrees = (angleDegrees + dt * 30).truncatingRemainder(dividingBy: 360)
-        return angleDegrees
     }
 }

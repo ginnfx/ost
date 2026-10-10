@@ -4,18 +4,20 @@ import SwiftUI
 
 struct NowPlayingBar: View {
     let store: AppStore
-    /// Opens the fullscreen visualizer (expand button, or tapping the spectrum).
+    /// Opens the fullscreen visualizer from the expand button or cassette.
     var onExpand: () -> Void = {}
     /// False when the bar is fully covered (visualizer/attract overlay up); its
-    /// spectrum + vinyl stop animating so they don't burn frames off-screen.
+    /// spectrum + cassette stop animating so they don't burn frames off-screen.
     var active: Bool = true
     /// macOS keeps the transport in the window even before a track is selected.
     var desktop: Bool = false
 
     @State private var scrubbing = false
     @State private var scrubValue = 0.0
+    @State private var miniDeckSpin = ReelSpin()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
+    @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
     @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     private var status: PlaybackStatus { store.playback?.status ?? .idle }
@@ -82,6 +84,25 @@ struct NowPlayingBar: View {
                 .frame(width: 48, height: 48)
                 .background(Theme.bg)
                 .clipShape(RoundedRectangle(cornerRadius: 5))
+
+                if hasTrack {
+                    Button {
+                        SoundKit.shared.play(.select)
+                        onExpand()
+                    } label: {
+                        PocketDeck(
+                            store: store, accent: accentColor, spin: miniDeckSpin,
+                            isPlaying: status == .playing && active,
+                            still: reduceMotion || !fxEnabled || motionSelection == MotionMode.minimal.rawValue,
+                            intensity: fxIntensity,
+                            compact: true
+                        )
+                        .frame(width: 58, height: 40)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Open cassette visualizer")
+                    .help("Open visualizer")
+                }
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(store.nowPlayingEntry?.ost.title ?? "Nothing playing")
