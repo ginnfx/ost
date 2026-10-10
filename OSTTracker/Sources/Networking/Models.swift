@@ -47,11 +47,12 @@ nonisolated struct Note: Codable, Sendable, Identifiable, Hashable {
 }
 
 nonisolated struct CatalogTrack: Codable, Sendable, Identifiable, Hashable {
-    let id: Int
+    let id: String
     let title: String
     let artist: String
     let collection: String
     let storeUrl: String?
+    let provider: String
 }
 
 nonisolated struct RankEntry: Codable, Sendable, Identifiable, Hashable {
