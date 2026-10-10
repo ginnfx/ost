@@ -14,6 +14,8 @@ struct SyncedLyricsView: View {
     /// track the rest of the takeover between windowed and fullscreen.
     var scale: CGFloat = 1
     let onSeek: (Double) -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     var body: some View {
         // While playing: tick 5x/s and extrapolate wall-clock time since the
@@ -56,11 +58,11 @@ struct SyncedLyricsView: View {
                 }
                 .padding(.vertical, 180 * scale)   // room to center first/last lines
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .animation(.easeOut(duration: 0.25), value: currentIndex)
+                .animation(Theme.motion(.feedback, reduceMotion: reduceMotion), value: currentIndex)
             }
             .onChange(of: currentIndex) { _, new in
                 guard let new else { return }
-                withAnimation(.spring(response: 0.55, dampingFraction: 0.85)) {
+                withAnimation(Theme.motion(.navigation, reduceMotion: reduceMotion)) {
                     proxy.scrollTo(new, anchor: .center)
                 }
             }

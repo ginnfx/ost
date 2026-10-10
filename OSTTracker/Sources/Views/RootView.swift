@@ -1,8 +1,3 @@
-// App chrome: black backdrop with faint glows, custom segment selector (no
-// .pickerStyle(.tabs) on macOS — custom enum tabs with a sliding
-// highlight), now-playing bar. Glass lives on chrome and panels; roster cards
-// stay solid content surfaces.
-
 import SwiftUI
 
 enum AppTab: String, CaseIterable, Identifiable {
@@ -14,71 +9,86 @@ enum AppTab: String, CaseIterable, Identifiable {
     case history = "History"
 
     var id: String { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .roster: "square.grid.2x2"
+        case .people: "person.2"
+        case .notes: "note.text"
+        case .stats: "chart.bar"
+        case .batches: "square.stack"
+        case .history: "clock.arrow.circlepath"
+        }
+    }
 }
 
-/// One Add-OST presentation: captures the submitter filter at the moment the
-/// button was clicked, and its fresh identity resets the sheet's form state.
+/// Each presentation gets a fresh form, with the current Roster filter as its default.
 struct AddOstRequest: Identifiable {
     let id = UUID()
     let submitterID: Int?
 }
 
+#if os(macOS)
 struct RootView: View {
     let store: AppStore
     @State private var tab: AppTab = .roster
-    // Item-based presentation (not isPresented): SwiftUI keeps an isPresented
-    // sheet's content identity alive across presentations, so AddOstView's
-    // @State(initialValue:) default submitter was only honored the FIRST time
-    // the sheet ever opened. A fresh Identifiable item per open rebuilds the
-    // form with the filter that's active right now.
     @State private var addOstRequest: AddOstRequest?
-    // Lifted out of RosterView so the Add-OST sheet can default its submitter to
-    // whoever the roster is currently filtered by.
     @State private var submitterFilter: Int?
-    @Environment(\.scenePhase) private var scenePhase
-    // Mirror the theme selection so a Settings change re-renders the content
-    // tree with fresh accent colors (Theme.accent is a plain static read, so it
-    // won't update children unless their subtree is rebuilt — the .id() below).
-    @AppStorage(Theme.presetKey) private var themePreset = "emerald"
-    @AppStorage(Theme.customAccentKey) private var customAccent = ""
-    #if os(macOS)
-    @Environment(\.openSettings) private var openSettings
-    #endif
     @State private var showVisualizer = false
     @State private var attract = AttractModeController()
+    @State private var hoveredTab: AppTab?
+    @State private var sidebarWidth: CGFloat = 200
+    @State private var sidebarDragStart: CGFloat?
+    @Namespace private var navigationSelection
+
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.openSettings) private var openSettings
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.presetKey) private var themePreset = "emerald"
+    @AppStorage(Theme.customAccentKey) private var customAccent = ""
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
+
+    private var motionMode: MotionMode { MotionMode(rawValue: motionSelection) ?? .subtle }
+
+    private var sectionTransition: AnyTransition {
+        if reduceMotion || motionMode == .minimal { return .identity }
+        if motionMode == .cinematic { return .opacity.combined(with: .offset(x: 12)) }
+        return .opacity
+    }
 
     var body: some View {
-        GeometryReader { geo in
-            // Transport bar scales up modestly on big/fullscreen windows so it
-            // doesn't read as a lost sliver at the bottom of a huge screen.
-            let barScale = min(1.25, max(1.0, geo.size.width / 1300))
-            ZStack(alignment: .bottom) {
-            Theme.bg
-
+        ZStack(alignment: .bottom) {
             VStack(spacing: 0) {
-                header
-                content
-                    .id("theme-\(themePreset)-\(customAccent)")
+                HStack(spacing: 0) {
+                    sidebar
+                        .frame(width: sidebarWidth)
+                    sidebarDivider
+                    VStack(spacing: 0) {
+                        topBar
+                        ZStack {
+                            content
+                                .id("\(tab.rawValue)-\(themePreset)-\(customAccent)")
+                                .transition(sectionTransition)
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-
-            if store.playback?.status != nil, store.playback?.status != .idle {
+                    .background(Theme.bg)
+                }
                 NowPlayingBar(
                     store: store,
-                    onExpand: { showVisualizer = true },
-                    active: !showVisualizer && !attract.isActive
+                    onExpand: { openVisualizer() },
+                    active: !showVisualizer && !attract.isActive,
+                    desktop: true
                 )
-                    .scaleEffect(barScale, anchor: .bottom)
-                    .padding(.horizontal, 20)
-                    .padding(.bottom, 14)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
             if showVisualizer {
                 VisualizerView(store: store) {
                     SoundKit.shared.play(.dismiss)
-                    showVisualizer = false
+                    withAnimation(Theme.motion(.overlay, reduceMotion: reduceMotion)) {
+                        showVisualizer = false
+                    }
                 }
                 .zIndex(2)
                 .transition(.opacity)
@@ -88,76 +98,177 @@ struct RootView: View {
                 AttractOverlay(store: store)
                     .zIndex(3)
                     .transition(.opacity)
-                    .allowsHitTesting(false)   // the controller's monitor handles waking
+                    .allowsHitTesting(false)
             }
 
             if let message = store.lastError {
                 ErrorBanner(message: message)
-                    // Clear the now-playing bar when it's up; hug the bottom otherwise.
-                    .padding(.bottom, store.playback?.status != nil && store.playback?.status != .idle ? 120 : 24)
+                    .padding(.bottom, 104)
                     .zIndex(4)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .transition(.opacity)
             }
-            }
-            .animation(.spring(response: 0.4, dampingFraction: 0.85), value: store.playback?.status)
-            .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.lastError)
-            .animation(.easeInOut(duration: 0.3), value: showVisualizer)
-            .animation(.easeInOut(duration: 1.5), value: attract.isActive)
         }
         .background(Theme.bg)
         .tint(Theme.accent)
         .preferredColorScheme(.dark)
+        .animation(Theme.motion(.feedback, reduceMotion: reduceMotion), value: store.lastError)
+        .animation(Theme.motion(.overlay, reduceMotion: reduceMotion), value: attract.isActive)
         .sheet(item: $addOstRequest) { request in
             AddOstView(store: store, defaultSubmitterID: request.submitterID)
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.onBecameActive() }
         }
-        .onChange(of: tab) { _, _ in
-            SoundKit.shared.play(.tabSwitch)
-        }
         .onAppear { attract.start() }
         .onDisappear { attract.stop() }
     }
 
-    private var header: some View {
-        HStack(spacing: 20) {
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
             Text("OST TRACKER")
                 .font(.ostWordmark(18, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
-                .fixedSize()
-            Picker("Section", selection: $tab) {
-                ForEach(AppTab.allCases) { section in
-                    Text(section.rawValue).tag(section)
+                .lineLimit(1)
+                .padding(.horizontal, 12)
+                .padding(.top, 42)
+                .padding(.bottom, 30)
+
+            Text("LIBRARY")
+                .font(.ostMono(10, weight: .semibold))
+                .tracking(1.5)
+                .foregroundStyle(Theme.textDim)
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+
+            ForEach(Array(AppTab.allCases.enumerated()), id: \.element.id) { index, section in
+                Button { select(section) } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: section.systemImage)
+                            .font(.system(size: 15, weight: .medium))
+                            .frame(width: 20)
+                        Text(section.rawValue)
+                            .font(.ostBody(14, weight: tab == section ? .semibold : .regular))
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(tab == section ? Theme.textPrimary : Theme.textDim)
+                    .padding(.horizontal, 12)
+                    .frame(height: 38)
+                    .contentShape(Rectangle())
+                    .background {
+                        if tab == section {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Theme.cardSurface)
+                                .matchedGeometryEffect(id: "selected-section", in: navigationSelection)
+                        } else if hoveredTab == section {
+                            RoundedRectangle(cornerRadius: 6)
+                                .fill(Theme.cardSurface.opacity(0.55))
+                        }
+                    }
+                    .overlay(alignment: .leading) {
+                        if tab == section {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Theme.accent)
+                                .frame(width: 3, height: 22)
+                        }
+                    }
                 }
+                .buttonStyle(.plain)
+                .keyboardShortcut(KeyEquivalent(Character(String(index + 1))), modifiers: .command)
+                .onHover { hovering in hoveredTab = hovering ? section : nil }
+                .help("\(section.rawValue) (⌘\(index + 1))")
+                .accessibilityAddTraits(tab == section ? .isSelected : [])
             }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 560)
-            Spacer(minLength: 8)
-            #if os(macOS)
+
+            Spacer(minLength: 24)
+
             Button { openSettings() } label: {
                 Label("Settings", systemImage: "gearshape")
+                    .font(.ostBody(14))
+                    .foregroundStyle(Theme.textDim)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .frame(height: 38)
+                    .contentShape(Rectangle())
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(.plain)
             .help("Settings (⌘,)")
-            #endif
-            Button { addOstRequest = AddOstRequest(submitterID: submitterFilter) } label: {
-                Label("Add OST", systemImage: "plus")
+            .padding(.bottom, 18)
+        }
+        .padding(.horizontal, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Theme.bgRaised)
+    }
+
+    private var sidebarDivider: some View {
+        Rectangle()
+            .fill(Theme.separator)
+            .frame(width: 1)
+            .overlay {
+                Color.clear
+                    .frame(width: 10)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 2)
+                            .onChanged { value in
+                                if sidebarDragStart == nil { sidebarDragStart = sidebarWidth }
+                                sidebarWidth = min(270, max(168, (sidebarDragStart ?? sidebarWidth) + value.translation.width))
+                            }
+                            .onEnded { _ in sidebarDragStart = nil }
+                    )
+                    .help("Drag to resize sidebar")
             }
-            .buttonStyle(.borderedProminent)
-            .disabled(store.roundInfo?.needsStart != false)
+    }
+
+    private var topBar: some View {
+        HStack(spacing: 16) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(store.roundInfo?.currentName ?? "No active ranking")
+                    .font(.ostBody(14, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                Text(store.roundInfo?.needsStart == true
+                     ? "Start a ranking in Roster"
+                     : "\(store.leaderboard.count) OSTs in this ranking")
+                    .font(.ostBody(11))
+                    .foregroundStyle(Theme.textDim)
+            }
+            Spacer(minLength: 8)
             if case .failed(let message) = store.phase {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundStyle(Theme.rust)
                     .help(message)
+                    .accessibilityLabel("Backend unavailable: \(message)")
             }
+            Button {
+                addOstRequest = AddOstRequest(submitterID: submitterFilter)
+            } label: {
+                Label("Add OST", systemImage: "plus")
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.regular)
+            .disabled(store.roundInfo?.needsStart != false)
+            .keyboardShortcut("n", modifiers: .command)
         }
-        .font(.ostBody(12))
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(Theme.bgRaised)
+        .padding(.horizontal, 24)
+        .frame(height: 64)
+        .background(Theme.bg)
         .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
+    }
+
+    private func select(_ section: AppTab) {
+        guard tab != section else { return }
+        SoundKit.shared.play(.tabSwitch)
+        withAnimation(Theme.motion(.navigation, reduceMotion: reduceMotion)) {
+            tab = section
+        }
+    }
+
+    private func openVisualizer() {
+        guard store.playback?.status != nil, store.playback?.status != .idle else { return }
+        SoundKit.shared.play(.select)
+        withAnimation(Theme.motion(.overlay, reduceMotion: reduceMotion)) {
+            showVisualizer = true
+        }
     }
 
     @ViewBuilder
@@ -172,10 +283,9 @@ struct RootView: View {
         }
     }
 }
+#endif
 
-/// Bottom toast for rejected writes. AppStore.reportError() feeds it and
-/// auto-clears after ~5s; before this existed every failed rating, add,
-/// delete, and cover apply died silently.
+/// A rejected write stays visible long enough to read, above the player.
 struct ErrorBanner: View {
     let message: String
 
@@ -192,7 +302,7 @@ struct ErrorBanner: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
-        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.rust, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Theme.separator, lineWidth: 1))
         .frame(maxWidth: 480)
     }
 }

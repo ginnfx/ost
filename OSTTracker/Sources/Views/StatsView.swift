@@ -41,72 +41,63 @@ struct StatsView: View {
                                 StatTile(
                                     superlative: "MOST DIVISIVE",
                                     value: String(format: "σ %.2f", divisive.stddev ?? 0),
-                                    subject: divisive.ost.title,
-                                    tint: Theme.rust
+                                    subject: divisive.ost.title
                                 )
                             }
                             if let consensus = consensusPick {
                                 StatTile(
                                     superlative: "CONSENSUS PICK",
                                     value: String(format: "σ %.2f", consensus.stddev ?? 0),
-                                    subject: consensus.ost.title,
-                                    tint: Theme.accent
+                                    subject: consensus.ost.title
                                 )
                             }
                             if let top = topRated {
                                 StatTile(
                                     superlative: "HIGHEST RATED",
                                     value: String(format: "%.2f", top.average ?? 0),
-                                    subject: top.ost.title,
-                                    tint: Theme.accent
+                                    subject: top.ost.title
                                 )
                             }
                             if let low = lowestRated {
                                 StatTile(
                                     superlative: "LOWEST RATED",
                                     value: String(format: "%.2f", low.average ?? 0),
-                                    subject: low.ost.title,
-                                    tint: Theme.rust
+                                    subject: low.ost.title
                                 )
                             }
                             if let harsh = harshestRater {
                                 StatTile(
                                     superlative: "TOUGHEST RATER",
                                     value: String(format: "%.2f", harsh.average),
-                                    subject: "\(harsh.person.name) — lowest average given",
-                                    tint: Theme.rust
+                                    subject: "\(harsh.person.name) — lowest average given"
                                 )
                             }
                             if let generous = mostGenerousRater {
                                 StatTile(
                                     superlative: "MOST GENEROUS RATER",
                                     value: String(format: "%.2f", generous.average),
-                                    subject: "\(generous.person.name) — highest average given",
-                                    tint: Theme.accent
+                                    subject: "\(generous.person.name) — highest average given"
                                 )
                             }
                             if let most = mostRated {
                                 StatTile(
                                     superlative: "MOST RATED",
                                     value: "\(most.ratingCount)",
-                                    subject: "\(most.ost.title) — votes cast",
-                                    tint: Theme.accent
+                                    subject: "\(most.ost.title) — votes cast"
                                 )
                             }
                             if let curator = topCurator {
                                 StatTile(
                                     superlative: "BEST SUBMITTER",
                                     value: String(format: "%.2f", curator.average),
-                                    subject: "\(curator.person.name) — avg of \(curator.count) picks",
-                                    tint: Theme.accent
+                                    subject: "\(curator.person.name) — avg of \(curator.count) picks"
                                 )
                             }
                             if let prolific = mostProlificSubmitter {
                                 StatTile(
                                     superlative: "MOST PROLIFIC SUBMITTER",
                                     value: "\(prolific.count)",
-                                    subject: "\(prolific.person.name) — OSTs submitted",
-                                    tint: Theme.accent
+                                    subject: "\(prolific.person.name) — OSTs submitted"
                                 )
                             }
                         }
@@ -139,9 +130,17 @@ struct StatsView: View {
                     }
                 }
                 .padding(20)
-                .padding(.bottom, 90) // clear now-playing bar
+                .padding(.bottom, bottomClearance)
             }
         }
+    }
+
+    private var bottomClearance: CGFloat {
+        #if os(macOS)
+        12
+        #else
+        90
+        #endif
     }
 
     private func sectionLabel(_ title: String) -> some View {
@@ -312,16 +311,11 @@ struct StatsView: View {
     }
 }
 
-/// One superlative: caption, one big number, one line context. Solid card
-/// surface matching roster (glass stays reserved chrome). The number rolls
-/// up from zero on first appear and re-rolls to the new figure whenever a
-/// live rating streams in; hover lifts the card the same way a roster
-/// card does, minus the full glow shader (informational, not playable).
+/// One superlative in a compact, readable row.
 private struct StatTile: View {
     let superlative: String
     let value: String
     let subject: String
-    let tint: Color
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 16) {

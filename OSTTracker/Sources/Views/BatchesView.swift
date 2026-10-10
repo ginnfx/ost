@@ -8,6 +8,8 @@ import SwiftUI
 
 struct BatchesView: View {
     let store: AppStore
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     @State private var confirmRandomize = false
     @State private var isRandomizing = false
@@ -24,7 +26,8 @@ struct BatchesView: View {
                     emptyState
                 } else {
                     ForEach(store.batches) { group in
-                        BatchSection(group: group, draggingID: $draggingID, onDrop: { ostID, slotIndex in
+                        BatchSection(group: group, draggingID: $draggingID,
+                                     coverEpoch: { store.coverEpoch(for: $0) }, onDrop: { ostID, slotIndex in
                             moveOST(ostID, toBatch: group.index - 1, at: slotIndex)
                         }, onTogglePin: { slot in
                             Task { await store.setPin(ostID: slot.ost.id, pinned: !slot.pinned) }
@@ -33,9 +36,10 @@ struct BatchesView: View {
                 }
             }
             .padding(20)
-            .padding(.bottom, 96)
+            .padding(.bottom, bottomClearance)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .animation(Theme.motion(.reorder, reduceMotion: reduceMotion), value: store.batches.flatMap { $0.slots.map(\.ost.id) })
         .confirmationDialog(
             "Re-randomize batches?",
             isPresented: $confirmRandomize,
@@ -48,16 +52,24 @@ struct BatchesView: View {
         }
     }
 
+    private var bottomClearance: CGFloat {
+        #if os(macOS)
+        12
+        #else
+        96
+        #endif
+    }
+
     // MARK: - Header
 
     private var header: some View {
         HStack(alignment: .top) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("BATCHES")
-                    .font(.ostDisplay(15, weight: .semibold))
+                Text("Batches")
+                    .font(.ostDisplay(22, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
                 Text("Private order for listening sessions. Drag to arrange; right-click to pin.")
-                    .font(.ostMono(10))
+                    .font(.ostBody(12))
                     .foregroundStyle(Theme.textDim)
                     .kerning(0.6)
                 if let stamp = formattedTimestamp {
@@ -131,9 +143,7 @@ struct BatchesView: View {
                 .lineLimit(4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(20)
-        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
-        .padding(.top, 40)
+        .padding(.top, 20)
     }
 
     // MARK: - Actions
@@ -183,6 +193,7 @@ struct BatchesView: View {
 private struct BatchSection: View {
     let group: BatchGroup
     @Binding var draggingID: Int?
+    let coverEpoch: (Int) -> Int
     let onDrop: (_ ostID: Int, _ slotIndex: Int) -> Void
     let onTogglePin: (BatchSlot) -> Void
 
@@ -200,9 +211,9 @@ private struct BatchSection: View {
 
             VStack(spacing: 0) {
                 ForEach(Array(group.slots.enumerated()), id: \.element.id) { index, slot in
-                    BatchRow(slot: slot)
+                    BatchRow(slot: slot, epoch: coverEpoch(slot.ost.id))
                         .draggable(String(slot.ost.id)) {
-                            BatchRow(slot: slot)  // drag preview
+                            BatchRow(slot: slot, epoch: coverEpoch(slot.ost.id))  // drag preview
                                 .frame(width: 320)
                                 .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
                         }
@@ -231,15 +242,15 @@ private struct BatchSection: View {
         }
     }
 
-    private func handleDrop(_ items: [String], at slotIndex: Int) -> Bool {
-        guard let first = items.first, let ostID = Int(first) else { return false }
+    private func handleDrop(_ items: [String], at slotIndex: Int) {
+        guard let first = items.first, let ostID = Int(first) else { return }
         onDrop(ostID, slotIndex)
-        return true
     }
 }
 
 private struct BatchRow: View {
     let slot: BatchSlot
+    let epoch: Int
 
     var body: some View {
         HStack(spacing: 12) {
@@ -247,6 +258,12 @@ private struct BatchRow: View {
                 .font(.ostMono(11, weight: .bold))
                 .foregroundStyle(Theme.textDim)
                 .frame(width: 58, alignment: .leading)
+
+            CoverImage(path: slot.ost.coverImagePath, epoch: epoch)
+                .scaledToFit()
+                .frame(width: 36, height: 36)
+                .background(Theme.bgRaised)
+                .clipShape(RoundedRectangle(cornerRadius: 4))
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(slot.ost.title)

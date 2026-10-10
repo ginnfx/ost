@@ -11,9 +11,6 @@ settings:
     SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
     MACOSX_DEPLOYMENT_TARGET: "27.0"
     ARCHS: arm64
-packages:
-  GlowEffectKit:
-    path: ../GlowEffectKit-main
 targets:
   OSTTracker:
     type: application
@@ -24,8 +21,6 @@ targets:
       - path: Fonts
         type: folder
         buildPhase: resources
-    dependencies:
-      - package: GlowEffectKit
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
