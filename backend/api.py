@@ -31,6 +31,7 @@ import sys
 import tempfile
 import threading
 import time
+import httpx
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -52,10 +53,11 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
-from ost_tracker.db import history_repo, migrations, notes_repo, ost_repo, people_repo, rating_repo, settings_repo
+from ost_tracker.db import history_repo, migrations, notes_repo, ost_repo, people_repo, rating_repo, rounds_repo, settings_repo
 from ost_tracker.db.models import HistoryEntry, Note, Ost, OstStats, Person, Rating
 from ost_tracker.services import batches as batches_service
 from ost_tracker.services import coverart
+from ost_tracker.services import catalog_search
 from ost_tracker.services import elimination as elimination_service
 from ost_tracker.services import portable
 from ost_tracker.services.link_resolver import resolve_playback
@@ -102,6 +104,20 @@ class OstPatch(BaseModel):
     external_link: Optional[str] = None
 
 
+class RetireConfirmIn(BaseModel):
+    challenge_id: str
+    word: str
+
+
+class HistoryLabelRenameIn(BaseModel):
+    old_label: str
+    new_label: str
+
+
+class StartRoundIn(BaseModel):
+    name: str
+
+
 class CoverCandidateOut(BaseModel):
     image_url: str
     thumb_url: str
@@ -136,11 +152,17 @@ class NoteOut(BaseModel):
     title: str
     note: str
     created_at: str
+    source: Optional[str] = None
+    artist: Optional[str] = None
+    external_link: Optional[str] = None
 
 
 class NoteIn(BaseModel):
     title: str
     note: str = ""
+    source: Optional[str] = None
+    artist: Optional[str] = None
+    external_link: Optional[str] = None
 
 
 class NotePatch(BaseModel):
@@ -292,7 +314,8 @@ def _rating_out(r: Rating) -> RatingOut:
 
 
 def _note_out(n: Note) -> NoteOut:
-    return NoteOut(id=n.id, title=n.title, note=n.note, created_at=_iso(n.created_at))
+    return NoteOut(id=n.id, title=n.title, note=n.note, created_at=_iso(n.created_at),
+                   source=n.source, artist=n.artist, external_link=n.external_link)
 
 
 def _person_out(p: Person) -> PersonOut:
@@ -425,6 +448,7 @@ def _broadcast_leaderboard() -> None:
 
 
 def _leaderboard_worker() -> None:
+    global _leaderboard_due
     while True:
         with _leaderboard_lock:
             due = _leaderboard_due
@@ -619,7 +643,7 @@ def post_person(body: PersonIn) -> PersonOut:
     return _person_out(people_repo.add_person(body.name))
 
 
-@app.delete("/people/{person_id}", status_code=204)
+@app.delete("/people/{person_id}", status_code=204, response_model=None)
 def delete_person(person_id: int) -> None:
     # FK cascade (schema): their ratings are deleted; their OSTs' submitter_id
     # is set NULL. The leaderboard then recomputes without them.
@@ -671,7 +695,7 @@ def patch_ost(ost_id: int, body: OstPatch) -> OstOut:
     return _ost_out(updated)
 
 
-@app.delete("/osts/{ost_id}", status_code=204)
+@app.delete("/osts/{ost_id}", status_code=204, response_model=None)
 def delete_ost(ost_id: int) -> None:
     if ost_repo.get_ost(ost_id) is None:
         raise HTTPException(404, "OST not found")
@@ -701,6 +725,57 @@ def get_history_matches(
     title: str = Query(""), source: Optional[str] = Query(None)
 ) -> list[HistoryEntryOut]:
     return [_history_entry_out(h) for h in history_repo.find_matches(title, source)]
+
+
+@app.patch("/history/label")
+def patch_history_label(body: HistoryLabelRenameIn) -> dict:
+    return rounds_repo.rename_history_label(body.old_label, body.new_label)
+
+
+# --- round retirement ---------------------------------------------------------
+
+_retire_words = ("HARBOR", "LANTERN", "ORBIT", "MEADOW", "PAPER", "RIVER", "SUNSET", "WILLOW")
+_retire_challenges: dict[str, tuple[str, float]] = {}
+_retire_challenge_lock = threading.Lock()
+
+
+@app.get("/rounds")
+def get_rounds() -> dict:
+    return rounds_repo.round_status()
+
+
+@app.post("/rounds/start")
+def post_start_round(body: StartRoundIn) -> dict:
+    return rounds_repo.start_round(body.name)
+
+
+@app.get("/rounds/retire-challenge")
+def get_retire_challenge() -> dict:
+    challenge_id = secrets.token_urlsafe(18)
+    word = secrets.choice(_retire_words)
+    with _retire_challenge_lock:
+        _retire_challenges.clear()  # only the latest open confirmation can be used
+        _retire_challenges[challenge_id] = (word, time.monotonic() + 300)
+    return {"challenge_id": challenge_id, "word": word}
+
+
+@app.post("/rounds/retire")
+def post_retire_round(body: RetireConfirmIn) -> dict:
+    with _retire_challenge_lock:
+        challenge = _retire_challenges.pop(body.challenge_id, None)
+    if challenge is None or time.monotonic() > challenge[1] or not secrets.compare_digest(body.word, challenge[0]):
+        raise HTTPException(400, "Confirmation word was incorrect or expired.")
+    retired = rounds_repo.retire_round()
+    _set_player(PlaybackState(status="idle"))
+    _broadcast_leaderboard()
+    return retired
+
+
+@app.post("/rounds/{round_id}/restore")
+def post_restore_round(round_id: int) -> dict:
+    restored = rounds_repo.restore_round(round_id)
+    _broadcast_leaderboard()
+    return restored
 
 
 # --- covers -------------------------------------------------------------------
@@ -818,9 +893,18 @@ def get_notes() -> list[NoteOut]:
     return [_note_out(n) for n in notes_repo.list_notes()]
 
 
+@app.get("/notes/catalog-search")
+def search_note_catalog(q: str = Query(min_length=3, max_length=120)) -> list[dict]:
+    try:
+        return catalog_search.search_tracks(q)
+    except (httpx.HTTPError, ValueError):
+        raise HTTPException(503, "Music catalog is temporarily unavailable.")
+
+
 @app.post("/notes", status_code=201)
 def post_note(body: NoteIn) -> NoteOut:
-    return _note_out(notes_repo.add_note(body.title, body.note))
+    return _note_out(notes_repo.add_note(body.title, body.note, body.source,
+                                         body.artist, body.external_link))
 
 
 @app.patch("/notes/{note_id}")
@@ -840,7 +924,7 @@ def patch_note(note_id: int, body: NotePatch) -> NoteOut:
     return _note_out(updated)
 
 
-@app.delete("/notes/{note_id}", status_code=204)
+@app.delete("/notes/{note_id}", status_code=204, response_model=None)
 def delete_note(note_id: int) -> None:
     if notes_repo.get_note(note_id) is None:
         raise HTTPException(404, "Note not found")

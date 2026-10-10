@@ -26,32 +26,31 @@ struct NowPlayingBar: View {
     }
 
     var body: some View {
-        GlassEffectContainer {
-            VStack(spacing: 6) {
-                HStack(spacing: 14) {
-                    artwork
-                    titleBlock
-                    Spacer(minLength: 12)
-                    transport
-                }
-                SpectrumView(
-                    engine: store.player.spectrum,
-                    accent: accentColor,
-                    isPlaying: status == .playing && active
-                )
-                .frame(height: 30)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    SoundKit.shared.play(.select)
-                    onExpand()
-                }
-                scrubber
+        VStack(spacing: 6) {
+            HStack(spacing: 14) {
+                artwork
+                titleBlock
+                Spacer(minLength: 12)
+                transport
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .glassEffect(.regular, in: ChamferedRect(cut: 12))
+            SpectrumView(
+                engine: store.player.spectrum,
+                accent: accentColor,
+                isPlaying: status == .playing && active
+            )
+            .frame(height: 30)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                SoundKit.shared.play(.select)
+                onExpand()
+            }
+            scrubber
         }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .frame(maxWidth: 640)
+        .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.separator, lineWidth: 1))
     }
 
     private var scrubber: some View {
@@ -97,7 +96,7 @@ struct NowPlayingBar: View {
     /// The playing OST's cover accent drives the spectrum gradient, matching
     /// the accent treatment on its card and detail view.
     private var accentColor: Color {
-        store.nowPlayingEntry?.ost.coverAccentHex.map { Color(hex: $0) } ?? Theme.accent
+        Theme.accent
     }
 
     private var timeReadout: String {
@@ -124,10 +123,10 @@ struct NowPlayingBar: View {
                 Image(systemName: status == .playing ? "pause.fill" : "play.fill")
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(Theme.textPrimary)
-                    .frame(width: 40, height: 30)
+                    .frame(width: 44, height: 44)
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive().tint(Theme.accent.opacity(0.2)), in: .capsule)
+            .buttonStyle(.borderless)
+            .accessibilityLabel(status == .playing ? "Pause" : "Play")
             .disabled(status == .resolving)
 
             Button {
@@ -137,10 +136,10 @@ struct NowPlayingBar: View {
                 Image(systemName: "stop.fill")
                     .font(.system(size: 13))
                     .foregroundStyle(Theme.textPrimary)
-                    .frame(width: 34, height: 30)
+                    .frame(width: 44, height: 44)
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Stop")
 
             Button {
                 SoundKit.shared.play(.select)
@@ -149,10 +148,10 @@ struct NowPlayingBar: View {
                 Image(systemName: "arrow.up.left.and.arrow.down.right")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                    .frame(width: 30, height: 30)
+                    .frame(width: 44, height: 44)
             }
-            .buttonStyle(.plain)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .buttonStyle(.borderless)
+            .accessibilityLabel("Open visualizer")
             .help("Fullscreen visualizer")
         }
     }
@@ -164,41 +163,16 @@ struct NowPlayingBar: View {
     }
 }
 
-/// The bar's cover, pressed as a record: circular with a spindle hole, spinning
-/// at ~12s/rev while playing (continuous loops are the one sanctioned use of
-/// linear motion), frozen in place on pause. Reduce Motion: never spins.
+/// Album artwork in the compact player.
 private struct VinylArtwork: View {
     let path: String?
     let epoch: Int
     let isPlaying: Bool
 
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var spin = SpinTracker()
-
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying || reduceMotion)) { timeline in
-            CoverImage(path: path, epoch: epoch)
-                .aspectRatio(1, contentMode: .fill)
-                .frame(width: 40, height: 40)
-                .clipShape(Circle())
-                .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 1))
-                .overlay(Circle().fill(Color.black.opacity(0.85)).frame(width: 7, height: 7))
-                .rotationEffect(.degrees(spin.angle(at: timeline.date, spinning: isPlaying && !reduceMotion)))
-        }
-    }
-}
-
-/// Accumulates rotation only while playing, so pausing freezes the platter
-/// exactly where it stopped. Plain class — never invalidates the view.
-private final class SpinTracker {
-    private var angleDegrees: Double = 0
-    private var lastDate: Date?
-
-    func angle(at date: Date, spinning: Bool) -> Double {
-        defer { lastDate = date }
-        guard spinning, let last = lastDate else { return angleDegrees }
-        let dt = min(0.5, date.timeIntervalSince(last))   // clamp resume jumps
-        angleDegrees = (angleDegrees + dt * 30).truncatingRemainder(dividingBy: 360)
-        return angleDegrees
+        CoverImage(path: path, epoch: epoch)
+            .aspectRatio(1, contentMode: .fill)
+            .frame(width: 40, height: 40)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 }

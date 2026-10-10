@@ -30,6 +30,40 @@ if [ ! -d "$IOS_RUNTIME/Python.xcframework" ]; then
   rm -f "$HERE/runtime/$BEEWARE_ASSET"
 fi
 
+# The BeeWare xcframework separates the stdlib (xcframework/lib/python3.11/) and
+# arm64 C extensions (ios-arm64/lib-arm64/python3.11/lib-dynload/) from the
+# linkable framework. Xcode only embeds what's INSIDE Python.framework, so we
+# must copy both into the device framework slice before building.
+FRAMEWORK_LIB="$IOS_RUNTIME/Python.xcframework/ios-arm64/Python.framework/lib/python3.11"
+if [ ! -f "$FRAMEWORK_LIB/os.py" ]; then
+  echo "copying Python stdlib into device framework…"
+  mkdir -p "$FRAMEWORK_LIB"
+  # Exclude site-packages so we don't overwrite a previous pip install.
+  rsync -a --exclude=site-packages \
+      "$IOS_RUNTIME/Python.xcframework/lib/python3.11/" \
+      "$FRAMEWORK_LIB/"
+  # C extensions compiled for arm64 device.
+  mkdir -p "$FRAMEWORK_LIB/lib-dynload"
+  cp "$IOS_RUNTIME/Python.xcframework/ios-arm64/lib-arm64/python3.11/lib-dynload/"*.so \
+     "$FRAMEWORK_LIB/lib-dynload/"
+fi
+
+# Install Python packages into the xcframework's arm64 device site-packages.
+# Try a proper iOS cross-install first (pure-Python wheels only); fall back to
+# a host-platform install which works for pure-Python packages like uvicorn/fastapi.
+SITE="$FRAMEWORK_LIB/site-packages"
+mkdir -p "$SITE"
+echo "installing Python packages into xcframework site-packages…"
+pip3 install \
+  uvicorn fastapi sqlalchemy aiofiles \
+  --target "$SITE" \
+  --platform ios_18_0_arm64 \
+  --only-binary=:all: \
+  --python-version 3.11 \
+  --implementation cp \
+  2>/dev/null || \
+pip3 install uvicorn fastapi sqlalchemy aiofiles --target "$SITE"
+
 # --- 2) Generate the Xcode project ---------------------------------------------
 cd "$REPO_ROOT/OSTTracker"
 xcodegen generate

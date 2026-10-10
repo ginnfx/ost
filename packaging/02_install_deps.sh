@@ -10,7 +10,8 @@ source "$(dirname "$0")/config.sh"
 "$RUNTIME_DIR/uv" pip install --python "$PYTHON_BIN" --upgrade "${BUNDLE_DEPS[@]}"
 
 "$PYTHON_BIN" - <<'EOF'
-import fastapi, httpx, PIL, uvicorn, yt_dlp
+import fastapi, httpx, PIL, uvicorn, yt_dlp, python_multipart
 print("bundled deps import OK:",
-      "fastapi", fastapi.__version__, "| yt-dlp", yt_dlp.version.__version__)
+      "fastapi", fastapi.__version__, "| python-multipart", python_multipart.__version__,
+      "| yt-dlp", yt_dlp.version.__version__)
 EOF

@@ -8,6 +8,41 @@ nonisolated enum BackendError: Error {
     case healthTimeout
 }
 
+nonisolated struct RoundArchive: Codable, Sendable, Identifiable {
+    let id: Int
+    let retiredAt: String
+    let ostCount: Int
+    let restoredAt: String?
+    let name: String
+}
+
+nonisolated struct HistoryLabelRename: Encodable, Sendable {
+    let oldLabel: String
+    let newLabel: String
+}
+
+nonisolated struct RoundStatus: Codable, Sendable {
+    let activeOstCount: Int
+    let currentName: String?
+    let needsStart: Bool
+    let archives: [RoundArchive]
+}
+
+nonisolated struct StartRound: Encodable, Sendable {
+    let name: String
+}
+
+nonisolated struct RetireChallenge: Codable, Sendable, Identifiable {
+    let challengeId: String
+    let word: String
+    var id: String { challengeId }
+}
+
+nonisolated struct RetireConfirmation: Encodable, Sendable {
+    let challengeId: String
+    let word: String
+}
+
 actor BackendClient {
     private let baseURL: URL
     private let wsURL: URL
@@ -161,6 +196,14 @@ actor BackendClient {
 
     func notes() async throws -> [Note] { try await get("/notes") }
 
+    func searchCatalog(_ query: String) async throws -> [CatalogTrack] {
+        var components = URLComponents(url: baseURL.appending(path: "/notes/catalog-search"), resolvingAgainstBaseURL: false)!
+        components.queryItems = [URLQueryItem(name: "q", value: query)]
+        var req = URLRequest(url: components.url!)
+        req.setValue(token, forHTTPHeaderField: "X-OST-Token")
+        return try decoder.decode([CatalogTrack].self, from: try await run(req))
+    }
+
     func addNote(_ new: NewNote) async throws -> Note {
         try await send("POST", "/notes", body: new)
     }
@@ -174,6 +217,28 @@ actor BackendClient {
     }
 
     func history() async throws -> [HistoryEntry] { try await get("/history") }
+
+    func renameHistoryLabel(from oldLabel: String, to newLabel: String) async throws {
+        _ = try await run(request("PATCH", "/history/label", body: try encoder.encode(
+            HistoryLabelRename(oldLabel: oldLabel, newLabel: newLabel)
+        )))
+    }
+
+    func roundStatus() async throws -> RoundStatus { try await get("/rounds") }
+
+    func startRound(name: String) async throws -> RoundStatus {
+        try await send("POST", "/rounds/start", body: StartRound(name: name))
+    }
+
+    func retireChallenge() async throws -> RetireChallenge { try await get("/rounds/retire-challenge") }
+
+    func retireRound(challengeId: String, word: String) async throws {
+        let _: RoundArchive = try await send("POST", "/rounds/retire", body: RetireConfirmation(challengeId: challengeId, word: word))
+    }
+
+    func restoreRound(id: Int) async throws {
+        _ = try await run(request("POST", "/rounds/\(id)/restore"))
+    }
 
     // GET /history/matches (?title=&source=) has no Swift caller — the
     // Add-OST pre-submit hint matches locally against store.history (see

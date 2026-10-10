@@ -43,14 +43,9 @@ struct SpectrumView: View {
                         cornerSize: CGSize(width: 1.5, height: 1.5)
                     )
                 }
-                context.addFilter(.shadow(color: accent.opacity(0.55), radius: 5))
                 context.fill(
                     path,
-                    with: .linearGradient(
-                        Gradient(colors: [accent, Theme.pink]),
-                        startPoint: CGPoint(x: 0, y: size.height),
-                        endPoint: CGPoint(x: 0, y: 0)
-                    )
+                    with: .color(accent)
                 )
             }
         }

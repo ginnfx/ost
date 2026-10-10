@@ -4,7 +4,7 @@
 # This is BOTH the installer and the updater. After changing any code, just run
 # ./install.sh again — it rebuilds, re-embeds the Python runtime, ad-hoc signs,
 # and atomically swaps the app in /Applications. Your data lives in
-# ~/Library/Application Support/OSTTracker and is never touched by an update.
+# ~/Library/Application Support/ost-tracker and is never touched by an update.
 #
 # Flags:
 #   --launch   Open the app after installing.
@@ -50,7 +50,7 @@ packaging/01_fetch_runtime.sh
 
 # Only reinstall backend deps when missing (network + slow) unless --deps.
 deps_ok=0
-if [[ $FORCE_DEPS -eq 0 ]] && "$PYTHON_BIN" -c "import fastapi, uvicorn, yt_dlp, httpx, PIL" 2>/dev/null; then
+if [[ $FORCE_DEPS -eq 0 ]] && "$PYTHON_BIN" -c "import fastapi, uvicorn, yt_dlp, httpx, PIL, python_multipart" 2>/dev/null; then
     deps_ok=1
     echo "bundled deps already present; skipping install (use --deps to refresh)"
 fi
@@ -99,7 +99,7 @@ xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
 /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$DEST" 2>/dev/null || true
 
 echo "==> Installed $APP_NAME $VERSION (build $BUILD_NUM) to $DEST"
-echo "    Data: ~/Library/Application Support/$APP_NAME (preserved across updates)"
+echo "    Data: ~/Library/Application Support/ost-tracker (preserved across updates)"
 
 if [[ $LAUNCH -eq 1 ]]; then
     echo "==> Launching…"

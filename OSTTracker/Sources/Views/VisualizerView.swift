@@ -146,32 +146,16 @@ struct VisualizerView: View {
                         .frame(width: 34, height: 34)
                 }
                 .buttonStyle(.plain)
-                .glassEffect(.regular.interactive(), in: .circle)
+                .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 6))
             }
             Spacer()
         }
         .padding(24)
     }
 
-    /// Blurred cover fills the screen behind a heavy dark scrim (static — the
-    /// blur renders once per track, not per frame).
+    /// A quiet backdrop keeps the artwork and playback controls legible.
     private var backdrop: some View {
-        ZStack {
-            Color.black
-            CoverImage(
-                path: entry?.ost.coverImagePath,
-                epoch: store.coverEpoch(for: entry?.ost.id)
-            )
-            .scaledToFill()
-            .blur(radius: 70)
-            .opacity(0.5)
-            Color.black.opacity(0.55)
-            RadialGradient(
-                colors: [accent.opacity(0.18), .clear],
-                center: .center, startRadius: 60, endRadius: 700
-            )
-        }
-        .ignoresSafeArea()
+        Theme.bg.ignoresSafeArea()
     }
 
     private func titleBlock(compact: Bool, scale: CGFloat) -> some View {
@@ -250,11 +234,7 @@ private struct SpectrumRing: View {
                     }
                     context.stroke(
                         path,
-                        with: .linearGradient(
-                            Gradient(colors: [accent, Theme.pink]),
-                            startPoint: CGPoint(x: 0, y: size.height),
-                            endPoint: CGPoint(x: size.width, y: 0)
-                        ),
+                        with: .color(Theme.accent),
                         style: StrokeStyle(lineWidth: 4, lineCap: .round)
                     )
                 }
@@ -269,7 +249,6 @@ private struct SpectrumRing: View {
                 .overlay(Circle().stroke(Color.black.opacity(0.6), lineWidth: 2))
                 .overlay(Circle().fill(Color.black.opacity(0.85)).frame(width: coverSize * 0.07, height: coverSize * 0.07))
                 .rotationEffect(.degrees(spin.angle(at: timeline.date, spinning: isPlaying && !reduceMotion)))
-                .shadow(color: accent.opacity(0.4), radius: 30)
             }
         }
         .frame(width: diameter, height: diameter)

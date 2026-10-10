@@ -16,6 +16,10 @@ struct SettingsView: View {
 
     // Working color for the custom picker; seeded from whatever accent is live.
     @State private var customColor = Theme.accent
+    @State private var roundStatus: RoundStatus?
+    @State private var retireChallenge: RetireChallenge?
+    @State private var typedWord = ""
+    @State private var roundActionInFlight = false
 
     private var usingCustom: Bool { !customAccentHex.isEmpty }
 
@@ -23,13 +27,48 @@ struct SettingsView: View {
         Form {
             appearance
             competition
+            roundManagement
             effects
             screensaver
             sound
         }
         .formStyle(.grouped)
         .tint(Theme.accent)
+        .task { roundStatus = await AppStore.shared.roundStatus() }
+        .sheet(item: $retireChallenge) { challenge in
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Retire this rating?").font(.title2.bold())
+                Text("All current OSTs will move to History. Ratings and the batch arrangement are saved so this round can be restored while the next one is empty. People and notes stay in place.")
+                    .font(.callout)
+                Text("Type \(challenge.word) to confirm")
+                    .font(.headline.monospaced())
+                TextField("Confirmation word", text: $typedWord)
+                    .textFieldStyle(.roundedBorder)
+                    .autocorrectionDisabled()
+                HStack {
+                    Button("Cancel") { retireChallenge = nil; typedWord = "" }
+                    Spacer()
+                    Button("Retire & begin new rating", role: .destructive) {
+                        roundActionInFlight = true
+                        Task {
+                            let succeeded = await AppStore.shared.retireRound(challengeId: challenge.challengeId, word: typedWord)
+                            roundActionInFlight = false
+                            if succeeded {
+                                retireChallenge = nil
+                                typedWord = ""
+                                roundStatus = await AppStore.shared.roundStatus()
+                            }
+                        }
+                    }
+                    .disabled(typedWord != challenge.word || roundActionInFlight)
+                }
+            }
+            .padding(24)
+            .frame(maxWidth: 410)
+        }
+        #if os(macOS)
         .frame(width: 460, height: 560)
+        #endif
     }
 
     // MARK: Competition
@@ -55,6 +94,40 @@ struct SettingsView: View {
             get: { threshold },
             set: { new in Task { await AppStore.shared.setEliminationThreshold(new) } }
         )
+    }
+
+    private var roundManagement: some View {
+        Section("Rating rounds") {
+            LabeledContent("Current rating", value: "\(roundStatus?.currentName ?? "None") · \(roundStatus?.activeOstCount ?? 0) OSTs")
+            Button("Retire current rating…") {
+                Task {
+                    typedWord = ""
+                    retireChallenge = await AppStore.shared.retireChallenge()
+                }
+            }
+            .disabled((roundStatus?.activeOstCount ?? 0) == 0 || roundActionInFlight)
+            if let roundStatus {
+                ForEach(roundStatus.archives.filter { $0.restoredAt == nil }) { archive in
+                    HStack {
+                        Text("\(archive.name) · \(archive.ostCount) OSTs")
+                            .font(.caption)
+                        Spacer()
+                        Button("Restore") {
+                            roundActionInFlight = true
+                            Task {
+                                let succeeded = await AppStore.shared.restoreRound(id: archive.id)
+                                roundActionInFlight = false
+                                if succeeded { self.roundStatus = await AppStore.shared.roundStatus() }
+                            }
+                        }
+                        .disabled(roundStatus.activeOstCount != 0 || roundActionInFlight)
+                    }
+                }
+            }
+            Text("Restore is available while the current rating is empty. Retire a new rating first to switch back to an older one.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
     }
 
     // MARK: Appearance

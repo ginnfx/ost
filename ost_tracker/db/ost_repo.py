@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from typing import Optional
 
-from ost_tracker.db import history_repo, people_repo, rating_repo
+from ost_tracker.db import history_repo, people_repo, rating_repo, settings_repo
 from ost_tracker.db.connection import get_db
 from ost_tracker.db.models import Ost, OstStats
 from ost_tracker.services import accent, statistics
@@ -13,6 +13,10 @@ from ost_tracker.services import accent, statistics
 # batch_label used for every OST recorded into history via the live app,
 # whether backfilled from an existing roster or auto-added on creation.
 CURRENT_RANKING_LABEL = "Current Ranking"
+
+
+def current_ranking_label() -> str:
+    return settings_repo.get_setting(settings_repo.ACTIVE_ROUND_NAME) or CURRENT_RANKING_LABEL
 
 _SELECT_OST = """
     SELECT o.id, o.title, o.source, o.submitter_id, p.name AS submitter_name,
@@ -55,6 +59,12 @@ def add_ost(
     title = (title or "").strip()
     if not title:
         raise ValueError("OST title cannot be empty")
+    if settings_repo.get_setting(settings_repo.ROUND_STATE) == "retired" or (
+        settings_repo.get_setting(settings_repo.ROUND_STATE) is None
+        and not get_db().scalar("SELECT 1 FROM osts LIMIT 1")
+        and get_db().scalar("SELECT 1 FROM retired_rounds LIMIT 1")
+    ):
+        raise ValueError("Start a new ranking before adding OSTs.")
     source_norm = (source or "").strip() or None
     matches = history_repo.find_matches(title, source_norm)
     if matches:
@@ -65,20 +75,24 @@ def add_ost(
         if not source_norm and match.source:
             detail += " — set the Source field if this is a different track"
         raise ValueError(f'"{title}" was already used before, in {detail}.')
-    ost_id = get_db().execute(
-        """
-        INSERT INTO osts (title, source, submitter_id, external_link)
-        VALUES (?, ?, ?, ?)
-        """,
-        (title, source_norm, submitter_id, (external_link or "").strip() or None),
-    )
-    # A submitter automatically rates their own pick (see ensure_self_rating).
-    rating_repo.ensure_self_rating(ost_id, submitter_id)
-    # Every unique OST self-records into history so it's never re-submittable.
-    person = people_repo.get_person(submitter_id) if submitter_id is not None else None
-    history_repo.add_entry(
-        title, source_norm, batch_label=CURRENT_RANKING_LABEL, sender=person.name if person else None
-    )
+    # Commit the OST, its seeded self-rating, and its history exclusion row
+    # together. An incomplete write must never leave an OST out of History.
+    with get_db().transaction() as conn:
+        cur = conn.execute(
+            "INSERT INTO osts (title, source, submitter_id, external_link) VALUES (?,?,?,?)",
+            (title, source_norm, submitter_id, (external_link or "").strip() or None),
+        )
+        ost_id = cur.lastrowid
+        person = conn.execute("SELECT name FROM people WHERE id = ?", (submitter_id,)).fetchone() if submitter_id is not None else None
+        if submitter_id is not None:
+            conn.execute(
+                "INSERT INTO ratings (ost_id, rater_id, score) VALUES (?,?,?)",
+                (ost_id, submitter_id, rating_repo.SELF_RATING_SCORE),
+            )
+        conn.execute(
+            "INSERT INTO ost_history (title, source, batch_label, sender) VALUES (?,?,?,?)",
+            (title, source_norm, current_ranking_label(), person[0] if person else None),
+        )
     return ost_id
 
 
@@ -124,7 +138,7 @@ def _sync_history_entry(
     candidates = [
         e
         for e in history_repo.find_matches(previous.title, previous.source)
-        if e.batch_label == CURRENT_RANKING_LABEL
+        if e.batch_label == current_ranking_label()
     ]
     if not candidates:
         return
@@ -137,7 +151,7 @@ def _sync_history_entry(
     entry = exact[0] if exact else candidates[0]
     person = people_repo.get_person(submitter_id) if submitter_id is not None else None
     history_repo.update_entry(
-        entry.id, title, source, batch_label=CURRENT_RANKING_LABEL, sender=person.name if person else None
+        entry.id, title, source, batch_label=current_ranking_label(), sender=person.name if person else None
     )
 
 

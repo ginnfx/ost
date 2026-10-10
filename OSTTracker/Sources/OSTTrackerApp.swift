@@ -28,12 +28,17 @@ struct OSTTrackerApp: App {
 
     var body: some Scene {
         WindowGroup {
+            #if os(iOS)
+            IOSRootView(store: AppStore.shared)
+                .task { await AppStore.shared.start() }
+            #else
             RootView(store: AppStore.shared)
                 .task { await AppStore.shared.start() }
                 .frame(minWidth: 980, minHeight: 640)
+            #endif
         }
         #if os(macOS)
-        .windowStyle(.hiddenTitleBar)  // TODO(iOS): no window chrome to hide
+        .windowStyle(.hiddenTitleBar)
         #endif
 
         #if os(macOS)
