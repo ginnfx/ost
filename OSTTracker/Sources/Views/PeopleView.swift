@@ -67,8 +67,7 @@ struct PeopleView: View {
             }
             Button("Cancel", role: .cancel) {}
         } message: { person in
-            let subs = store.leaderboard.filter { $0.ost.submitterId == person.id }.count
-            Text("Their \(subs) submitted OST(s) stay but become unsubmitted, and every rating they gave is removed. This can't be undone.")
+            Text("Submitted OSTs stay but become unassigned. This person's ratings are deleted. This can't be undone.")
         }
     }
 
@@ -141,7 +140,7 @@ struct NotesView: View {
             Text("Notes")
                 .font(.ostDisplay(22, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
-            Text("Track ideas and listening notes for a future ranking.")
+            Text("Track ideas for a future ranking.")
                 .font(.ostBody(13))
                 .foregroundStyle(Theme.textDim)
         }
@@ -204,7 +203,7 @@ struct NotesView: View {
                 }
                 .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
             }
-            Text("Catalog results come from Apple Music. You can also write an idea manually below.")
+            Text("Results from Apple Music.")
                 .font(.ostMono(10))
                 .foregroundStyle(Theme.textDim)
         }
@@ -220,7 +219,7 @@ struct NotesView: View {
                     .foregroundStyle(Theme.textPrimary)
                 Spacer()
                 if !artist.isEmpty {
-                    Text("Found: \(artist)")
+                    Text("Artist: \(artist)")
                         .font(.ostBody(12))
                         .foregroundStyle(Theme.textDim)
                         .lineLimit(1)
@@ -232,12 +231,12 @@ struct NotesView: View {
             TextField("Game, anime, or soundtrack source (optional)", text: $source)
                 .textFieldStyle(.plain).font(.ostBody(13))
                 .padding(10).background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
-            TextField("Why this track? Any details to remember…", text: $body_, axis: .vertical)
+            TextField("Notes about this track", text: $body_, axis: .vertical)
                 .lineLimit(2...4)
                 .textFieldStyle(.plain).font(.ostBody(13))
                 .padding(10).background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
             HStack {
-                Text("Saved ideas stay across rankings and never affect scores.")
+                Text("Ideas carry over to new rankings.")
                     .font(.ostMono(10))
                     .foregroundStyle(Theme.textDim)
                 Spacer()
@@ -251,8 +250,8 @@ struct NotesView: View {
 
     private var emptyState: some View {
         ContentUnavailableView(
-            "Your shortlist starts here", systemImage: "music.note.list",
-            description: Text("Search the catalog above or save a track idea manually.")
+            "No saved notes", systemImage: "music.note.list",
+            description: Text("Save a track idea to see it here.")
         )
         .frame(maxWidth: .infinity, minHeight: 220)
     }
@@ -298,9 +297,9 @@ struct NotesView: View {
                     isSearching = false; return
                 }
                 catalogResults = found
-                searchMessage = found.isEmpty ? "No catalog match. Try another title or add it manually." : "Choose a result to fill your idea."
+                searchMessage = found.isEmpty ? "No matches. Try another search or add the track manually." : ""
             } catch {
-                searchMessage = "Catalog search is unavailable right now. You can still save an idea manually."
+                searchMessage = "Catalog search failed. Try again or add the track manually."
             }
             isSearching = false
         }
@@ -312,7 +311,7 @@ struct NotesView: View {
         artist = track.artist
         externalLink = track.storeUrl ?? ""
         catalogResults = []
-        searchMessage = "Filled from catalog. Edit the source if the soundtrack album name needs changing."
+        searchMessage = ""
     }
 
     private func saveNote() {

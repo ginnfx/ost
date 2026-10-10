@@ -68,7 +68,7 @@ struct BatchesView: View {
                 Text("Batches")
                     .font(.ostDisplay(22, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                Text("Private order for listening sessions. Drag to arrange; right-click to pin.")
+                Text("Drag to reorder. Right-click to pin a slot.")
                     .font(.ostBody(12))
                     .foregroundStyle(Theme.textDim)
                     .kerning(0.6)
@@ -137,7 +137,7 @@ struct BatchesView: View {
             Text("No batches yet")
                 .font(.ostDisplay(16, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
-            Text("Hit Randomize to split every OST into batches. At the Limit and Shining Star are pinned to Batch 1 by default — pin any other OST to lock its slot too.")
+            Text("Randomize to create listening batches. At the Limit and Shining Star start pinned in Batch 1.")
                 .font(.ostBody(12))
                 .foregroundStyle(Theme.textDim)
                 .lineLimit(4)
@@ -280,7 +280,7 @@ private struct BatchRow: View {
 
             Spacer()
 
-            Text((slot.ost.submitterName ?? "—").uppercased())
+            Text((slot.ost.submitterName ?? "Unassigned").uppercased())
                 .font(.ostMono(12, weight: .bold))
                 .foregroundStyle(Theme.textDim)
                 .kerning(0.8)

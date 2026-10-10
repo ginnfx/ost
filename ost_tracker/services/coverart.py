@@ -397,7 +397,7 @@ def _itunes_candidates(
             continue
         name = item.get("trackName") or item.get("collectionName") or "Unknown"
         artist = item.get("artistName") or ""
-        label = f"{name} — {artist}".strip(" —")
+        label = f"{name} · {artist}" if artist else name
         out.append(
             CoverCandidate(
                 image_url=upsize_itunes_url(art),

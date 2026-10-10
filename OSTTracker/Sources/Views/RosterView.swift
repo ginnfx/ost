@@ -223,7 +223,7 @@ struct RosterView: View {
         .sheet(isPresented: $showStartRanking) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Start a new ranking").font(.title2.bold())
-                Text("Name this ranking. People and notes carry over; scores start fresh. New tracks appear in History as you add them.")
+                Text("People and notes carry over. Scores start fresh. New OSTs appear in History as you add them.")
                     .font(.callout).foregroundStyle(.secondary)
                 TextField("e.g. Autumn 2026", text: $newRankingName)
                     .textFieldStyle(.roundedBorder)
@@ -253,7 +253,7 @@ struct RosterView: View {
                 Text("Ranking retired")
                     .font(.ostDisplay(20, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                Text("The previous roster is in History. Start a new ranking when you are ready to add tracks.")
+                Text("The previous ranking is in History.")
                     .font(.ostBody(13))
                     .foregroundStyle(Theme.textDim)
                 Button("Start new ranking") {
@@ -265,7 +265,7 @@ struct RosterView: View {
                 Text(name)
                     .font(.ostDisplay(20, weight: .semibold))
                     .foregroundStyle(Theme.textPrimary)
-                Text("This ranking is ready. Use Add OST to add the first track; it will appear in History right away.")
+                Text("Add an OST to begin. It will also appear in History.")
                     .font(.ostBody(13))
                     .foregroundStyle(Theme.textDim)
             } else {
@@ -676,7 +676,7 @@ struct RosterCard: View {
                     .lineLimit(1)
             }
             Spacer()
-            Text(entry.average.map { String(format: "%.2f", $0) } ?? "—")
+            Text(entry.average.map { String(format: "%.2f", $0) } ?? "n/a")
                 .font(.ostMono(17, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
                 .contentTransition(.numericText(value: entry.average ?? 0))

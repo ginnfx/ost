@@ -37,5 +37,5 @@ def format_score(value: float) -> str:
 def spread_label(minimum: Optional[float], maximum: Optional[float]) -> str:
     """Human-friendly min–max spread, e.g. ``3–10`` or ``3.5–9.5``."""
     if minimum is None or maximum is None:
-        return "—"
+        return ""
     return f"{format_score(minimum)}–{format_score(maximum)}"

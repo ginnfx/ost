@@ -172,7 +172,7 @@ struct NowPlayingBar: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(store.nowPlayingEntry?.ost.title ?? "—")
+            Text(store.nowPlayingEntry?.ost.title ?? "Loading track")
                 .font(.ostDisplay(13, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
                 .lineLimit(1)

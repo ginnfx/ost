@@ -32,12 +32,12 @@ class Standing:
 
     def as_row(self) -> list[str]:
         return [
-            str(self.rank) if self.rank is not None else "—",
+            str(self.rank) if self.rank is not None else "",
             self.title,
             self.submitter,
-            f"{self.average:.2f}" if self.average is not None else "—",
+            f"{self.average:.2f}" if self.average is not None else "",
             self.spread,
-            f"{self.stddev:.2f}" if self.stddev is not None else "—",
+            f"{self.stddev:.2f}" if self.stddev is not None else "",
             str(self.rating_count),
         ]
 
@@ -49,7 +49,7 @@ def build_standings() -> list[Standing]:
         Standing(
             rank=s.rank,
             title=s.ost.title,
-            submitter=s.ost.submitter_name or "—",
+            submitter=s.ost.submitter_name or "",
             average=s.average,
             spread=statistics.spread_label(s.minimum, s.maximum),
             stddev=s.stddev,

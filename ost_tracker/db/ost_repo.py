@@ -73,8 +73,8 @@ def add_ost(
         if match.sender:
             detail += f" (submitted by {match.sender})"
         if not source_norm and match.source:
-            detail += " — set the Source field if this is a different track"
-        raise ValueError(f'"{title}" was already used before, in {detail}.')
+            detail += ". Add a source if this is a different track"
+        raise ValueError(f'"{title}" is already in {detail}.')
     # Commit the OST, its seeded self-rating, and its history exclusion row
     # together. An incomplete write must never leave an OST out of History.
     with get_db().transaction() as conn:
