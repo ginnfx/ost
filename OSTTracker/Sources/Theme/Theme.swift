@@ -140,6 +140,7 @@ nonisolated enum Theme {
     /// Controls audio-reactive movement in the player and visualizer.
     static let fxDefaultsKey = "reactiveFXEnabled"
     static let fxIntensityKey = "fxIntensity"
+    static let visualizerKey = "playerVisualizerEnabled"
 
     /// Deterministic per-person accent (golden-ratio hue spacing) for the
     /// discreet rater-identity dots. Same person, same color, every screen.

@@ -7,6 +7,7 @@ enum AppTab: String, CaseIterable, Identifiable {
     case stats = "Stats"
     case batches = "Batches"
     case history = "History"
+    case settings = "Settings"
 
     var id: String { rawValue }
 
@@ -18,6 +19,7 @@ enum AppTab: String, CaseIterable, Identifiable {
         case .stats: "chart.bar"
         case .batches: "square.stack"
         case .history: "clock.arrow.circlepath"
+        case .settings: "gearshape"
         }
     }
 }
@@ -34,7 +36,6 @@ struct RootView: View {
     @State private var tab: AppTab = .roster
     @State private var addOstRequest: AddOstRequest?
     @State private var submitterFilter: Int?
-    @State private var showVisualizer = false
     @State private var attract = AttractModeController()
     @State private var hoveredTab: AppTab?
     @State private var sidebarWidth: CGFloat = 200
@@ -42,7 +43,6 @@ struct RootView: View {
     @Namespace private var navigationSelection
 
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.openSettings) private var openSettings
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Theme.presetKey) private var themePreset = "emerald"
     @AppStorage(Theme.customAccentKey) private var customAccent = ""
@@ -77,21 +77,9 @@ struct RootView: View {
                 }
                 NowPlayingBar(
                     store: store,
-                    onExpand: { openVisualizer() },
-                    active: !showVisualizer && !attract.isActive,
+                    active: !attract.isActive,
                     desktop: true
                 )
-            }
-
-            if showVisualizer {
-                VisualizerView(store: store) {
-                    SoundKit.shared.play(.dismiss)
-                    withAnimation(Theme.motion(.overlay, reduceMotion: reduceMotion)) {
-                        showVisualizer = false
-                    }
-                }
-                .zIndex(2)
-                .transition(.opacity)
             }
 
             if attract.isActive {
@@ -140,7 +128,7 @@ struct RootView: View {
                 .padding(.horizontal, 12)
                 .padding(.bottom, 8)
 
-            ForEach(Array(AppTab.allCases.enumerated()), id: \.element.id) { index, section in
+            ForEach(Array(AppTab.allCases.filter { $0 != .settings }.enumerated()), id: \.element.id) { index, section in
                 Button { select(section) } label: {
                     HStack(spacing: 12) {
                         Image(systemName: section.systemImage)
@@ -181,16 +169,27 @@ struct RootView: View {
 
             Spacer(minLength: 24)
 
-            Button { openSettings() } label: {
+            Button { select(.settings) } label: {
                 Label("Settings", systemImage: "gearshape")
                     .font(.ostBody(14))
-                    .foregroundStyle(Theme.textDim)
+                    .foregroundStyle(tab == .settings ? Theme.textPrimary : Theme.textDim)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
                     .frame(height: 38)
                     .contentShape(Rectangle())
+                    .background {
+                        if tab == .settings {
+                            RoundedRectangle(cornerRadius: 6).fill(Theme.cardSurface)
+                        }
+                    }
+                    .overlay(alignment: .leading) {
+                        if tab == .settings {
+                            RoundedRectangle(cornerRadius: 2).fill(Theme.accent).frame(width: 3, height: 22)
+                        }
+                    }
             }
             .buttonStyle(.plain)
+            .keyboardShortcut(",", modifiers: .command)
             .help("Settings (⌘,)")
             .padding(.bottom, 18)
         }
@@ -263,14 +262,6 @@ struct RootView: View {
         }
     }
 
-    private func openVisualizer() {
-        guard store.playback?.status != nil, store.playback?.status != .idle else { return }
-        SoundKit.shared.play(.select)
-        withAnimation(Theme.motion(.overlay, reduceMotion: reduceMotion)) {
-            showVisualizer = true
-        }
-    }
-
     @ViewBuilder
     private var content: some View {
         switch tab {
@@ -280,6 +271,7 @@ struct RootView: View {
         case .stats: StatsView(store: store)
         case .batches: BatchesView(store: store)
         case .history: HistoryView(store: store)
+        case .settings: SettingsView()
         }
     }
 }

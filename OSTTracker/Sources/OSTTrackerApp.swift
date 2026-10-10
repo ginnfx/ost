@@ -41,10 +41,5 @@ struct OSTTrackerApp: App {
         .windowStyle(.hiddenTitleBar)
         #endif
 
-        #if os(macOS)
-        Settings {
-            SettingsView()
-        }
-        #endif
     }
 }

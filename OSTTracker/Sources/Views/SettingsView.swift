@@ -1,7 +1,4 @@
-// The ⌘, Settings window. Native Form chrome (this is app chrome, not the
-// themed content surface). Writes preferences straight to UserDefaults via
-// @AppStorage; RootView mirrors the theme keys and re-keys its content so accent
-// changes render live. FX intensity and the screensaver read their keys live.
+// Settings embedded in the main app navigation.
 
 import SwiftUI
 
@@ -10,6 +7,7 @@ struct SettingsView: View {
     @AppStorage(Theme.customAccentKey) private var customAccentHex = ""
     @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
     @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
+    @AppStorage(Theme.visualizerKey) private var visualizerEnabled = true
     @AppStorage(Theme.motionKey) private var motionMode = MotionMode.subtle.rawValue
     @AppStorage(SoundKit.mutedDefaultsKey) private var uiSoundsMuted = false
     @AppStorage(AttractModeController.enabledKey) private var attractEnabled = true
@@ -35,6 +33,9 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .tint(Theme.accent)
+        .frame(maxWidth: 760, maxHeight: .infinity)
+        .padding(24)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task { roundStatus = await AppStore.shared.roundStatus() }
         .sheet(item: $retireChallenge) { challenge in
             VStack(alignment: .leading, spacing: 16) {
@@ -67,9 +68,6 @@ struct SettingsView: View {
             .padding(24)
             .frame(maxWidth: 410)
         }
-        #if os(macOS)
-        .frame(width: 480, height: 600)
-        #endif
     }
 
     // MARK: Competition
@@ -192,6 +190,7 @@ struct SettingsView: View {
 
     private var effects: some View {
         Section("Effects") {
+            Toggle("Show player visualizer", isOn: $visualizerEnabled)
             Toggle("Music-reactive effects", isOn: $fxEnabled)
             Picker("Spectrum intensity", selection: $fxIntensity) {
                 Text("Subtle").tag(0.5)
@@ -199,7 +198,7 @@ struct SettingsView: View {
                 Text("Vivid").tag(1.5)
             }
             .pickerStyle(.segmented)
-            .disabled(!fxEnabled)
+            .disabled(!visualizerEnabled)
         }
     }
 

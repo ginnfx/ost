@@ -1,6 +1,5 @@
-// iOS root shell: bottom TabView, glass backdrop, floating NowPlayingBar via
-// safeAreaInset, VisualizerView as fullScreenCover, error banner, and attract
-// overlay. The macOS RootView is used on macOS; this view is the iOS entry point
+// iOS root shell: bottom TabView, floating NowPlayingBar via safeAreaInset,
+// error banner, and attract overlay. This is the iOS entry point
 // (OSTTrackerApp switches between them via #if os(iOS)).
 
 #if os(iOS)
@@ -11,8 +10,6 @@ struct IOSRootView: View {
     @State private var tab: AppTab = .roster
     @State private var addOstRequest: AddOstRequest?
     @State private var submitterFilter: Int?
-    @State private var showSettings = false
-    @State private var showVisualizer = false
     @State private var attract = AttractModeController()
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -43,14 +40,16 @@ struct IOSRootView: View {
                 Tab("History", systemImage: AppTab.history.systemImage, value: AppTab.history) {
                     HistoryView(store: store)
                 }
+                Tab("Settings", systemImage: AppTab.settings.systemImage, value: AppTab.settings) {
+                    SettingsView()
+                }
             }
             // Float the NowPlayingBar above the tab bar, inside the safe area.
             .safeAreaInset(edge: .bottom) {
                 if store.playback?.status != nil, store.playback?.status != .idle {
                     NowPlayingBar(
                         store: store,
-                        onExpand: { showVisualizer = true },
-                        active: !showVisualizer && !attract.isActive
+                        active: !attract.isActive
                     )
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
@@ -88,15 +87,6 @@ struct IOSRootView: View {
         .sheet(item: $addOstRequest) { request in
             AddOstView(store: store, defaultSubmitterID: request.submitterID)
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsView()
-        }
-        .fullScreenCover(isPresented: $showVisualizer) {
-            VisualizerView(store: store) {
-                SoundKit.shared.play(.dismiss)
-                showVisualizer = false
-            }
-        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.onBecameActive() }
         }
@@ -129,7 +119,7 @@ struct IOSRootView: View {
                     .foregroundStyle(Theme.rust)
                     .accessibilityLabel("Backend unavailable")
             }
-            Button { showSettings = true } label: {
+            Button { tab = .settings } label: {
                 Image(systemName: "gearshape")
                     .frame(width: 44, height: 44)
             }

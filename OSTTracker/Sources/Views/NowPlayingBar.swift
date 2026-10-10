@@ -4,25 +4,23 @@ import SwiftUI
 
 struct NowPlayingBar: View {
     let store: AppStore
-    /// Opens the fullscreen visualizer from the expand button or cassette.
-    var onExpand: () -> Void = {}
-    /// False when the bar is fully covered (visualizer/attract overlay up); its
-    /// spectrum + cassette stop animating so they don't burn frames off-screen.
+    /// False when the bar is covered by the attract overlay.
     var active: Bool = true
     /// macOS keeps the transport in the window even before a track is selected.
     var desktop: Bool = false
 
     @State private var scrubbing = false
     @State private var scrubValue = 0.0
-    @State private var miniDeckSpin = ReelSpin()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
-    @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
+    @AppStorage(Theme.visualizerKey) private var visualizerEnabled = true
     @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     private var status: PlaybackStatus { store.playback?.status ?? .idle }
     private var hasTrack: Bool { store.playback?.ostId != nil && status != .idle }
     private var transportHitSize: CGFloat { desktop ? 36 : 44 }
+    private var showVisualizer: Bool {
+        visualizerEnabled && hasTrack && !reduceMotion && motionSelection != MotionMode.minimal.rawValue
+    }
 
     /// Reads live playback position unless the user is actively dragging.
     private var progress: Binding<Double> {
@@ -50,18 +48,13 @@ struct NowPlayingBar: View {
                 Spacer(minLength: 12)
                 transport
             }
-            if fxEnabled && !reduceMotion && motionSelection != MotionMode.minimal.rawValue {
+            if showVisualizer {
                 SpectrumView(
                     engine: store.player.spectrum,
                     accent: accentColor,
                     isPlaying: status == .playing && active
                 )
                 .frame(height: 30)
-                .contentShape(Rectangle())
-                .onTapGesture {
-                    SoundKit.shared.play(.select)
-                    onExpand()
-                }
             }
             scrubber
         }
@@ -85,25 +78,6 @@ struct NowPlayingBar: View {
                 .background(Theme.bg)
                 .clipShape(RoundedRectangle(cornerRadius: 5))
 
-                if hasTrack {
-                    Button {
-                        SoundKit.shared.play(.select)
-                        onExpand()
-                    } label: {
-                        PocketDeck(
-                            store: store, accent: accentColor, spin: miniDeckSpin,
-                            isPlaying: status == .playing && active,
-                            still: reduceMotion || !fxEnabled || motionSelection == MotionMode.minimal.rawValue,
-                            intensity: fxIntensity,
-                            compact: true
-                        )
-                        .frame(width: 58, height: 40)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("Open cassette visualizer")
-                    .help("Open visualizer")
-                }
-
                 VStack(alignment: .leading, spacing: 3) {
                     Text(store.nowPlayingEntry?.ost.title ?? "Nothing playing")
                         .font(.ostBody(13, weight: .semibold))
@@ -122,6 +96,14 @@ struct NowPlayingBar: View {
                 HStack(spacing: 8) {
                     playPauseButton
                     stopButton
+                }
+                if showVisualizer {
+                    SpectrumView(
+                        engine: store.player.spectrum,
+                        accent: accentColor,
+                        isPlaying: status == .playing && active
+                    )
+                    .frame(height: 14)
                 }
                 HStack(spacing: 8) {
                     Text(format(store.player.position))
@@ -148,7 +130,6 @@ struct NowPlayingBar: View {
                 )
                 .controlSize(.small)
                 .accessibilityLabel("Volume")
-                expandButton
             }
             .frame(minWidth: 150, maxWidth: .infinity, alignment: .trailing)
         }
@@ -224,7 +205,6 @@ struct NowPlayingBar: View {
         HStack(spacing: 10) {
             playPauseButton
             stopButton
-            expandButton
         }
     }
 
@@ -258,22 +238,6 @@ struct NowPlayingBar: View {
         }
         .buttonStyle(.borderless)
         .accessibilityLabel("Stop")
-        .disabled(!hasTrack)
-    }
-
-    private var expandButton: some View {
-        Button {
-            SoundKit.shared.play(.select)
-            onExpand()
-        } label: {
-            Image(systemName: "arrow.up.left.and.arrow.down.right")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
-                .frame(width: transportHitSize, height: transportHitSize)
-        }
-        .buttonStyle(.borderless)
-        .accessibilityLabel("Open visualizer")
-        .help("Open visualizer")
         .disabled(!hasTrack)
     }
 
