@@ -6,19 +6,6 @@
 #if os(iOS)
 import SwiftUI
 
-extension AppTab {
-    var systemImage: String {
-        switch self {
-        case .roster:  return "list.star"
-        case .people:  return "person.2"
-        case .notes:   return "note.text"
-        case .stats:   return "chart.bar"
-        case .batches: return "square.grid.2x2"
-        case .history: return "clock"
-        }
-    }
-}
-
 struct IOSRootView: View {
     let store: AppStore
     @State private var tab: AppTab = .roster
@@ -28,8 +15,10 @@ struct IOSRootView: View {
     @State private var showVisualizer = false
     @State private var attract = AttractModeController()
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Theme.presetKey) private var themePreset = "emerald"
     @AppStorage(Theme.customAccentKey) private var customAccent = ""
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     var body: some View {
         ZStack {
@@ -93,9 +82,9 @@ struct IOSRootView: View {
         .background(Theme.bg)
         .tint(Theme.accent)
         .preferredColorScheme(.dark)
-        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: store.playback?.status)
-        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: store.lastError)
-        .animation(.easeInOut(duration: 1.5), value: attract.isActive)
+        .animation(Theme.motion(.feedback, reduceMotion: reduceMotion), value: store.playback?.status)
+        .animation(Theme.motion(.feedback, reduceMotion: reduceMotion), value: store.lastError)
+        .animation(Theme.motion(.overlay, reduceMotion: reduceMotion), value: attract.isActive)
         .sheet(item: $addOstRequest) { request in
             AddOstView(store: store, defaultSubmitterID: request.submitterID)
         }

@@ -1,7 +1,4 @@
-// Perfect-10 celebration. Research-backed restraint: a single ~1.8s decaying
-// burst fired only at the moment a 10 is set, drawn over an interactive UI
-// (never blocks input), and Reduce Motion swaps particles for a soft fading
-// glow. Canvas + TimelineView leaf, same pattern as the visualizer.
+// A brief, single-accent celebration for a perfect score in Cinematic mode.
 
 import SwiftUI
 
@@ -11,6 +8,7 @@ struct ParticleBurst: View {
     let accent: Color
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
     @State private var firedAt: Date?
     @State private var particles: [Particle] = []
 
@@ -21,21 +19,13 @@ struct ParticleBurst: View {
         let angle: Double      // launch direction, radians
         let speed: Double      // points/second
         let size: Double
-        let paletteIndex: Int  // accent / gold / pink
     }
 
     var body: some View {
         Group {
-            if firedAt != nil {
-                if reduceMotion {
-                    Circle()
-                        .fill(accent.opacity(0.35))
-                        .blur(radius: 18)
-                        .task { await expire(after: 0.8) }
-                } else {
-                    burstCanvas
-                        .task(id: firedAt) { await expire(after: Self.life) }
-                }
+            if firedAt != nil && !reduceMotion && motionSelection == MotionMode.cinematic.rawValue {
+                burstCanvas
+                    .task(id: firedAt) { await expire(after: Self.life) }
             }
         }
         .allowsHitTesting(false)
@@ -53,7 +43,6 @@ struct ParticleBurst: View {
                 let t = timeline.date.timeIntervalSince(firedAt)
                 guard t >= 0, t < Self.life else { return }
                 let origin = CGPoint(x: size.width / 2, y: size.height / 2)
-                let palette = [accent, Theme.gold, Theme.pink]
                 let progress = t / Self.life
                 for particle in particles {
                     // Fast launch that decelerates, plus gravity pulling down.
@@ -67,7 +56,7 @@ struct ParticleBurst: View {
                     context.opacity = 1 - progress
                     context.fill(
                         Path(ellipseIn: rect),
-                        with: .color(palette[particle.paletteIndex % palette.count])
+                        with: .color(accent)
                     )
                 }
             }
@@ -75,12 +64,12 @@ struct ParticleBurst: View {
     }
 
     private func fire() {
-        particles = (0..<Self.count).map { i in
+        guard !reduceMotion, motionSelection == MotionMode.cinematic.rawValue else { return }
+        particles = (0..<Self.count).map { _ in
             Particle(
                 angle: Double.random(in: 0..<(2 * .pi)),
                 speed: Double.random(in: 70...240),
-                size: Double.random(in: 3...7),
-                paletteIndex: i
+                size: Double.random(in: 3...7)
             )
         }
         firedAt = Date()

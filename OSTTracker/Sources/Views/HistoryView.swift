@@ -14,20 +14,36 @@ struct HistoryView: View {
 
     var body: some View {
         if store.history.isEmpty {
-            ContentUnavailableView(
-                "No history yet", systemImage: "clock.arrow.circlepath",
-                description: Text("Every OST ever ranked will be tracked here so it's never repeated.")
-            )
+            VStack(alignment: .leading, spacing: 8) {
+                Text("History")
+                    .font(.ostDisplay(22, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                Text("OSTs appear here as you add them to a ranking.")
+                    .font(.ostBody(13))
+                    .foregroundStyle(Theme.textDim)
+                Spacer()
+            }
+            .padding(24)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
+                    HStack {
+                        Text("History")
+                            .font(.ostDisplay(22, weight: .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Spacer()
+                        Text("\(store.history.count) OSTs")
+                            .font(.ostBody(12))
+                            .foregroundStyle(Theme.textDim)
+                    }
                     searchField
 
                     if groupedHistory.isEmpty {
                         Text("No matches for \"\(debouncedSearch)\".")
                             .font(.ostBody(13)).foregroundStyle(Theme.textDim)
-                            .padding(.top, 40)
-                            .frame(maxWidth: .infinity)
+                            .padding(.top, 12)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     } else {
                         ForEach(groupedHistory, id: \.label) { group in
                             VStack(alignment: .leading, spacing: 10) {
@@ -51,6 +67,7 @@ struct HistoryView: View {
                                         .buttonStyle(.plain)
                                         .foregroundStyle(Theme.textDim)
                                         .help("Rename ranking")
+                                        .accessibilityLabel("Rename \(group.label)")
                                     }
                                 }
 
@@ -65,7 +82,7 @@ struct HistoryView: View {
                     }
                 }
                 .padding(20)
-                .padding(.bottom, 90)   // clear the now-playing bar
+                .padding(.bottom, bottomClearance)
             }
             .sheet(item: $renameTarget) { target in
                 VStack(alignment: .leading, spacing: 16) {
@@ -93,6 +110,14 @@ struct HistoryView: View {
                 .frame(maxWidth: 420)
             }
         }
+    }
+
+    private var bottomClearance: CGFloat {
+        #if os(macOS)
+        12
+        #else
+        90
+        #endif
     }
 
     private var searchField: some View {
@@ -154,6 +179,7 @@ private struct HistoryRenameTarget: Identifiable {
 
 private struct HistoryCard: View {
     let entry: HistoryEntry
+    @State private var isHovered = false
 
     var body: some View {
         HStack(spacing: 16) {
@@ -176,6 +202,8 @@ private struct HistoryCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
+        .background(isHovered ? Theme.cardSurface : Theme.bgRaised)
         .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
+        .onHover { isHovered = $0 }
     }
 }

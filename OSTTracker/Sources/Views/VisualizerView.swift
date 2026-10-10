@@ -12,12 +12,18 @@ struct VisualizerView: View {
     var onClose: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
+    @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
+    @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
     @State private var spin = VinylSpin()
     @State private var lyrics: [LyricLine]?
     @State private var lyricsOstID: Int?   // which track the current lines belong to
 
     private var entry: RankEntry? { store.nowPlayingEntry }
     private var isPlaying: Bool { store.playback?.status == .playing }
+    private var stillArtwork: Bool {
+        reduceMotion || !fxEnabled || motionSelection == MotionMode.minimal.rawValue
+    }
     private var accent: Color {
         entry?.ost.coverAccentHex.map { Color(hex: $0) } ?? Theme.accent
     }
@@ -91,7 +97,7 @@ struct VisualizerView: View {
             Spacer(minLength: 20)
             SpectrumRing(
                 store: store, accent: accent, diameter: 470 * scale,
-                spin: spin, isPlaying: isPlaying, reduceMotion: reduceMotion
+                spin: spin, isPlaying: isPlaying, reduceMotion: stillArtwork, intensity: fxIntensity
             )
             titleBlock(compact: false, scale: scale)
             Spacer(minLength: 20)
@@ -120,7 +126,7 @@ struct VisualizerView: View {
             VStack(spacing: 20 * scale) {
                 SpectrumRing(
                     store: store, accent: accent, diameter: 330 * scale,
-                    spin: spin, isPlaying: isPlaying, reduceMotion: reduceMotion
+                    spin: spin, isPlaying: isPlaying, reduceMotion: stillArtwork, intensity: fxIntensity
                 )
                 if let average = entry?.average {
                     Text(String(format: "%.2f", average))
@@ -195,15 +201,17 @@ private struct SpectrumRing: View {
     let spin: VinylSpin
     let isPlaying: Bool
     let reduceMotion: Bool
+    let intensity: Double
 
     var body: some View {
         let coverSize = diameter * 0.5
         let innerRadius = diameter * 0.30
         let maxLength = diameter * 0.17
-        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying)) { timeline in
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: !isPlaying || reduceMotion)) { timeline in
             let now = timeline.date.timeIntervalSinceReferenceDate
             ZStack {
                 Canvas { context, size in
+                    guard !reduceMotion else { return }
                     var bands = store.player.spectrum.snapshot()
                     let isLive = bands.contains { $0 > 0.004 }
                     if !isLive {
@@ -222,7 +230,7 @@ private struct SpectrumRing: View {
                     for (i, raw) in spokes.enumerated() {
                         let level = CGFloat(pow(Double(raw), 0.8))
                         let angle = baseRotation + Double(i) / Double(spokes.count) * 2 * .pi
-                        let length = max(3, level * maxLength)
+                        let length = max(3, level * maxLength * CGFloat(intensity))
                         path.move(to: CGPoint(
                             x: center.x + Foundation.cos(angle) * innerRadius,
                             y: center.y + Foundation.sin(angle) * innerRadius

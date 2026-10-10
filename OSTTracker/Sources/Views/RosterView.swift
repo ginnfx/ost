@@ -26,6 +26,22 @@ struct RosterView: View {
     @State private var showStartRanking = false
     @State private var newRankingName = ""
     @State private var isStartingRanking = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
+
+    private var bottomClearance: CGFloat {
+        #if os(macOS)
+        12
+        #else
+        90
+        #endif
+    }
+
+    private var detailTransition: AnyTransition {
+        if reduceMotion || motionSelection == MotionMode.minimal.rawValue { return .identity }
+        let scale: CGFloat = motionSelection == MotionMode.cinematic.rawValue ? 0.94 : 0.98
+        return .opacity.combined(with: .scale(scale: scale))
+    }
 
     // Tighter minimum on iOS so portrait phones get 2 columns (~160pt each);
     // macOS's wider windows naturally land on more columns at 180pt minimum.
@@ -152,13 +168,17 @@ struct RosterView: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Detail panel sizing: render 1:1 in normal windows, then grow
-            // PROPORTIONALLY (content and all) on big/fullscreen windows.
-            // Without the cap the panel stretches to fill the screen while its
-            // fixed-size content huddles top-left.
-            let detailScale = min(1.3, max(1.0, min(geo.size.width / 1150, geo.size.height / 900)))
             ZStack {
             VStack(spacing: 0) {
+                HStack {
+                    Text("Roster")
+                        .font(.ostDisplay(22, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
+                .padding(.bottom, 6)
                 toolbar
                 if store.leaderboard.isEmpty {
                     emptyRoster
@@ -169,7 +189,7 @@ struct RosterView: View {
                         EliminationSidebar(board: board)
                             .padding(.top, 20)
                             .padding(.trailing, 20)
-                            .padding(.bottom, 90)   // clear the now-playing bar
+                            .padding(.bottom, bottomClearance)
                     }
                 } else {
                     grid(width: geo.size.width)
@@ -183,18 +203,17 @@ struct RosterView: View {
                     .onTapGesture { close() }
                     .transition(.opacity)
 
-                DetailView(store: store, ostID: id, onClose: close)
+                DetailView(store: store, ostID: id, heroNamespace: hero, onClose: close)
                     .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 9))
                     .overlay(RoundedRectangle(cornerRadius: 9).stroke(Theme.separator, lineWidth: 1))
                     .clipShape(RoundedRectangle(cornerRadius: 9))
                 .frame(maxWidth: 920, maxHeight: 800)
-                .matchedGeometryEffect(id: "hero-\(id)", in: hero)
-                .scaleEffect(detailScale)
                 .padding(40)
                 .zIndex(1)
+                .transition(detailTransition)
             }
             }
-            .animation(.easeOut(duration: 0.2), value: selectedOstID)
+            .animation(Theme.motion(.detail, reduceMotion: reduceMotion), value: selectedOstID)
             .onChange(of: hasSlices) { _, has in
                 // Never strand the picker on an option it no longer offers (e.g.
                 // the last rating was cleared away).
@@ -256,7 +275,7 @@ struct RosterView: View {
             }
         }
         .frame(maxWidth: 460, alignment: .leading)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .padding(24)
     }
 
@@ -368,15 +387,17 @@ struct RosterView: View {
             rankDelta: store.rankDeltas[id],
             isKeyboardCursor: gridFocused && cursorIndex == index,
             batchLabel: batchLabel(for: id),
+            heroNamespace: hero,
             onPlay: {
-                SoundKit.shared.play(.playStart)
-                Task { await store.play(ostID: id) }
+                let playing = store.playback?.ostId == id && store.playback?.status == .playing
+                SoundKit.shared.play(playing ? .pause : .playStart)
+                Task {
+                    if playing { await store.pause() }
+                    else { await store.play(ostID: id) }
+                }
             }
         )
         .id(id)
-        .matchedGeometryEffect(
-            id: "hero-\(id)", in: hero, isSource: selectedOstID != id
-        )
         .opacity(selectedOstID == id ? 0 : 1)
         .onTapGesture {
             cursorIndex = index   // keep keyboard cursor in sync with mouse
@@ -442,9 +463,9 @@ struct RosterView: View {
                     }
                 }
                 .padding(20)
-                .padding(.bottom, 90)   // clear the now-playing bar
+                .padding(.bottom, bottomClearance)
             }
-            .animation(Theme.resortAnimation, value: displayedEntries.map(\.id))
+            .animation(Theme.motion(.reorder, reduceMotion: reduceMotion), value: displayedEntries.map(\.id))
             .onChange(of: store.leaderboard.map(\.id)) { old, new in
                 // Whoosh only on genuine re-sorts, not the initial load.
                 guard !old.isEmpty, old != new else { return }
@@ -515,7 +536,7 @@ struct RosterView: View {
         cursorIndex = index
         SoundKit.shared.play(.navMove)
         // ≤100ms per research: fast enough that key-repeat never feels laggy.
-        withAnimation(.easeOut(duration: 0.1)) {
+        withAnimation(Theme.motion(.feedback, reduceMotion: reduceMotion)) {
             proxy.scrollTo(entries[index].id, anchor: nil)
         }
     }
@@ -550,9 +571,12 @@ struct RosterCard: View {
     var isKeyboardCursor: Bool = false
     /// "B1·3" batch-key chip, non-nil only while the roster is in Batch sort.
     var batchLabel: String? = nil
+    let heroNamespace: Namespace.ID
     var onPlay: () -> Void = {}
 
     @State private var isHovered = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
     private var accent: Color { Theme.accent }
 
     var body: some View {
@@ -600,6 +624,7 @@ struct RosterCard: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: 7))
         .onHover { isHovered = $0 }
+        .animation(Theme.motion(.feedback, reduceMotion: reduceMotion), value: isHovered)
     }
 
     private var cover: some View {
@@ -609,6 +634,11 @@ struct RosterCard: View {
                 CoverImage(path: entry.ost.coverImagePath, epoch: coverEpoch)
                     .scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .matchedGeometryEffect(
+                        id: "artwork-\(entry.ost.id)",
+                        in: heroNamespace,
+                        isSource: true
+                    )
             }
             .overlay(alignment: .bottomLeading) {
                 if let phase = resolutionPhase {
@@ -619,14 +649,14 @@ struct RosterCard: View {
             .overlay(alignment: .bottomTrailing) {
                 if isHovered || isPlaying {
                     Button(action: onPlay) {
-                        Image(systemName: isPlaying ? "waveform" : "play.fill")
+                        Image(systemName: isPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 14, weight: .semibold))
                             .foregroundStyle(Theme.bg)
                             .frame(width: 36, height: 36)
                             .background(Theme.accent, in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel(isPlaying ? "Play this OST again" : "Play \(entry.ost.title)")
+                    .accessibilityLabel(isPlaying ? "Pause \(entry.ost.title)" : "Play \(entry.ost.title)")
                     .padding(10)
                 }
             }
@@ -650,7 +680,7 @@ struct RosterCard: View {
                 .font(.ostMono(17, weight: .bold))
                 .foregroundStyle(Theme.textPrimary)
                 .contentTransition(.numericText(value: entry.average ?? 0))
-                .animation(.easeOut(duration: 0.6), value: entry.average)
+                .animation(Theme.motion(.feedback, reduceMotion: reduceMotion), value: entry.average)
         }
         .padding(10)
     }

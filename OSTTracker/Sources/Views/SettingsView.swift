@@ -10,6 +10,7 @@ struct SettingsView: View {
     @AppStorage(Theme.customAccentKey) private var customAccentHex = ""
     @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
     @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
+    @AppStorage(Theme.motionKey) private var motionMode = MotionMode.subtle.rawValue
     @AppStorage(SoundKit.mutedDefaultsKey) private var uiSoundsMuted = false
     @AppStorage(AttractModeController.enabledKey) private var attractEnabled = true
     @AppStorage(AttractModeController.idleSecondsKey) private var attractIdle = AttractModeController.defaultIdleSeconds
@@ -67,7 +68,7 @@ struct SettingsView: View {
             .frame(maxWidth: 410)
         }
         #if os(macOS)
-        .frame(width: 460, height: 560)
+        .frame(width: 480, height: 600)
         #endif
     }
 
@@ -134,19 +135,32 @@ struct SettingsView: View {
 
     private var appearance: some View {
         Section("Appearance") {
+            Picker("Motion", selection: $motionMode) {
+                ForEach(MotionMode.allCases) { mode in
+                    Text(mode.title).tag(mode.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            Text("Minimal keeps screens still. Subtle uses quick transitions. Cinematic gives artwork and navigation more movement. macOS Reduce Motion takes priority.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             LabeledContent("Accent theme") {
                 HStack(spacing: 10) {
                     ForEach(Theme.presets) { preset in
-                        Circle()
-                            .fill(Color(hex: preset.accentHex))
-                            .frame(width: 24, height: 24)
-                            .overlay {
-                                if !usingCustom, presetID == preset.id {
-                                    Circle().strokeBorder(.primary, lineWidth: 2)
+                        Button { selectPreset(preset.id) } label: {
+                            Circle()
+                                .fill(Color(hex: preset.accentHex))
+                                .frame(width: 24, height: 24)
+                                .overlay {
+                                    if !usingCustom, presetID == preset.id {
+                                        Circle().strokeBorder(.primary, lineWidth: 2)
+                                    }
                                 }
-                            }
-                            .help(preset.name)
-                            .onTapGesture { selectPreset(preset.id) }
+                                .frame(width: 32, height: 32)
+                        }
+                        .buttonStyle(.plain)
+                        .help(preset.name)
+                        .accessibilityLabel("\(preset.name) accent")
                     }
                 }
             }
@@ -179,7 +193,7 @@ struct SettingsView: View {
     private var effects: some View {
         Section("Effects") {
             Toggle("Music-reactive effects", isOn: $fxEnabled)
-            Picker("Backdrop intensity", selection: $fxIntensity) {
+            Picker("Spectrum intensity", selection: $fxIntensity) {
                 Text("Subtle").tag(0.5)
                 Text("Default").tag(1.0)
                 Text("Vivid").tag(1.5)

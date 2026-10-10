@@ -7,6 +7,17 @@ import AppKit
 #endif
 import SwiftUI
 
+nonisolated enum MotionMode: String, CaseIterable, Identifiable {
+    case minimal, subtle, cinematic
+
+    var id: String { rawValue }
+    var title: String { rawValue.capitalized }
+}
+
+nonisolated enum MotionPurpose: Equatable {
+    case navigation, detail, reorder, feedback, overlay
+}
+
 nonisolated enum Theme {
     // MARK: Color tokens (asserted against these exact hex values)
 
@@ -93,32 +104,42 @@ nonisolated enum Theme {
 
     // MARK: Motion
 
-    static let hoverGlowDuration: TimeInterval = 2.4
-    static let resortAnimation: Animation = .spring(response: 0.55, dampingFraction: 0.82)
-    static let revealStagger: TimeInterval = 0.035
+    static let motionKey = "motionMode"
 
-    // MARK: Sound + music reactivity
-    //
-    // Reactive scales are the MAX extra scale an envelope can add (1.0 + token).
-    // Kept small on purpose: the music should feel present, not seasick.
+    static var motionMode: MotionMode {
+        MotionMode(rawValue: UserDefaults.standard.string(forKey: motionKey) ?? "subtle") ?? .subtle
+    }
+
+    static func motion(_ purpose: MotionPurpose, reduceMotion: Bool = false) -> Animation? {
+        guard !reduceMotion else { return nil }
+        switch motionMode {
+        case .minimal:
+            return nil
+        case .subtle:
+            switch purpose {
+            case .navigation: return .easeInOut(duration: 0.18)
+            case .detail: return .easeInOut(duration: 0.22)
+            case .reorder: return .spring(response: 0.32, dampingFraction: 0.9)
+            case .feedback: return .easeOut(duration: 0.12)
+            case .overlay: return .easeInOut(duration: 0.2)
+            }
+        case .cinematic:
+            switch purpose {
+            case .navigation: return .spring(response: 0.32, dampingFraction: 0.88)
+            case .detail: return .spring(response: 0.46, dampingFraction: 0.86)
+            case .reorder: return .spring(response: 0.52, dampingFraction: 0.82)
+            case .feedback: return .easeOut(duration: 0.16)
+            case .overlay: return .easeInOut(duration: 0.32)
+            }
+        }
+    }
+
+    // MARK: Sound and spectrum settings
 
     static let uiSoundVolume: Float = 0.35    // UI blips sit well under the OST
-    /// UserDefaults key for the header sparkles toggle: gates all music-reactive
-    /// ambience (backdrop swell, pulses, beat stroke) for slower machines.
+    /// Controls spectrum movement in the compact player and visualizer.
     static let fxDefaultsKey = "reactiveFXEnabled"
-    static let backdropSwell: CGFloat = 0.16  // backdrop glow bass swell
-
-    /// Ambient-intensity multiplier for the music-reactive backdrop, set in
-    /// Settings (0.5 = subtle, 1.0 = default, 1.5 = vivid). Read live from
-    /// UserDefaults so a change takes effect on the next frame.
     static let fxIntensityKey = "fxIntensity"
-    static var fxScale: CGFloat {
-        let raw = UserDefaults.standard.object(forKey: fxIntensityKey) as? Double
-        return CGFloat(raw ?? 1.0)
-    }
-    static let beatPulse: CGFloat = 0.012     // playing roster card pulse
-    static let wordmarkBounce: CGFloat = 0.05 // wordmark kick bounce
-    static let coverThump: CGFloat = 0.018    // detail cover-art bass thump
 
     /// Deterministic per-person accent (golden-ratio hue spacing) for the
     /// discreet rater-identity dots. Same person, same color, every screen.
@@ -170,9 +191,6 @@ nonisolated enum Theme {
             precondition(isValidHex(preset.accentHex), "Malformed preset hex: \(preset.accentHex)")
         }
         precondition((0...1).contains(uiSoundVolume), "uiSoundVolume out of range")
-        for pulse in [backdropSwell, beatPulse, wordmarkBounce, coverThump] {
-            precondition(pulse > 0 && pulse < 0.25, "Reactive pulse token out of taste range: \(pulse)")
-        }
         print("THEME tokens verified: accent \(accentHex) | faces \(fontFaces.joined(separator: ", "))")
     }
 }

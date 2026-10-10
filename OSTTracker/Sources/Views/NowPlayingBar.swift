@@ -9,11 +9,18 @@ struct NowPlayingBar: View {
     /// False when the bar is fully covered (visualizer/attract overlay up); its
     /// spectrum + vinyl stop animating so they don't burn frames off-screen.
     var active: Bool = true
+    /// macOS keeps the transport in the window even before a track is selected.
+    var desktop: Bool = false
 
     @State private var scrubbing = false
     @State private var scrubValue = 0.0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     private var status: PlaybackStatus { store.playback?.status ?? .idle }
+    private var hasTrack: Bool { store.playback?.ostId != nil && status != .idle }
+    private var transportHitSize: CGFloat { desktop ? 36 : 44 }
 
     /// Reads live playback position unless the user is actively dragging.
     private var progress: Binding<Double> {
@@ -24,6 +31,16 @@ struct NowPlayingBar: View {
     }
 
     var body: some View {
+        Group {
+            #if os(macOS)
+            if desktop { desktopBody } else { compactBody }
+            #else
+            compactBody
+            #endif
+        }
+    }
+
+    private var compactBody: some View {
         VStack(spacing: 6) {
             HStack(spacing: 14) {
                 artwork
@@ -31,16 +48,18 @@ struct NowPlayingBar: View {
                 Spacer(minLength: 12)
                 transport
             }
-            SpectrumView(
-                engine: store.player.spectrum,
-                accent: accentColor,
-                isPlaying: status == .playing && active
-            )
-            .frame(height: 30)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                SoundKit.shared.play(.select)
-                onExpand()
+            if fxEnabled && !reduceMotion && motionSelection != MotionMode.minimal.rawValue {
+                SpectrumView(
+                    engine: store.player.spectrum,
+                    accent: accentColor,
+                    isPlaying: status == .playing && active
+                )
+                .frame(height: 30)
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    SoundKit.shared.play(.select)
+                    onExpand()
+                }
             }
             scrubber
         }
@@ -51,12 +70,93 @@ struct NowPlayingBar: View {
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Theme.separator, lineWidth: 1))
     }
 
+    #if os(macOS)
+    private var desktopBody: some View {
+        HStack(spacing: 24) {
+            HStack(spacing: 12) {
+                CoverImage(
+                    path: store.nowPlayingEntry?.ost.coverImagePath,
+                    epoch: store.coverEpoch(for: store.nowPlayingEntry?.ost.id)
+                )
+                .scaledToFit()
+                .frame(width: 48, height: 48)
+                .background(Theme.bg)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(store.nowPlayingEntry?.ost.title ?? "Nothing playing")
+                        .font(.ostBody(13, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .lineLimit(1)
+                    Text(desktopSubtitle)
+                        .font(.ostBody(11))
+                        .foregroundStyle(Theme.textDim)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(minWidth: 180, maxWidth: .infinity, alignment: .leading)
+
+            VStack(spacing: 3) {
+                HStack(spacing: 8) {
+                    playPauseButton
+                    stopButton
+                }
+                HStack(spacing: 8) {
+                    Text(format(store.player.position))
+                    seekSlider
+                    Text(format(store.player.duration))
+                }
+                .font(.ostMono(10))
+                .foregroundStyle(Theme.textDim)
+                .monospacedDigit()
+            }
+            .frame(maxWidth: 470)
+
+            HStack(spacing: 10) {
+                Image(systemName: "speaker.wave.2")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.textDim)
+                    .accessibilityHidden(true)
+                Slider(
+                    value: Binding(
+                        get: { store.player.volume },
+                        set: { store.player.setVolume($0) }
+                    ),
+                    in: 0...1
+                )
+                .controlSize(.small)
+                .accessibilityLabel("Volume")
+                expandButton
+            }
+            .frame(minWidth: 150, maxWidth: .infinity, alignment: .trailing)
+        }
+        .padding(.horizontal, 24)
+        .frame(height: 92)
+        .frame(maxWidth: .infinity)
+        .background(Theme.bgRaised)
+        .overlay(alignment: .top) { Theme.separator.frame(height: 1) }
+    }
+
+    private var desktopSubtitle: String {
+        if status == .resolving {
+            let phase = store.playback?.ostId.flatMap { store.resolutionPhase[$0] }
+            return "Resolving \(phase?.rawValue ?? "track")"
+        }
+        return store.nowPlayingEntry?.ost.source ?? (hasTrack ? "OST" : "Choose an OST from Roster")
+    }
+    #endif
+
     private var scrubber: some View {
+        seekSlider
+            .controlSize(.mini)
+    }
+
+    private var seekSlider: some View {
         Slider(value: progress, in: 0...max(store.player.duration, 0.1)) { editing in
             scrubbing = editing
             if !editing { Task { await store.seek(to: scrubValue) } }
         }
-        .controlSize(.mini)
         .tint(Theme.accent)
         .disabled(store.player.duration <= 0)
         .opacity(store.player.duration <= 0 ? 0.35 : 1)
@@ -101,50 +201,59 @@ struct NowPlayingBar: View {
 
     private var transport: some View {
         HStack(spacing: 10) {
-            Button {
-                SoundKit.shared.play(status == .playing ? .pause : .playStart)
-                Task {
-                    if status == .playing {
-                        await store.pause()
-                    } else if let id = store.playback?.ostId {
-                        await store.play(ostID: id)
-                    }
-                }
-            } label: {
-                Image(systemName: status == .playing ? "pause.fill" : "play.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(status == .playing ? "Pause" : "Play")
-            .disabled(status == .resolving)
-
-            Button {
-                SoundKit.shared.play(.stop)
-                Task { await store.stop() }
-            } label: {
-                Image(systemName: "stop.fill")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Stop")
-
-            Button {
-                SoundKit.shared.play(.select)
-                onExpand()
-            } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                    .frame(width: 44, height: 44)
-            }
-            .buttonStyle(.borderless)
-            .accessibilityLabel("Open visualizer")
-            .help("Fullscreen visualizer")
+            playPauseButton
+            stopButton
+            expandButton
         }
+    }
+
+    private var playPauseButton: some View {
+        Button {
+            SoundKit.shared.play(status == .playing ? .pause : .playStart)
+            Task {
+                if status == .playing { await store.pause() }
+                else if let id = store.playback?.ostId { await store.play(ostID: id) }
+            }
+        } label: {
+            Image(systemName: status == .playing ? "pause.fill" : "play.fill")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(width: transportHitSize, height: transportHitSize)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel(status == .playing ? "Pause" : "Play")
+        .disabled(!hasTrack || status == .resolving)
+    }
+
+    private var stopButton: some View {
+        Button {
+            SoundKit.shared.play(.stop)
+            Task { await store.stop() }
+        } label: {
+            Image(systemName: "stop.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(width: transportHitSize, height: transportHitSize)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Stop")
+        .disabled(!hasTrack)
+    }
+
+    private var expandButton: some View {
+        Button {
+            SoundKit.shared.play(.select)
+            onExpand()
+        } label: {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .frame(width: transportHitSize, height: transportHitSize)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Open visualizer")
+        .help("Open visualizer")
+        .disabled(!hasTrack)
     }
 
     private func format(_ seconds: Double) -> String {

@@ -9,6 +9,8 @@ struct AttractOverlay: View {
     let store: AppStore
 
     @State private var slideIndex = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     var body: some View {
         ZStack {
@@ -23,7 +25,7 @@ struct AttractOverlay: View {
                 .transition(.opacity)
             }
         }
-        .animation(.easeInOut(duration: 0.25), value: slideIndex)
+        .animation(Theme.motion(.overlay, reduceMotion: reduceMotion), value: slideIndex)
         .task {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(10))

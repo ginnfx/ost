@@ -7,8 +7,14 @@ import Observation
 
 @Observable
 final class PlayerSink {
+    static let volumeKey = "playerVolume"
+
     private(set) var position: Double = 0
     private(set) var duration: Double = 0
+    private(set) var volume: Double = {
+        let saved = UserDefaults.standard.object(forKey: "playerVolume") as? Double ?? 0.8
+        return min(1, max(0, saved))
+    }()
     /// Wall-clock stamp of the last position tick (0.5s cadence). Lets the
     /// lyrics view interpolate between ticks instead of quantizing line
     /// changes to half-second steps. Not observable on purpose.
@@ -51,6 +57,12 @@ final class PlayerSink {
         player?.seek(to: CMTime(seconds: seconds, preferredTimescale: 600))
     }
 
+    func setVolume(_ value: Double) {
+        volume = min(1, max(0, value))
+        player?.volume = Float(volume)
+        UserDefaults.standard.set(volume, forKey: Self.volumeKey)
+    }
+
     /// Forces local teardown independent of server confirmation — used when
     /// the OST behind the current session is deleted and the server's own
     /// stop call may have failed or /ws may be down, which must not leave
@@ -65,6 +77,7 @@ final class PlayerSink {
         tearDown()
         let item = AVPlayerItem(url: url)
         let player = AVPlayer(playerItem: item)
+        player.volume = Float(volume)
         self.player = player
         currentStreamURL = stream
         statusObservation = item.observe(\.status) { item, _ in
