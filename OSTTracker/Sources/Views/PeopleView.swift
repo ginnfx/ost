@@ -184,12 +184,15 @@ struct NotesView: View {
                                         .font(.ostDisplay(12, weight: .semibold))
                                         .foregroundStyle(Theme.textPrimary)
                                         .lineLimit(1)
-                                    Text("\(track.artist) · \(track.collection)")
+                                    Text([track.artist, track.collection].filter { !$0.isEmpty }.joined(separator: " · "))
                                         .font(.ostBody(11))
                                         .foregroundStyle(Theme.textDim)
                                         .lineLimit(1)
                                 }
                                 Spacer()
+                                Text(track.provider)
+                                    .font(.ostBody(10))
+                                    .foregroundStyle(Theme.textDim)
                                 Image(systemName: "arrow.down.left")
                                     .foregroundStyle(Theme.textDim)
                             }
@@ -203,7 +206,7 @@ struct NotesView: View {
                 }
                 .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
             }
-            Text("Results from Apple Music.")
+            Text("Apple Music, Deezer, and MusicBrainz")
                 .font(.ostMono(10))
                 .foregroundStyle(Theme.textDim)
         }
