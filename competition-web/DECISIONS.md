@@ -41,7 +41,7 @@ Form reveal groups only after the full tie-broken ranking. For a nonempty rankin
 
 ### Scoring fixture expectation history
 
-Expected ranking values follow the scoring specification, not observed code output. Two corrections were made during fixture construction: (1) `low-spread-b` precedes `low-spread-a` by the SHA-256 seeded draw for an otherwise exact ranking tie; (2) the fixture's reveal groups were changed to fixed sizes after the user clarified that tie-breakers complete the order and reveal groups must not move tied entries. The latter changes group boundaries only; the complete ranking and score expectations are unchanged. The scorer excludes any withdrawn or incomplete rater, and assigns each included owner's entry an automatic 10. Neither correction was made merely to match implementation output.
+Expected ranking values follow the scoring specification, not observed code output. Two corrections were made during fixture construction: (1) the SHA-256 seeded draw ranks `low-spread-a` before `low-spread-b`; since reveal order is the reverse of rank, `low-spread-b` appears first among those tied entries in the reveal sequence; (2) the fixture's reveal groups were changed to fixed sizes after the user clarified that tie-breakers complete the order and reveal groups must not move tied entries. The latter changes group boundaries only; the complete ranking and score expectations are unchanged. The scorer excludes any withdrawn or incomplete rater, and assigns each included owner's entry an automatic 10. Neither correction was made merely to match implementation output.
 
 
 ### Visual audit
