@@ -8,7 +8,7 @@
     "test": "tests"
   },
   "scripts": {
-    "tokens": "node scripts/generate-tokens.mjs",
+    "tokens": "node scripts/generate-tokens.mjs && prettier --write app/tokens.generated.css",
     "predev": "npm run tokens",
     "dev": "next dev",
     "prebuild": "npm run tokens",
@@ -19,15 +19,22 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install webkit",
-    "security:audit": "npm audit --audit-level=high"
+    "security:audit": "npm audit --audit-level=high",
+    "format": "prettier --write \"**/*.{ts,tsx,css}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,css}\"",
+    "media:build": "docker build -f worker/Dockerfile -t ost-competition-media-worker:local worker",
+    "media:process": "node scripts/media-worker.mjs",
+    "media:test": "node scripts/test-media-worker.mjs"
   },
   "keywords": [],
   "author": "",
   "type": "module",
   "dependencies": {
+    "@phosphor-icons/react": "2.1.10",
+    "@simplewebauthn/browser": "14.0.0",
+    "@simplewebauthn/server": "14.0.3",
     "@supabase/ssr": "0.9.0",
     "@supabase/supabase-js": "2.117.3",
-    "lucide-react": "1.56.0",
     "next": "16.4.0",
     "pg": "8.23.1",
     "react": "19.3.0",
@@ -44,6 +51,7 @@
     "axe-core": "4.11.1",
     "eslint": "9.39.5",
     "eslint-plugin-jsx-a11y": "6.10.2",
+    "prettier": "3.9.10",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.2",
     "vitest": "4.1.11"
