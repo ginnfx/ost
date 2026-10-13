@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { withCurrentUser } from "@/lib/server/database";
+import { StaleRatingError, withCurrentUser } from "@/lib/server/database";
 import { privateJson, sameOriginRequest, unavailable } from "@/lib/server/http";
 import { sha256 } from "@/lib/server/webauthn";
 
@@ -25,16 +25,28 @@ export async function PUT(request: Request) {
         ["rating", sha256(userId), 1200, 3600],
       );
       if (!limit.rows[0]?.allowed) throw new Error("RATE_LIMITED");
-      const result = await db.query<{ save_listening_rating: string }>(
-        "select private.save_listening_rating($1,$2::smallint,$3,$4::smallint,$5::bigint)",
-        [
-          body.data.competitionId,
-          body.data.batch,
-          body.data.listeningId,
-          body.data.score,
-          body.data.expectedVersion,
-        ],
-      );
+      let result;
+      try {
+        result = await db.query<{ save_listening_rating: string }>(
+          "select private.save_listening_rating($1,$2::smallint,$3,$4::smallint,$5::bigint)",
+          [
+            body.data.competitionId,
+            body.data.batch,
+            body.data.listeningId,
+            body.data.score,
+            body.data.expectedVersion,
+          ],
+        );
+      } catch (error) {
+        if (
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          error.code === "40001"
+        )
+          throw new StaleRatingError("The rating changed on another device.");
+        throw error;
+      }
       return Number(result.rows[0]?.save_listening_rating);
     });
     return privateJson({ saved: true, version });
@@ -44,7 +56,7 @@ export async function PUT(request: Request) {
         { error: "Rating limit reached. Try again later." },
         429,
       );
-    if (error instanceof Error && error.message.includes("Stale rating"))
+    if (error instanceof StaleRatingError)
       return privateJson(
         { error: "This rating changed elsewhere. Refresh to sync." },
         409,

@@ -245,3 +245,27 @@ nonisolated struct BatchPin: Encodable, Sendable {
     let ostId: Int
     let pinned: Bool
 }
+
+nonisolated struct RoundArchiveDetail: Decodable, Sendable {
+    let id: Int
+    let name: String
+    let payloadJson: String
+}
+
+nonisolated struct CompetitionHistoryEntry: Encodable, Sendable {
+    let title: String
+    let source: String
+    let rank: Int
+    let meanScore: Double
+}
+
+nonisolated struct CompetitionHistoryImport: Encodable, Sendable {
+    let sourceId: String
+    let name: String
+    let entries: [CompetitionHistoryEntry]
+}
+
+nonisolated struct CompetitionHistoryImportResponse: Decodable, Sendable {
+    let imported: Bool
+    let added: Int
+}

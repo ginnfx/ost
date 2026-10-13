@@ -46,6 +46,26 @@ def test_count_history(fresh_db):
     assert history_repo.count_history() == 2
 
 
+def test_competition_history_import_is_idempotent_and_keeps_local_duplicates_out(fresh_db):
+    result = history_repo.import_competition_history(
+        "11111111-1111-4111-8111-111111111111",
+        "Practice round",
+        [
+            {"title": "Song A", "source": "Game A"},
+            {"title": "Song A", "source": "Game A"},
+            {"title": "Song B", "source": "Game B"},
+        ],
+    )
+    assert result == {"imported": True, "added": 2}
+    again = history_repo.import_competition_history(
+        "11111111-1111-4111-8111-111111111111",
+        "Practice round",
+        [{"title": "Changed"}],
+    )
+    assert again == {"imported": False, "added": 0}
+    assert [entry.title for entry in history_repo.list_history()] == ["Song A", "Song B"]
+
+
 # --- find_matches ---------------------------------------------------------
 
 def test_find_matches_is_case_and_whitespace_insensitive(fresh_db):

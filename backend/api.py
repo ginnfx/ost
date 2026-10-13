@@ -138,6 +138,19 @@ class HistoryLabelRenameIn(BaseModel):
     new_label: str
 
 
+class CompetitionHistoryEntryIn(BaseModel):
+    title: str
+    source: Optional[str] = None
+    rank: Optional[int] = None
+    mean_score: Optional[float] = None
+
+
+class CompetitionHistoryImportIn(BaseModel):
+    source_id: str
+    name: str
+    entries: list[CompetitionHistoryEntryIn]
+
+
 class StartRoundIn(BaseModel):
     name: str
 
@@ -912,6 +925,17 @@ def patch_history_label(body: HistoryLabelRenameIn) -> dict:
     return rounds_repo.rename_history_label(body.old_label, body.new_label)
 
 
+@app.post("/history/import-competition")
+def post_import_competition_history(body: CompetitionHistoryImportIn) -> dict:
+    if len(body.entries) > 500:
+        raise HTTPException(413, "The competition archive is too large.")
+    return history_repo.import_competition_history(
+        body.source_id,
+        body.name,
+        [entry.model_dump() for entry in body.entries],
+    )
+
+
 # --- round retirement ---------------------------------------------------------
 
 _retire_words = ("HARBOR", "LANTERN", "ORBIT", "MEADOW", "PAPER", "RIVER", "SUNSET", "WILLOW")
@@ -922,6 +946,14 @@ _retire_challenge_lock = threading.Lock()
 @app.get("/rounds")
 def get_rounds() -> dict:
     return rounds_repo.round_status()
+
+
+@app.get("/rounds/{round_id:int}")
+def get_round_archive(round_id: int) -> dict:
+    archive = rounds_repo.get_round_archive(round_id)
+    if archive is None:
+        raise HTTPException(404, "Round archive not found.")
+    return archive
 
 
 @app.post("/rounds/start")

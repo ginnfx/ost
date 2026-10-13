@@ -15,5 +15,7 @@ select format(
 )
 where not exists (select 1 from pg_roles where rolname='ost_web_app_login')
 \gexec
+select format('alter role ost_web_app_login password %L', :'app_password')
+\gexec
 grant ost_web_app to ost_web_app_login;
 SQL

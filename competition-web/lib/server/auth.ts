@@ -1,5 +1,6 @@
 import "server-only";
-import { cookies } from "next/headers";
+import { createClient } from "@supabase/supabase-js";
+import { cookies, headers } from "next/headers";
 import { createServerClient } from "@supabase/ssr";
 
 export async function supabaseForRequest() {
@@ -35,6 +36,20 @@ export async function supabaseForRequest() {
 }
 
 export async function verifiedCurrentUser() {
+  const authorization = (await headers()).get("authorization");
+  const bearer = authorization?.match(/^Bearer\s+(.+)$/i)?.[1];
+  if (bearer) {
+    const supabase = createClient(
+      requiredEnv("NEXT_PUBLIC_SUPABASE_URL"),
+      requiredEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+      { auth: { persistSession: false, autoRefreshToken: false } },
+    );
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(bearer);
+    return error || !user ? null : { user, accessToken: bearer };
+  }
   const supabase = await supabaseForRequest();
   const [
     {
