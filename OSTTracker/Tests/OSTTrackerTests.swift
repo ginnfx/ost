@@ -9,12 +9,35 @@ import Testing
 // MARK: - Fixtures
 
 private func makeOst(
-    id: Int, title: String, submitterId: Int? = nil
+    id: Int, title: String, submitterId: Int? = nil, submitterName: String? = nil
 ) -> Ost {
     Ost(
-        id: id, title: title, source: nil, submitterId: submitterId, submitterName: nil,
+        id: id, title: title, source: nil, submitterId: submitterId, submitterName: submitterName,
         coverImagePath: nil, coverAccentHex: nil, externalLink: nil, createdAt: "2026-01-01T00:00:00Z"
     )
+}
+
+@Suite("EliminationBuilder")
+struct EliminationBuilderTests {
+    @Test("builds worst-first slices, eliminations, and survivors from local ranks")
+    func buildsSliceBoard() {
+        let entries = [
+            RankEntry(ost: makeOst(id: 1, title: "Worst", submitterId: 1, submitterName: "A"), ratingCount: 1, average: 1, minimum: 1, maximum: 1, stddev: 0, rank: 3),
+            RankEntry(ost: makeOst(id: 2, title: "Middle", submitterId: 1, submitterName: "A"), ratingCount: 1, average: 2, minimum: 2, maximum: 2, stddev: 0, rank: 2),
+            RankEntry(ost: makeOst(id: 3, title: "Best", submitterId: 2, submitterName: "B"), ratingCount: 1, average: 3, minimum: 3, maximum: 3, stddev: 0, rank: 1),
+            RankEntry(ost: makeOst(id: 4, title: "Unranked", submitterId: 2, submitterName: "B"), ratingCount: 0, average: nil, minimum: nil, maximum: nil, stddev: nil, rank: nil),
+        ]
+
+        let board = EliminationBuilder.build(entries, threshold: 2, sliceSize: 2)
+
+        #expect(board.rankedCount == 3)
+        #expect(board.slices.map(\.label) == ["3–2", "1–1"])
+        #expect(board.eliminated.map(\.personId) == [1])
+        #expect(board.eliminated.first?.place == 2)
+        #expect(board.eliminated.first?.outAtRank == 2)
+        #expect(board.survivors.map(\.personId) == [2])
+        #expect(board.survivors.first?.remaining == 1)
+    }
 }
 
 private func makeEntry(id: Int, title: String, rank: Int?) -> RankEntry {

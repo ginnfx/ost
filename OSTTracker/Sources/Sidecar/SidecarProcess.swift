@@ -3,7 +3,7 @@
 // teardown is one kill(-pgid, SIGTERM) with a SIGKILL backstop. Python also
 // runs a parent-death watchdog, so even a SIGKILL'd host never leaks it.
 //
-// iOS uses EmbeddedSidecar instead (sandbox forbids subprocesses).
+// The iOS companion connects to this process over the local network.
 
 #if os(macOS)
 
@@ -17,7 +17,15 @@ nonisolated struct SidecarConfiguration: Sendable {
     /// Packaged runtime embedded by packaging/04_copy_runtime.sh when
     /// present, otherwise the repo checkout (dev build).
     static func resolve() -> SidecarConfiguration {
-        packaged() ?? development()
+        let base = packaged() ?? development()
+        guard UserDefaults.standard.bool(forKey: "ost.lan.enabled") else { return base }
+        var environment = base.extraEnvironment
+        environment["OST_LAN_ENABLED"] = "1"
+        return SidecarConfiguration(
+            pythonPath: base.pythonPath,
+            scriptPath: base.scriptPath,
+            extraEnvironment: environment
+        )
     }
 
     /// The bundle-embedded python-build-standalone runtime, plus the

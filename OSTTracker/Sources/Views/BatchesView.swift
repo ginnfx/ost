@@ -63,25 +63,43 @@ struct BatchesView: View {
     // MARK: - Header
 
     private var header: some View {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 12) {
+            headerTitle
+            randomizeButton
+            if !store.batches.isEmpty { countControl }
+        }
+        #else
         HStack(alignment: .top) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Batches")
-                    .font(.ostDisplay(22, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                Text("Drag to reorder. Right-click to pin a slot.")
-                    .font(.ostBody(12))
-                    .foregroundStyle(Theme.textDim)
-                    .kerning(0.6)
-                if let stamp = formattedTimestamp {
-                    Text("Generated \(stamp)")
-                        .font(.ostMono(10))
-                        .foregroundStyle(Theme.textDim)
-                }
-            }
+            headerTitle
             Spacer()
             VStack(alignment: .trailing, spacing: 10) {
                 randomizeButton
                 if !store.batches.isEmpty { countControl }
+            }
+        }
+        #endif
+    }
+
+    private var headerTitle: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Batches")
+                .font(.ostDisplay(22, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+            #if os(iOS)
+            Text("Drag to reorder. Hold a slot to pin it.")
+                .font(.ostBody(12))
+                .foregroundStyle(Theme.textDim)
+            #else
+            Text("Drag to reorder. Right-click to pin a slot.")
+                .font(.ostBody(12))
+                .foregroundStyle(Theme.textDim)
+                .kerning(0.6)
+            #endif
+            if let stamp = formattedTimestamp {
+                Text("Generated \(stamp)")
+                    .font(.ostMono(10))
+                    .foregroundStyle(Theme.textDim)
             }
         }
     }
@@ -276,16 +294,24 @@ private struct BatchRow: View {
                         .foregroundStyle(Theme.textDim)
                         .lineLimit(1)
                 }
+                #if os(iOS)
+                Text(slot.ost.submitterName ?? "Unassigned")
+                    .font(.ostMono(10))
+                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
+                #endif
             }
 
             Spacer()
 
+            #if os(macOS)
             Text((slot.ost.submitterName ?? "Unassigned").uppercased())
                 .font(.ostMono(12, weight: .bold))
                 .foregroundStyle(Theme.textDim)
                 .kerning(0.8)
                 .lineLimit(1)
                 .layoutPriority(1)
+            #endif
 
             Image(systemName: slot.pinned ? "pin.fill" : "line.3.horizontal")
                 .font(.system(size: 11))

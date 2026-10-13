@@ -121,7 +121,7 @@ struct HistoryView: View {
     private var searchField: some View {
         HStack(spacing: 6) {
             Image(systemName: "magnifyingglass").font(.system(size: 11)).foregroundStyle(Theme.textDim)
-            TextField("Search title, source, or sender…", text: $search)
+            TextField("Search OST titles…", text: $search)
                 .textFieldStyle(.plain).font(.ostBody(13))
                 .focused($searchFocused)
         }
@@ -146,9 +146,6 @@ struct HistoryView: View {
         let query = debouncedSearch.trimmingCharacters(in: .whitespaces)
         let filtered = query.isEmpty ? store.history : store.history.filter { entry in
             entry.title.localizedCaseInsensitiveContains(query)
-                || (entry.source?.localizedCaseInsensitiveContains(query) ?? false)
-                || (entry.sender?.localizedCaseInsensitiveContains(query) ?? false)
-                || (entry.batchLabel?.localizedCaseInsensitiveContains(query) ?? false)
         }
         var byLabel: [String: [HistoryEntry]] = [:]
         for entry in filtered {

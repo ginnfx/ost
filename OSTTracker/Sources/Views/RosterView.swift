@@ -23,16 +23,30 @@ struct RosterView: View {
     // ephemeral @State (like `search`) — it's a working view, not a saved one.
     @State private var fullyRatedOnly = false
     @State private var showStartRanking = false
+    #if os(iOS)
+    @State private var showSliceStandings = false
+    #endif
     @State private var newRankingName = ""
     @State private var isStartingRanking = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
+    #if os(iOS)
+    @AppStorage("ios.roster.columns") private var phoneColumns = 2
+    #endif
 
     private var bottomClearance: CGFloat {
         #if os(macOS)
         12
         #else
         90
+        #endif
+    }
+
+    private var isCompactGrid: Bool {
+        #if os(iOS)
+        phoneColumns > 2
+        #else
+        false
         #endif
     }
 
@@ -174,14 +188,50 @@ struct RosterView: View {
                         .font(.ostDisplay(22, weight: .semibold))
                         .foregroundStyle(Theme.textPrimary)
                     Spacer()
+                    #if os(iOS)
+                    Menu {
+                        ForEach(2...availablePhoneColumns(width: geo.size.width), id: \.self) { count in
+                            Button {
+                                phoneColumns = count
+                                HapticKit.selection()
+                            } label: {
+                                if phoneColumns == count {
+                                    Label("\(count) columns", systemImage: "checkmark")
+                                } else {
+                                    Text("\(count) columns")
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "square.grid.3x3")
+                            .frame(width: 40, height: 40)
+                            .contentShape(Rectangle())
+                    }
+                    .accessibilityLabel("Roster grid columns")
+                    .accessibilityHint("Choose how many OSTs appear in each row")
+                    if hasSlices {
+                        Button("Standings") { showSliceStandings = true }
+                            .font(.ostBody(12, weight: .semibold))
+                    }
+                    #endif
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
                 .padding(.bottom, 6)
                 toolbar
                 if store.leaderboard.isEmpty {
-                    emptyRoster
+                    if store.phase == .launching {
+                        ScrollView {
+                            LoadingSkeleton(rows: 4, style: .cards)
+                                .padding(20)
+                        }
+                    } else {
+                        emptyRoster
+                    }
                 } else if sortMode == .slices, let board = store.elimination {
+                    #if os(iOS)
+                    grid(width: geo.size.width)
+                    #else
                     HStack(alignment: .top, spacing: 14) {
                         // The grid keeps the sidebar's width out of its column math.
                         grid(width: geo.size.width - Self.sidebarWidth - 34)
@@ -190,12 +240,14 @@ struct RosterView: View {
                             .padding(.trailing, 20)
                             .padding(.bottom, bottomClearance)
                     }
+                    #endif
                 } else {
                     grid(width: geo.size.width)
                 }
             }
             .allowsHitTesting(selectedOstID == nil)
 
+            #if os(macOS)
             if let id = selectedOstID {
                 Color.black.opacity(0.45)
                     .ignoresSafeArea()
@@ -211,6 +263,7 @@ struct RosterView: View {
                 .zIndex(1)
                 .transition(detailTransition)
             }
+            #endif
             }
             .animation(Theme.motion(.detail, reduceMotion: reduceMotion), value: selectedOstID)
             .onChange(of: hasSlices) { _, has in
@@ -219,6 +272,19 @@ struct RosterView: View {
                 if !has, sortMode == .slices { sortMode = .rank }
             }
         }
+        #if os(iOS)
+        .sheet(isPresented: Binding(
+            get: { selectedOstID != nil },
+            set: { if !$0 { close() } }
+        )) {
+            if let id = selectedOstID {
+                DetailView(store: store, ostID: id, onClose: close)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(Theme.bgRaised)
+            }
+        }
+        #endif
         .sheet(isPresented: $showStartRanking) {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Start a new ranking").font(.title2.bold())
@@ -244,6 +310,16 @@ struct RosterView: View {
             .padding(24)
             .frame(maxWidth: 430)
         }
+        #if os(iOS)
+        .sheet(isPresented: $showSliceStandings) {
+            if let board = store.elimination {
+                EliminationSidebar(board: board)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .presentationDetents([.medium, .large])
+            }
+        }
+        #endif
     }
 
     private var emptyRoster: some View {
@@ -385,6 +461,7 @@ struct RosterView: View {
             isPlaying: playingOstID == id,
             rankDelta: store.rankDeltas[id],
             isKeyboardCursor: gridFocused && cursorIndex == index,
+            compact: isCompactGrid,
             batchLabel: batchLabel(for: id),
             onPlay: {
                 let playing = store.playback?.ostId == id && store.playback?.status == .playing
@@ -423,7 +500,7 @@ struct RosterView: View {
     private func grid(width: CGFloat) -> some View {
         ScrollViewReader { proxy in
             ScrollView {
-                LazyVGrid(columns: columns, spacing: Theme.gridSpacing) {
+                LazyVGrid(columns: gridColumns(for: width), spacing: Theme.gridSpacing) {
                     if sortMode == .slices {
                         // Bottom slice first: each header carries the running
                         // per-person out-tally Python computed for that slice.
@@ -491,12 +568,33 @@ struct RosterView: View {
         }
     }
 
+    private func gridColumns(for width: CGFloat) -> [GridItem] {
+        #if os(iOS)
+        let count = min(max(phoneColumns, 2), availablePhoneColumns(width: width))
+        let spacing = Theme.gridSpacing
+        return Array(repeating: GridItem(.flexible(minimum: 0), spacing: spacing), count: count)
+        #else
+        return columns
+        #endif
+    }
+
+    #if os(iOS)
+    private func availablePhoneColumns(width: CGFloat) -> Int {
+        let fit = Int((width - 40 + Theme.gridSpacing) / (112 + Theme.gridSpacing))
+        return min(4, max(2, fit))
+    }
+    #endif
+
     // MARK: Keyboard character-select
 
     /// Same math LazyVGrid's adaptive layout uses to pick a column count.
     private func columnCount(width: CGFloat) -> Int {
+        #if os(iOS)
+        return min(phoneColumns, availablePhoneColumns(width: width))
+        #else
         let available = width - 40   // grid's horizontal padding
         return max(1, Int((available + Theme.gridSpacing) / (180 + Theme.gridSpacing)))
+        #endif
     }
 
     private func moveCursor(dx: Int, dy: Int, width: CGFloat, proxy: ScrollViewProxy) -> KeyPress.Result {
@@ -567,6 +665,7 @@ struct RosterCard: View {
     let rankDelta: Int?
     /// Keyboard roving cursor is parked here: always-visible focus ring.
     var isKeyboardCursor: Bool = false
+    var compact: Bool = false
     /// "B1·3" batch-key chip, non-nil only while the roster is in Batch sort.
     var batchLabel: String? = nil
     var onPlay: () -> Void = {}
@@ -626,10 +725,18 @@ struct RosterCard: View {
 
     private var cover: some View {
         Theme.bgRaised
+            #if os(iOS)
+            .aspectRatio(1, contentMode: .fit)
+            #else
             .aspectRatio(0.85, contentMode: .fit)
+            #endif
             .overlay {
                 CoverImage(path: entry.ost.coverImagePath, epoch: coverEpoch)
+                    #if os(iOS)
+                    .scaledToFill()
+                    #else
                     .scaledToFit()
+                    #endif
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .overlay(alignment: .bottomLeading) {
@@ -655,7 +762,29 @@ struct RosterCard: View {
             #endif
     }
 
+    @ViewBuilder
     private var info: some View {
+        if compact {
+            VStack(alignment: .leading, spacing: 5) {
+                Text(entry.ost.title)
+                    .font(.ostDisplay(11, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, minHeight: 28, alignment: .leading)
+                HStack(spacing: 4) {
+                    Text(entry.ost.source ?? "")
+                        .font(.ostBody(9))
+                        .foregroundStyle(Theme.textDim)
+                        .lineLimit(1)
+                    Spacer(minLength: 2)
+                    Text(entry.average.map { String(format: "%.1f", $0) } ?? "n/a")
+                        .font(.ostMono(12, weight: .bold))
+                        .foregroundStyle(Theme.textPrimary)
+                        .fixedSize()
+                }
+            }
+            .padding(8)
+        } else {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.ost.title)
@@ -675,6 +804,7 @@ struct RosterCard: View {
                 .animation(Theme.motion(.feedback, reduceMotion: reduceMotion), value: entry.average)
         }
         .padding(10)
+        }
     }
 }
 
@@ -731,23 +861,58 @@ struct CoverImage: View {
     // Deliberately REQUIRED (no default): a call site that forgot to pass it
     // would silently reintroduce the stale-cover bug.
     let epoch: Int
+    #if os(iOS)
+    @State private var remoteImage: UIImage?
+    #endif
 
     var body: some View {
+        #if os(macOS)
         if let path, let image = Self.cachedCover(path: path, epoch: epoch) {
-            #if os(macOS)
             Image(nsImage: image).resizable()
-            #else
-            Image(uiImage: image).resizable()
-            #endif
         } else {
+            placeholder
+        }
+        #else
+        Group {
+            if let remoteImage {
+                Image(uiImage: remoteImage).resizable()
+            } else {
+                placeholder
+            }
+        }
+        .task(id: "\(path ?? "")#\(epoch)") { await loadRemoteCover() }
+        #endif
+    }
+
+    private var placeholder: some View {
             ZStack {
                 Theme.bgRaised
                 Image(systemName: "music.note")
                     .font(.system(size: 28))
                     .foregroundStyle(Theme.textDim)
             }
-        }
     }
+
+    #if os(iOS)
+    private func loadRemoteCover() async {
+        remoteImage = nil
+        guard let path else { return }
+        let name = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
+        guard name.hasPrefix("cover_"),
+              let ostID = Int(name.dropFirst(6)),
+              let client = AppStore.shared.client else { return }
+        let server = UserDefaults.standard.string(forKey: LANConnection.addressKey) ?? ""
+        let key = "\(server)#\(path)#\(epoch)" as NSString
+        if let cached = Self.cache.object(forKey: key) {
+            remoteImage = cached
+            return
+        }
+        guard let data = try? await client.cover(ostID: ostID),
+              let image = UIImage(data: data), !Task.isCancelled else { return }
+        Self.cache.setObject(image, forKey: key)
+        remoteImage = image
+    }
+    #endif
 }
 
 /// The "news chip": rank movement after a re-sort. Climbs are accent green,

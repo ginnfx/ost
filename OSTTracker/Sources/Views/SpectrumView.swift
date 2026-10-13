@@ -9,6 +9,7 @@ struct SpectrumView: View {
     let engine: SpectrumEngine
     let accent: Color
     var isPlaying = false
+    var radial = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Theme.visualizerKey) private var visualizerEnabled = true
     @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
@@ -39,6 +40,33 @@ struct SpectrumView: View {
                 }
 
                 let count = bands.count
+                if radial {
+                    let center = min(size.width, size.height) / 2
+                    let radius = center * 0.82
+                    let radialCount = max(72, count * 3)
+                    let barWidth = max(3, center * 0.052)
+                    for i in 0..<radialCount {
+                        let sample = Double(i) / Double(radialCount) * Double(count)
+                        let lower = Int(sample) % count
+                        let upper = (lower + 1) % count
+                        let blend = sample - floor(sample)
+                        let raw = Double(bands[lower]) * (1 - blend) + Double(bands[upper]) * blend
+                        let level = CGFloat(pow(raw, 0.8))
+                        let length = max(2, min(center * 0.18, level * center * 0.42 * CGFloat(fxIntensity)))
+                        let angle = Angle.degrees(Double(i) / Double(radialCount) * 360 - 90)
+                        var barContext = context
+                        barContext.translateBy(x: center, y: center)
+                        barContext.rotate(by: angle)
+                        var bar = Path()
+                        bar.addRoundedRect(
+                            in: CGRect(x: radius, y: -barWidth / 2, width: length, height: barWidth),
+                            cornerSize: CGSize(width: barWidth / 2, height: barWidth / 2)
+                        )
+                        barContext.fill(bar, with: .color(accent))
+                    }
+                    return
+                }
+
                 let spacing: CGFloat = 3
                 let barWidth = (size.width - spacing * CGFloat(count - 1)) / CGFloat(count)
                 var path = Path()

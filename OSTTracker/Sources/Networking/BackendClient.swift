@@ -3,9 +3,17 @@
 
 import Foundation
 
-nonisolated enum BackendError: Error {
+nonisolated enum BackendError: LocalizedError {
     case badStatus(Int, path: String)
     case healthTimeout
+
+    var errorDescription: String? {
+        switch self {
+        case .badStatus(401, _): "The pairing code is incorrect."
+        case .badStatus(let status, let path): "The Mac returned HTTP \(status) for \(path)."
+        case .healthTimeout: "The Mac did not respond. Check its address and local network access."
+        }
+    }
 }
 
 nonisolated struct RoundArchive: Codable, Sendable, Identifiable {
@@ -43,7 +51,7 @@ nonisolated struct RetireConfirmation: Encodable, Sendable {
     let word: String
 }
 
-actor BackendClient {
+actor BackendClient: OSTBackend {
     private let baseURL: URL
     private let wsURL: URL
     private let token: String
@@ -53,8 +61,15 @@ actor BackendClient {
     private let encoder: JSONEncoder
 
     init(port: Int, token: String) {
-        self.baseURL = URL(string: "http://127.0.0.1:\(port)")!
-        self.wsURL = URL(string: "ws://127.0.0.1:\(port)/ws")!
+        self.init(baseURL: URL(string: "http://127.0.0.1:\(port)")!, token: token)
+    }
+
+    init(baseURL: URL, token: String) {
+        self.baseURL = baseURL
+        var ws = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)!
+        ws.scheme = baseURL.scheme == "https" ? "wss" : "ws"
+        ws.path = "/ws"
+        self.wsURL = ws.url!
         self.token = token
         let config = URLSessionConfiguration.ephemeral
         config.timeoutIntervalForRequest = 30
@@ -106,6 +121,18 @@ actor BackendClient {
 
     // MARK: - Health
 
+    func checkHealth() async throws {
+        _ = try await run(request("GET", "/health"))
+    }
+
+    func syncSnapshot() async throws -> Data {
+        try await run(request("GET", "/sync/state"))
+    }
+
+    func applySyncSnapshot(_ snapshot: Data) async throws {
+        _ = try await run(request("PUT", "/sync/state", body: snapshot))
+    }
+
     func waitUntilHealthy(timeout: Duration = .seconds(10)) async throws {
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
@@ -151,6 +178,10 @@ actor BackendClient {
 
     func setCover(ostID: Int, imageURL: String) async throws -> Ost {
         try await send("POST", "/osts/\(ostID)/cover", body: CoverSet(imageUrl: imageURL))
+    }
+
+    func cover(ostID: Int) async throws -> Data {
+        try await run(request("GET", "/covers/\(ostID)"))
     }
 
     func ratings(raterID: Int? = nil) async throws -> [Rating] {
@@ -260,7 +291,21 @@ actor BackendClient {
     }
 
     func play(ostID: Int) async throws -> PlaybackState {
-        try await send("POST", "/player/play", body: ["ost_id": ostID])
+        var state: PlaybackState = try await send("POST", "/player/play", body: ["ost_id": ostID])
+        // The Mac backend's range relay is local to the host. Its default
+        // loopback URL would resolve to the iPhone itself, so route the relay
+        // through the same paired LAN address used for API requests.
+        #if os(iOS)
+        if let stream = state.streamUrl, var parts = URLComponents(string: stream),
+           parts.host == "127.0.0.1" || parts.host == "localhost" {
+            parts.host = baseURL.host
+            parts.port = baseURL.port
+            if let routed = parts.url?.absoluteString {
+                state = PlaybackState(status: state.status, ostId: state.ostId, streamUrl: routed, watchUrl: state.watchUrl, position: state.position)
+            }
+        }
+        #endif
+        return state
     }
 
     func pause() async throws -> PlaybackState { try await send("POST", "/player/pause") }
@@ -275,7 +320,7 @@ actor BackendClient {
 
     /// Connect to /ws and stream decoded envelope events until the socket
     /// drops. Reconnection policy belongs to the caller (the store).
-    func events() -> AsyncThrowingStream<WSEvent, Error> {
+    func events() async -> AsyncThrowingStream<WSEvent, Error> {
         var req = URLRequest(url: wsURL)
         req.setValue(token, forHTTPHeaderField: "X-OST-Token")
         let task = wsSession.webSocketTask(with: req)

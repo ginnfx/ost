@@ -1,6 +1,10 @@
 // Settings embedded in the main app navigation.
 
 import SwiftUI
+#if os(macOS)
+import AppKit
+import SystemConfiguration
+#endif
 
 struct SettingsView: View {
     @AppStorage(Theme.presetKey) private var presetID = "emerald"
@@ -12,6 +16,9 @@ struct SettingsView: View {
     @AppStorage(SoundKit.mutedDefaultsKey) private var uiSoundsMuted = false
     @AppStorage(AttractModeController.enabledKey) private var attractEnabled = true
     @AppStorage(AttractModeController.idleSecondsKey) private var attractIdle = AttractModeController.defaultIdleSeconds
+    #if os(macOS)
+    @AppStorage("ost.lan.enabled") private var lanEnabled = false
+    #endif
 
     // Working color for the custom picker; seeded from whatever accent is live.
     @State private var customColor = Theme.accent
@@ -19,13 +26,23 @@ struct SettingsView: View {
     @State private var retireChallenge: RetireChallenge?
     @State private var typedWord = ""
     @State private var roundActionInFlight = false
+    @State private var showingBackupExporter = false
+    @State private var showingBackupImporter = false
+    @State private var backupDocument = OSTBackupDocument(data: Data())
+    @State private var backupMessage: String?
+    @State private var backupError: String?
+    @State private var pendingBackupSnapshot: Data?
+    @State private var showingRestoreConfirmation = false
 
     private var usingCustom: Bool { !customAccentHex.isEmpty }
 
     var body: some View {
         Form {
+            CloudAccountSection()
+            backupSection
             appearance
             competition
+            localNetwork
             roundManagement
             effects
             screensaver
@@ -34,9 +51,64 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .tint(Theme.accent)
         .frame(maxWidth: 760, maxHeight: .infinity)
+        #if os(iOS)
+        .padding(.horizontal, 0)
+        #else
         .padding(24)
+        #endif
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .task { roundStatus = await AppStore.shared.roundStatus() }
+        .fileExporter(isPresented: $showingBackupExporter, document: backupDocument,
+                      contentType: .json, defaultFilename: "OSTTracker-Backup") { result in
+            switch result {
+            case .success: backupMessage = "Backup saved. Keep it somewhere outside this app, such as Files or iCloud Drive."
+            case .failure(let error): backupError = error.localizedDescription
+            }
+        }
+        .fileImporter(isPresented: $showingBackupImporter, allowedContentTypes: [.json],
+                      allowsMultipleSelection: false) { result in
+            Task {
+                do {
+                    let urls = try result.get()
+                    guard let url = urls.first else { return }
+                    let accessed = url.startAccessingSecurityScopedResource()
+                    defer { if accessed { url.stopAccessingSecurityScopedResource() } }
+                    let data = try Data(contentsOf: url)
+                    let portable = try JSONDecoder().decode(PortableBackup.self, from: data)
+                    pendingBackupSnapshot = try portable.validatedSnapshot()
+                    showingRestoreConfirmation = true
+                } catch {
+                    backupError = error.localizedDescription
+                }
+            }
+        }
+        .alert("Backup", isPresented: Binding(get: { backupMessage != nil }, set: { if !$0 { backupMessage = nil } })) {
+            Button("OK") { backupMessage = nil }
+        } message: { Text(backupMessage ?? "") }
+        .alert("Couldn’t use backup", isPresented: Binding(get: { backupError != nil }, set: { if !$0 { backupError = nil } })) {
+            Button("OK") { backupError = nil }
+        } message: { Text(backupError ?? "") }
+        .confirmationDialog("Restore this backup?", isPresented: $showingRestoreConfirmation,
+                            titleVisibility: .visible) {
+            Button("Replace app data and sync", role: .destructive) {
+                guard let snapshot = pendingBackupSnapshot else { return }
+                Task {
+                    do {
+                        try await AppStore.shared.restoreBackupSnapshot(snapshot)
+                        backupMessage = "Backup restored. OST Tracker is syncing the restored data to your account."
+                    } catch { backupError = error.localizedDescription }
+                    pendingBackupSnapshot = nil
+                }
+            }
+            Button("Cancel", role: .cancel) { pendingBackupSnapshot = nil }
+        } message: {
+            Text("This replaces the data on this device and then syncs it to Supabase and your other devices.")
+        }
+        #if os(macOS)
+        .onChange(of: lanEnabled) { _, _ in
+            Task { await AppStore.shared.reconfigureLAN() }
+        }
+        #endif
         .sheet(item: $retireChallenge) { challenge in
             VStack(alignment: .leading, spacing: 16) {
                 Text("Retire this ranking?").font(.title2.bold())
@@ -70,13 +142,97 @@ struct SettingsView: View {
         }
     }
 
+    private var backupSection: some View {
+        Section("Data & recovery") {
+            Text("Supabase keeps your devices in sync. A backup file saves your OSTs, ratings, notes, and history to Files. A free Xcode install may stop opening after 7 days, but it doesn’t erase saved app data. Reinstall the signed app to resume; cover art syncs back from Supabase when you’re signed in.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Button {
+                Task {
+                    do {
+                        let snapshot = try await AppStore.shared.makeBackupSnapshot()
+                        let portable = PortableBackup(snapshot: snapshot)
+                        let encoder = JSONEncoder()
+                        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                        backupDocument = OSTBackupDocument(data: try encoder.encode(portable))
+                        showingBackupExporter = true
+                    } catch { backupError = error.localizedDescription }
+                }
+            } label: {
+                Label("Save backup to Files…", systemImage: "square.and.arrow.down")
+            }
+            Button { showingBackupImporter = true } label: {
+                Label("Restore from backup…", systemImage: "arrow.counterclockwise")
+            }
+            .foregroundStyle(.orange)
+        }
+    }
+
+    @ViewBuilder
+    private func settingsGroup<Content: View>(
+        _ title: String,
+        @ViewBuilder content: @escaping () -> Content
+    ) -> some View {
+        #if os(iOS)
+        DisclosureGroup(title, content: content)
+        #else
+        Section(title, content: content)
+        #endif
+    }
+
     // MARK: Competition
+
+    @ViewBuilder
+    private var localNetwork: some View {
+        #if os(macOS)
+        Section("iPhone connection") {
+            Toggle("Allow iPhone access on this local network", isOn: $lanEnabled)
+                .disabled(AppStore.shared.isReconfiguringLAN)
+            if lanEnabled, let code = AppStore.shared.lanPairingCode {
+                let host = (SCDynamicStoreCopyLocalHostName(nil) as String?) ?? ProcessInfo.processInfo.hostName
+                let localHost = host.hasSuffix(".local") ? host : "\(host).local"
+                let address = "http://\(localHost):8765"
+                LabeledContent("Mac address", value: address)
+                LabeledContent("Pairing code", value: code)
+                    .textSelection(.enabled)
+                Button("Copy connection") {
+                    var link = URLComponents()
+                    link.scheme = "osttracker"
+                    link.host = "pair"
+                    link.queryItems = [
+                        URLQueryItem(name: "address", value: address),
+                        URLQueryItem(name: "token", value: code),
+                    ]
+                    if let text = link.string {
+                        NSPasteboard.general.clearContents()
+                        NSPasteboard.general.setString(text, forType: .string)
+                    }
+                }
+                Text("Paste the connection on your iPhone. Keep this Mac and the app running while connected.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } else if lanEnabled {
+                Text("Starting local network access…")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        #else
+        Section("Mac connection") {
+            if let address = UserDefaults.standard.string(forKey: LANConnection.addressKey) {
+                LabeledContent("Connected to", value: address)
+            }
+            Button("Reconnect to Mac") { Task { await AppStore.shared.start() } }
+            Button("Forget this Mac") { AppStore.shared.disconnectFromMac() }
+        }
+        #endif
+    }
 
     /// The one server-backed preference here: the elimination threshold lives in
     /// Python's app_settings (it changes competition results), so this reads and
     /// writes the store rather than UserDefaults.
     private var competition: some View {
-        Section("Competition") {
+        settingsGroup("Competition") {
             Stepper(value: thresholdBinding, in: 1...20) {
                 LabeledContent("Eliminate at", value: "\(threshold) OSTs out")
             }
@@ -96,7 +252,7 @@ struct SettingsView: View {
     }
 
     private var roundManagement: some View {
-        Section("Rankings") {
+        settingsGroup("Rankings") {
             LabeledContent("Current ranking", value: "\(roundStatus?.currentName ?? "None") · \(roundStatus?.activeOstCount ?? 0) OSTs")
             Button("Retire current ranking…") {
                 Task {
@@ -132,7 +288,7 @@ struct SettingsView: View {
     // MARK: Appearance
 
     private var appearance: some View {
-        Section("Appearance") {
+        settingsGroup("Appearance") {
             Picker("Motion", selection: $motionMode) {
                 ForEach(MotionMode.allCases) { mode in
                     Text(mode.title).tag(mode.rawValue)
@@ -189,7 +345,7 @@ struct SettingsView: View {
     // MARK: Effects
 
     private var effects: some View {
-        Section("Effects") {
+        settingsGroup("Visual effects") {
             Toggle("Show player visualizer", isOn: $visualizerEnabled)
             Toggle("Music-reactive effects", isOn: $fxEnabled)
             Picker("Spectrum intensity", selection: $fxIntensity) {
@@ -205,7 +361,7 @@ struct SettingsView: View {
     // MARK: Screensaver
 
     private var screensaver: some View {
-        Section("Screensaver") {
+        settingsGroup("Screensaver") {
             Toggle("Idle attract mode", isOn: $attractEnabled)
             VStack(alignment: .leading, spacing: 4) {
                 LabeledContent("Idle timeout", value: idleLabel)
@@ -223,7 +379,7 @@ struct SettingsView: View {
     // MARK: Sound
 
     private var sound: some View {
-        Section("Sound") {
+        settingsGroup("Sound") {
             Toggle("Mute UI sounds", isOn: $uiSoundsMuted)
         }
     }

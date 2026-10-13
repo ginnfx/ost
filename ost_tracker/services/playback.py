@@ -18,7 +18,9 @@ until yt-dlp ships a fix. If in-app playback stops working, update it
 from __future__ import annotations
 
 import shutil
+import json
 import subprocess
+from dataclasses import dataclass
 from typing import Optional
 
 _RESOLVE_TIMEOUT_S = 25
@@ -32,7 +34,23 @@ _YTDLP_FORMAT = "bestaudio[ext=m4a]/bestaudio[acodec^=mp4a]/bestaudio/best"
 _YTDLP_PLAYER_CLIENTS = ["default", "android", "tv"]
 
 
-def _resolve_via_module(link: str) -> Optional[str]:
+@dataclass(frozen=True)
+class ResolvedStream:
+    url: str
+    headers: dict[str, str]
+
+
+def _from_info(info: Optional[dict]) -> Optional[ResolvedStream]:
+    if info and info.get("entries"):
+        info = next((entry for entry in info["entries"] if entry), None)
+    if not info or not info.get("url"):
+        return None
+    raw_headers = info.get("http_headers") or {}
+    headers = {str(key): str(value) for key, value in raw_headers.items()}
+    return ResolvedStream(str(info["url"]), headers)
+
+
+def _resolve_via_module(link: str) -> Optional[ResolvedStream]:
     try:
         import yt_dlp
     except ImportError:
@@ -47,13 +65,10 @@ def _resolve_via_module(link: str) -> Optional[str]:
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(link, download=False)
-    if info and info.get("entries"):  # playlist page — take the first entry
-        info = next((e for e in info["entries"] if e), None)
-    url = (info or {}).get("url")
-    return url or None
+    return _from_info(info)
 
 
-def _resolve_via_cli(link: str) -> Optional[str]:
+def _resolve_via_cli(link: str) -> Optional[ResolvedStream]:
     binary = shutil.which("yt-dlp")
     if not binary:
         return None
@@ -61,7 +76,7 @@ def _resolve_via_cli(link: str) -> Optional[str]:
         [
             binary, "-f", _YTDLP_FORMAT, "--no-playlist",
             "--extractor-args", f"youtube:player_client={','.join(_YTDLP_PLAYER_CLIENTS)}",
-            "-g", link,
+            "--dump-single-json", link,
         ],
         capture_output=True,
         text=True,
@@ -69,24 +84,32 @@ def _resolve_via_cli(link: str) -> Optional[str]:
     )
     if result.returncode != 0:
         return None
-    first_line = result.stdout.strip().splitlines()
-    return first_line[0] if first_line else None
+    try:
+        return _from_info(json.loads(result.stdout))
+    except (ValueError, TypeError):
+        return None
 
 
-def resolve_stream_url(link: Optional[str]) -> Optional[str]:
-    """A playable stream URL for ``link``, or None when it can't be resolved
-    (caller falls back to opening the link in the browser)."""
+def resolve_stream(link: Optional[str]) -> Optional[ResolvedStream]:
+    """Return media URL and the request headers required by its host."""
     if not link or not link.strip():
         return None
     link = link.strip()
     for resolver in (_resolve_via_module, _resolve_via_cli):
         try:
-            url = resolver(link)
+            media = resolver(link)
         except Exception:  # yt-dlp raises many library-specific types; all mean "miss"
-            url = None
-        if url:
-            return url
+            media = None
+        if media:
+            return media
     return None
+
+
+def resolve_stream_url(link: Optional[str]) -> Optional[str]:
+    """A playable stream URL for ``link``, or None when it can't be resolved
+    (caller falls back to opening the link in the browser)."""
+    media = resolve_stream(link)
+    return media.url if media else None
 
 
 def format_time(ms: int) -> str:

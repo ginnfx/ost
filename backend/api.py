@@ -35,7 +35,7 @@ import httpx
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if REPO_ROOT not in sys.path:
@@ -49,11 +49,12 @@ if _writable_site and os.path.isdir(_writable_site):
     sys.path.insert(0, _writable_site)
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile, WebSocket, WebSocketDisconnect
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from starlette.background import BackgroundTask
 
 from ost_tracker.db import history_repo, migrations, notes_repo, ost_repo, people_repo, rating_repo, rounds_repo, settings_repo
+from ost_tracker.db.connection import get_db
 from ost_tracker.db.models import HistoryEntry, Note, Ost, OstStats, Person, Rating
 from ost_tracker.services import batches as batches_service
 from ost_tracker.services import coverart
@@ -61,9 +62,32 @@ from ost_tracker.services import catalog_search
 from ost_tracker.services import elimination as elimination_service
 from ost_tracker.services import portable
 from ost_tracker.services.link_resolver import resolve_playback
+from ost_tracker.services import playback_cache
+from ost_tracker import config as app_config
 
-TOKEN = os.environ.get("OST_API_TOKEN") or secrets.token_hex(16)
+LAN_ENABLED = os.environ.get("OST_LAN_ENABLED") == "1"
+LAN_PORT = 8765
+
+
+def _lan_token() -> str:
+    """Keep the pairing secret stable across Mac app launches and private to the user."""
+    path = app_config.app_support_dir() / "lan-token"
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError:
+        pass
+    else:
+        with os.fdopen(fd, "w") as output:
+            output.write(secrets.token_hex(32))
+    token = path.read_text(encoding="ascii").strip()
+    if len(token) != 64 or any(c not in "0123456789abcdef" for c in token):
+        raise RuntimeError(f"Invalid LAN pairing token at {path}")
+    return token
+
+
+TOKEN = _lan_token() if LAN_ENABLED else (os.environ.get("OST_API_TOKEN") or secrets.token_hex(16))
 _bound_port: Optional[int] = None  # set by __main__ before uvicorn runs
+logger = logging.getLogger("ost_tracker.playback")
 
 
 # --- wire models (mirror /shared/CONTRACT.md exactly) ------------------------
@@ -511,6 +535,17 @@ def _resolve_worker(ost: Ost, play: bool) -> None:
     resolutionProgress phases and (when ``play``) the final playbackState."""
     _resolving.ost_id = ost.id
     try:
+        if play:
+            cached_audio = playback_cache.cached_audio_url(ost)
+            if cached_audio:
+                _emit_phase(ost.id, "ready")
+                _set_player(PlaybackState(
+                    status="playing", ost_id=ost.id,
+                    stream_url=cached_audio,
+                    watch_url=ost_repo.get_playback_watch_url(ost.id),
+                ))
+                logger.info("started OST %s from local audio cache", ost.id)
+                return
         _emit_phase(ost.id, "externalLink")
         cached = ost_repo.get_playback_watch_url(ost.id)
         result = resolve_playback(ost.title, ost.source, ost.external_link, cached)
@@ -519,10 +554,12 @@ def _resolve_worker(ost: Ost, play: bool) -> None:
         if result.stream_url:
             _emit_phase(ost.id, "ready")
             if play:
+                playable_url = _register_player_stream(result.stream_url, result.stream_headers)
                 _set_player(PlaybackState(
                     status="playing", ost_id=ost.id,
-                    stream_url=result.stream_url, watch_url=result.watch_url,
+                    stream_url=playable_url, watch_url=result.watch_url,
                 ))
+                _spawn(playback_cache.cache_audio, ost, result.watch_url or result.fallback_link)
         else:
             _emit_phase(ost.id, "failed")
             if play:
@@ -536,6 +573,20 @@ def _resolve_worker(ost: Ost, play: bool) -> None:
 
 _player = PlaybackState(status="idle")
 _player_lock = threading.Lock()
+_player_stream_sources: dict[str, tuple[str, dict[str, str]]] = {}
+_player_stream_sources_lock = threading.Lock()
+
+
+def _register_player_stream(url: str, headers: Optional[dict[str, str]]) -> str:
+    """Expose yt-dlp media through localhost so its required headers are kept."""
+    if _bound_port is None:
+        return url
+    stream_id = secrets.token_urlsafe(18)
+    with _player_stream_sources_lock:
+        if len(_player_stream_sources) >= 128:
+            _player_stream_sources.pop(next(iter(_player_stream_sources)))
+        _player_stream_sources[stream_id] = (url, dict(headers or {}))
+    return f"http://127.0.0.1:{_bound_port}/player/audio/{stream_id}"
 
 
 def _set_player(state: PlaybackState) -> None:
@@ -615,7 +666,11 @@ app = FastAPI(title="OST Tracker sidecar", lifespan=_lifespan)
 
 @app.middleware("http")
 async def _require_token(request: Request, call_next):
-    if request.headers.get("X-OST-Token") != TOKEN:
+    # AVPlayer cannot attach the sidecar auth header. Audio URLs include a
+    # high-entropy per-play token, so only that endpoint is exempt.
+    if request.url.path.startswith("/player/audio/"):
+        return await call_next(request)
+    if not secrets.compare_digest(request.headers.get("X-OST-Token") or "", TOKEN):
         return JSONResponse({"detail": "invalid token"}, status_code=401)
     return await call_next(request)
 
@@ -628,6 +683,131 @@ async def _value_error(_request: Request, exc: ValueError):
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+_SYNC_TABLES = {
+    "people": "id, name",
+    "osts": "id, title, source, submitter_id, cover_accent_hex, external_link, playback_watch_url, created_at",
+    "ratings": "id, ost_id, rater_id, score, updated_at",
+    "notes": "id, title, note, source, artist, external_link, created_at",
+    "ost_history": "id, title, source, batch_label, sender, created_at",
+    "app_settings": "key, value",
+    "retired_rounds": "id, retired_at, ost_count, payload, name, restored_at",
+}
+
+
+def _sync_snapshot() -> dict[str, Any]:
+    db = get_db()
+    tables = {
+        name: [dict(row) for row in db.query(f"SELECT {columns} FROM {name}")]
+        for name, columns in _SYNC_TABLES.items()
+    }
+    # Retired-round payloads contain full OST rows, including local cover
+    # paths. Keep those paths on each device just like active OST artwork.
+    for archive in tables["retired_rounds"]:
+        archive["payload"] = _portable_round_payload(archive.get("payload"))
+    return {
+        "version": 1,
+        "tables": tables,
+    }
+
+
+def _portable_round_payload(raw: Any) -> str | None:
+    if raw is None:
+        return None
+    try:
+        payload = json.loads(raw) if isinstance(raw, str) else raw
+        for ost in payload.get("osts", []):
+            if isinstance(ost, dict):
+                ost.pop("cover_image_path", None)
+        return json.dumps(payload, separators=(",", ":"), sort_keys=True)
+    except (TypeError, ValueError, AttributeError):
+        return raw if isinstance(raw, str) else json.dumps(raw, separators=(",", ":"), sort_keys=True)
+
+
+@app.get("/sync/state")
+def get_sync_state() -> dict[str, Any]:
+    """Export portable competition data for the signed-in Supabase account."""
+    return _sync_snapshot()
+
+
+@app.put("/sync/state")
+def put_sync_state(payload: dict[str, Any]) -> dict[str, str]:
+    """Replace this device's portable data with a validated cloud snapshot."""
+    if payload.get("version") != 1 or not isinstance(payload.get("tables"), dict):
+        raise HTTPException(400, "Unsupported sync snapshot")
+    tables = payload["tables"]
+    if any(not isinstance(tables.get(name), list) for name in _SYNC_TABLES):
+        raise HTTPException(400, "Sync snapshot is missing a data table")
+
+    db = get_db()
+    # Artwork paths are private to each device. Keep any local artwork already
+    # cached for matching OST IDs, and never copy a Mac filesystem path to iOS.
+    cover_paths = {
+        row["id"]: row["cover_image_path"]
+        for row in db.query("SELECT id, cover_image_path FROM osts")
+    }
+    for archive in db.query("SELECT payload FROM retired_rounds"):
+        try:
+            archived_osts = json.loads(archive["payload"]).get("osts", [])
+            cover_paths.update({ost["id"]: ost["cover_image_path"] for ost in archived_osts
+                                if ost.get("id") is not None and ost.get("cover_image_path")})
+        except (TypeError, ValueError, AttributeError):
+            continue
+    columns = {
+        "people": ("id", "name"),
+        "osts": ("id", "title", "source", "submitter_id", "cover_image_path", "cover_accent_hex", "external_link", "playback_watch_url", "created_at"),
+        "ratings": ("id", "ost_id", "rater_id", "score", "updated_at"),
+        "notes": ("id", "title", "note", "source", "artist", "external_link", "created_at"),
+        "ost_history": ("id", "title", "source", "batch_label", "sender", "created_at"),
+        "app_settings": ("key", "value"),
+        "retired_rounds": ("id", "retired_at", "ost_count", "payload", "name", "restored_at"),
+    }
+    with db.transaction() as conn:
+        for table in ("ratings", "osts", "notes", "ost_history", "retired_rounds", "people", "app_settings"):
+            conn.execute(f"DELETE FROM {table}")
+        for table in ("people", "osts", "ratings", "notes", "ost_history", "app_settings", "retired_rounds"):
+            names = columns[table]
+            placeholders = ", ".join("?" for _ in names)
+            statement = f"INSERT INTO {table} ({', '.join(names)}) VALUES ({placeholders})"
+            rows = tables[table]
+            if len(rows) > 20000:
+                raise HTTPException(413, "Sync snapshot is too large")
+            for row in rows:
+                if not isinstance(row, dict):
+                    raise HTTPException(400, "Invalid row in sync snapshot")
+                if table == "osts":
+                    row = {**row, "cover_image_path": cover_paths.get(row.get("id"))}
+                elif table == "retired_rounds" and isinstance(row.get("payload"), str):
+                    try:
+                        archived_payload = json.loads(row["payload"])
+                        for ost in archived_payload.get("osts", []):
+                            if ost.get("id") in cover_paths:
+                                ost["cover_image_path"] = cover_paths[ost["id"]]
+                        row = {**row, "payload": json.dumps(archived_payload, separators=(",", ":"), sort_keys=True)}
+                    except (TypeError, ValueError, AttributeError):
+                        pass
+                try:
+                    values = [
+                        row.get(column).replace("T", " ", 1)
+                        if column.endswith("_at") and isinstance(row.get(column), str) and "T" in row[column]
+                        else row.get(column)
+                        for column in names
+                    ]
+                    conn.execute(statement, values)
+                except Exception as exc:
+                    raise HTTPException(400, f"Invalid {table} row: {exc}") from exc
+    return {"status": "ok"}
+
+
+@app.get("/covers/{ost_id}")
+def get_cover(ost_id: int) -> FileResponse:
+    """Send Mac-cached artwork to a paired iPhone without exposing file paths."""
+    ost = ost_repo.get_ost(ost_id)
+    expected = app_config.covers_dir() / f"cover_{ost_id}.jpg"
+    if not ost or not ost.cover_image_path or Path(ost.cover_image_path) != expected or not expected.is_file():
+        raise HTTPException(404, "Cover not found")
+    return FileResponse(expected, media_type="image/jpeg")
 
 
 # --- people -------------------------------------------------------------------
@@ -987,6 +1167,105 @@ def post_pin_batch(body: BatchPinIn) -> BatchesOut:
 # --- player ---------------------------------------------------------------------
 
 
+@app.api_route("/player/audio/{stream_id}", methods=["GET", "HEAD"])
+async def player_audio(stream_id: str, request: Request):
+    """Range-capable local relay. AVPlayer cannot send yt-dlp's full headers."""
+    with _player_stream_sources_lock:
+        source = _player_stream_sources.get(stream_id)
+    if source is None:
+        raise HTTPException(404, "Audio stream expired. Play the OST again.")
+
+    source_url, source_headers = source
+    headers = dict(source_headers)
+    headers["Accept-Encoding"] = "identity"
+    client_range = None if request.method == "HEAD" else request.headers.get("range")
+    range_start, requested_end = 0, None
+    if client_range:
+        unit, separator, span = client_range.partition("=")
+        start, dash, end = span.partition("-")
+        if not (separator and unit.lower() == "bytes" and dash and start.isdecimal()):
+            raise HTTPException(416, "Unsupported audio byte range.")
+        range_start = int(start)
+        requested_end = int(end) if end.isdecimal() else None
+    # This YouTube CDN URL permits 16 KiB nonzero ranges. Larger continuation
+    # ranges return 403, which makes AVPlayer stop a few seconds into playback.
+    chunk_size = 16_384
+    first_end = min(requested_end, range_start + chunk_size - 1) if requested_end is not None else range_start + chunk_size - 1
+    # YouTube rejects open-ended and very large ranges. Fetch bounded pieces,
+    # then present AVPlayer with the exact range it requested.
+    headers["Range"] = f"bytes={range_start}-{0 if request.method == 'HEAD' else first_end}"
+    for name in ("range", "if-range", "if-modified-since", "if-none-match"):
+        if name != "range" and (value := request.headers.get(name)):
+            headers[name] = value
+
+    client = httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(30, connect=10))
+    try:
+        upstream_request = client.build_request("GET", source_url, headers=headers)
+        upstream = await client.send(upstream_request, stream=True)
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        raise HTTPException(502, "Audio source could not be reached.") from exc
+
+    response_headers = {
+        name: upstream.headers[name]
+        for name in ("content-type", "content-length", "content-range", "accept-ranges", "last-modified", "etag")
+        if name in upstream.headers
+    }
+    content_range = upstream.headers.get("content-range", "")
+    try:
+        delivered_span, total_text = content_range.removeprefix("bytes ").split("/", 1)
+        delivered_start, delivered_end = map(int, delivered_span.split("-", 1))
+        total_size = int(total_text)
+    except (ValueError, TypeError):
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(502, "Audio source returned invalid range metadata.")
+
+    if request.method == "HEAD":
+        await upstream.aclose()
+        await client.aclose()
+        response_headers.pop("content-range", None)
+        response_headers["content-length"] = str(total_size)
+        return Response(status_code=200, headers=response_headers)
+
+    range_end = min(requested_end if requested_end is not None else total_size - 1, total_size - 1)
+    segmented = range_start != delivered_start or range_end != delivered_end
+    if segmented:
+        response_headers["content-length"] = str(range_end - range_start + 1)
+        if client_range:
+            response_headers["content-range"] = f"bytes {range_start}-{range_end}/{total_size}"
+        else:
+            response_headers.pop("content-range", None)
+
+    async def chunks():
+        current = upstream
+        cursor = delivered_end + 1
+        try:
+            while True:
+                async for chunk in current.aiter_raw(64 * 1024):
+                    yield chunk
+                await current.aclose()
+                if cursor > range_end or not segmented:
+                    break
+                next_end = min(cursor + chunk_size - 1, range_end)
+                next_headers = dict(headers)
+                next_headers["Range"] = f"bytes={cursor}-{next_end}"
+                next_request = client.build_request("GET", source_url, headers=next_headers)
+                current = await client.send(next_request, stream=True)
+                if current.status_code != 206:
+                    logger.error("audio relay range failed: HTTP %s", current.status_code)
+                    await current.aclose()
+                    break
+                cursor = next_end + 1
+        finally:
+            await current.aclose()
+
+    return StreamingResponse(
+        chunks(), status_code=upstream.status_code if client_range else 200, headers=response_headers,
+        background=BackgroundTask(client.aclose),
+    )
+
+
 @app.post("/player/play")
 def player_play(body: PlayIn) -> PlaybackState:
     ost = ost_repo.get_ost(body.ost_id)
@@ -1055,7 +1334,7 @@ async def import_portable(bundle: UploadFile = File(...)) -> dict:
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket) -> None:
     supplied = ws.headers.get("X-OST-Token") or ws.query_params.get("token")
-    if supplied != TOKEN:
+    if not secrets.compare_digest(supplied or "", TOKEN):
         await ws.close(code=4401)
         return
     await ws.accept()
@@ -1091,7 +1370,9 @@ def main() -> None:
     global _bound_port
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(("127.0.0.1", int(os.environ.get("OST_API_PORT", 0))))
+    host = "0.0.0.0" if LAN_ENABLED else "127.0.0.1"
+    port = LAN_PORT if LAN_ENABLED else int(os.environ.get("OST_API_PORT", 0))
+    sock.bind((host, port))
     sock.listen(128)
     _bound_port = sock.getsockname()[1]
 

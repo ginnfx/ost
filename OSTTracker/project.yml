@@ -4,6 +4,13 @@ options:
   deploymentTarget:
     macOS: "27.0"
   createIntermediateGroups: true
+packages:
+  Supabase:
+    url: https://github.com/supabase/supabase-swift.git
+    from: 2.0.0
+  YouTubeKit:
+    url: https://github.com/alexeichhorn/YouTubeKit.git
+    from: 0.4.9
 settings:
   base:
     SWIFT_VERSION: "6.2"
@@ -15,12 +22,22 @@ targets:
   OSTTracker:
     type: application
     platform: macOS
+    info:
+      path: MacInfo.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: com.brajanzalta.osttracker
+            CFBundleURLSchemes:
+              - osttracker
     sources:
       - Sources
       - Assets.xcassets
       - path: Fonts
         type: folder
         buildPhase: resources
+    dependencies:
+      - package: Supabase
+        product: Supabase
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -43,26 +60,33 @@ targets:
     type: application
     platform: iOS
     deploymentTarget: "26.0"
+    info:
+      path: IOSInfo.plist
+      properties:
+        CFBundleURLTypes:
+          - CFBundleURLName: com.brajanzalta.osttracker
+            CFBundleURLSchemes:
+              - osttracker
+        NSLocalNetworkUsageDescription: "Connect to OSTTracker on your Mac to share your competition data."
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
     sources:
-      - Sources
+      - path: Sources
+        excludes:
+          - Sidecar/EmbeddedSidecar.swift
+          - Sidecar/python_shim.c
       - Assets.xcassets
       - path: Fonts
-        type: folder
-        buildPhase: resources
-      - path: ../backend
-        type: folder
-        buildPhase: resources
-      - path: ../ost_tracker
         type: folder
         buildPhase: resources
     dependencies:
       - sdk: AudioToolbox.framework
       - sdk: CoreText.framework
       - sdk: UIKit.framework
-      # BeeWare Python-Apple-support 3.11-b9 — staged by packaging/08_ios_build.sh.
-      # Dynamic framework must be embedded so the dylib is present at runtime.
-      - framework: ../packaging/runtime/ios/Python.xcframework
-        embed: true
+      - package: Supabase
+        product: Supabase
+      - package: YouTubeKit
+        product: YouTubeKit
     settings:
       base:
         GENERATE_INFOPLIST_FILE: YES
@@ -70,17 +94,13 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents: YES
-        INFOPLIST_KEY_UIBackgroundModes: audio
         INFOPLIST_KEY_ATSApplicationFontsPath: "Fonts"
         CODE_SIGN_STYLE: Automatic
-        DEVELOPMENT_TEAM: "5W29Q45NKL"
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "6.2"
         SWIFT_APPROACHABLE_CONCURRENCY: YES
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         ARCHS: arm64
-        "HEADER_SEARCH_PATHS[sdk=iphoneos*]": "$(SRCROOT)/../packaging/runtime/ios/Python.xcframework/ios-arm64/Python.framework/Headers"
-        "HEADER_SEARCH_PATHS[sdk=iphonesimulator*]": "$(SRCROOT)/../packaging/runtime/ios/Python.xcframework/ios-arm64_x86_64-simulator/Python.framework/Headers"
   OSTTrackerTests:
     type: bundle.unit-test
     platform: macOS

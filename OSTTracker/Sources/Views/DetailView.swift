@@ -30,6 +30,7 @@ struct DetailView: View {
         if let entry = entry ?? lastEntry {
             ScrollView {
                 VStack(alignment: .leading, spacing: 22) {
+                    #if os(macOS)
                     HStack {
                         Button { confirmingDelete = true } label: {
                             Image(systemName: "trash")
@@ -47,12 +48,22 @@ struct DetailView: View {
                         .buttonStyle(.plain)
                         .keyboardShortcut(.escape, modifiers: [])
                     }
+                    #endif
                     hero(entry)
                     stats(entry)
                     ratingGrid(entry)
                 }
+                #if os(iOS)
+                .padding(18)
+                #else
                 .padding(24)
+                #endif
             }
+            #if os(iOS)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                detailActions
+            }
+            #endif
             .sheet(isPresented: $showCoverPicker) {
                 CoverPickerView(store: store, ostID: ostID, accent: accent(entry))
             }
@@ -79,10 +90,41 @@ struct DetailView: View {
         }
     }
 
+    #if os(iOS)
+    private var detailActions: some View {
+        HStack {
+            Button { confirmingDelete = true } label: {
+                Label("Delete OST", systemImage: "trash")
+                    .font(.ostBody(13, weight: .semibold))
+                    .foregroundStyle(Theme.rust)
+                    .frame(minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            Spacer()
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .frame(width: 44, height: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Close OST details")
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 4)
+        .background(Theme.bgRaised)
+        .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
+    }
+    #endif
+
     @ViewBuilder private func hero(_ entry: RankEntry) -> some View {
         #if os(iOS)
         VStack(alignment: .leading, spacing: 14) {
-            heroCover(entry).frame(maxWidth: .infinity).frame(height: 200)
+            heroCover(entry)
+                .aspectRatio(1, contentMode: .fit)
+                .frame(maxWidth: 280)
+                .frame(maxWidth: .infinity)
             heroMeta(entry)
         }
         #else
@@ -156,6 +198,15 @@ struct DetailView: View {
     // Stat tiles share the same glass treatment as the rating boxes below so
     // every raised surface on the detail panel reads as one material.
     private func stats(_ entry: RankEntry) -> some View {
+        #if os(iOS)
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
+            stat("AVG", entry.average.map { String(format: "%.2f", $0) } ?? "n/a", accent(entry))
+            stat("MIN", entry.minimum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
+            stat("MAX", entry.maximum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
+            stat("σ", entry.stddev.map { String(format: "%.2f", $0) } ?? "n/a", Theme.textDim)
+            stat("VOTES", "\(entry.ratingCount)", Theme.textDim)
+        }
+        #else
         HStack(spacing: 14) {
             stat("AVG", entry.average.map { String(format: "%.2f", $0) } ?? "n/a", accent(entry))
             stat("MIN", entry.minimum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
@@ -163,6 +214,7 @@ struct DetailView: View {
             stat("σ", entry.stddev.map { String(format: "%.2f", $0) } ?? "n/a", Theme.textDim)
             stat("VOTES", "\(entry.ratingCount)", Theme.textDim)
         }
+        #endif
     }
 
     private func stat(_ label: String, _ value: String, _ color: Color) -> some View {
