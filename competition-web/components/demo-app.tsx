@@ -26,10 +26,19 @@ import {
   WifiHigh as Wifi,
   WifiX as WifiOff,
   X,
+  ArrowsOut,
+  SpeakerHigh,
+  SpeakerSlash,
 } from "@phosphor-icons/react/ssr";
 import type { DemoState, Entry, RoundPhase } from "@/lib/domain";
 import { demoData } from "@/lib/demo/mock-api";
-import { SoundtrackCard, RatingScale } from "./ui";
+import { SoundtrackCard, RatingScale, CompactPlayer } from "./ui";
+import { DemoIntro } from "./demo/intro";
+import {
+  PlayerArtwork,
+  RevealArtwork,
+  use3DCapability,
+} from "./demo/scene-viewport";
 
 const selfId = "person-1";
 const delay = (ms: number) =>
@@ -51,15 +60,30 @@ export function DemoApp() {
   const [title, setTitle] = useState("");
   const [franchise, setFranchise] = useState("");
   const [playing, setPlaying] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const [soundEffects, setSoundEffects] = useState(false);
+  const [activeEntry, setActiveEntry] = useState<Entry | null>(null);
+  const [nowPlaying, setNowPlaying] = useState<Entry | null>(null);
   const [showTour, setShowTour] = useState(false);
   const [hold, setHold] = useState(false);
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playerRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const pendingRef = useRef<DemoState | null>(null);
+  const previousScreenRef = useRef<string | null>(null);
 
   useEffect(() => {
+    setEntered(window.sessionStorage.getItem("ost-demo-entered") === "yes");
     void demoData.read().then(setState);
   }, []);
+  useEffect(() => {
+    if (!state) return;
+    const screen = `${state.role}:${state.phase}:${state.batch}:${state.hostTab}`;
+    if (previousScreenRef.current && previousScreenRef.current !== screen) {
+      requestAnimationFrame(() => window.scrollTo(0, 0));
+    }
+    previousScreenRef.current = screen;
+  }, [state?.role, state?.phase, state?.batch, state?.hostTab]);
   useEffect(() => {
     const onOffline = () => {
       if (state)
@@ -143,6 +167,14 @@ export function DemoApp() {
     const AudioContextCtor = window.AudioContext;
     const context = playerRef.current ?? new AudioContextCtor();
     playerRef.current = context;
+    if (entry) setNowPlaying(entry);
+    let analyser = analyserRef.current;
+    if (!analyser) {
+      analyser = context.createAnalyser();
+      analyser.fftSize = 128;
+      analyser.connect(context.destination);
+      analyserRef.current = analyser;
+    }
     if (context.state === "suspended") void context.resume();
     const now = context.currentTime;
     const seedText = entry?.id ?? entry?.title ?? "first-light-demo";
@@ -182,12 +214,33 @@ export function DemoApp() {
       gain.gain.setValueAtTime(0.0001, at);
       gain.gain.exponentialRampToValueAtTime(0.045, at + 0.025);
       gain.gain.exponentialRampToValueAtTime(0.0001, at + tempo * 0.9);
-      oscillator.connect(gain).connect(context.destination);
+      oscillator.connect(gain).connect(analyser);
       oscillator.start(at);
       oscillator.stop(at + tempo);
     });
     setPlaying(true);
     window.setTimeout(() => setPlaying(false), melody.length * tempo * 1000);
+  };
+
+  const confirmSound = () => {
+    if (!soundEffects) return;
+    const context = playerRef.current ?? new window.AudioContext();
+    playerRef.current = context;
+    if (context.state === "suspended") void context.resume();
+    const notes = [523.25, 659.25, 783.99];
+    notes.forEach((frequency, i) => {
+      const at = context.currentTime + i * 0.075;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.055, at + 0.012);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.16);
+      oscillator.connect(gain).connect(context.destination);
+      oscillator.start(at);
+      oscillator.stop(at + 0.17);
+    });
   };
 
   const reset = async () => {
@@ -255,7 +308,9 @@ export function DemoApp() {
         p.id === selfId ? { ...p, finalized: finalized.length } : p,
       ),
     };
+    confirmSound();
     save(next);
+    window.scrollTo(0, 0);
   };
   const playEntry = (entry: Entry) => {
     if (entry.own && !entry.opened)
@@ -443,6 +498,19 @@ export function DemoApp() {
         <span>Loading demo…</span>
       </main>
     );
+  if (!entered)
+    return (
+      <DemoIntro
+        samples={state.entries.slice(0, 5)}
+        soundEffects={soundEffects}
+        onSoundEffects={() => setSoundEffects((value) => !value)}
+        onPreview={(entry) => startTone(entry)}
+        onEnter={() => {
+          window.sessionStorage.setItem("ost-demo-entered", "yes");
+          setEntered(true);
+        }}
+      />
+    );
   const myProgress = state.finalized.length;
 
   return (
@@ -467,6 +535,18 @@ export function DemoApp() {
           <h1>Glass Harbor Trial</h1>
         </div>
         <div className="demo-top-actions">
+          <button
+            className={`quiet-button sound-toggle${soundEffects ? " sound-on" : ""}`}
+            onClick={() => setSoundEffects((value) => !value)}
+            aria-pressed={soundEffects}
+            aria-label={`Sound effects ${soundEffects ? "on" : "off"}`}
+          >
+            {soundEffects ? (
+              <SpeakerHigh size={17} />
+            ) : (
+              <SpeakerSlash size={17} />
+            )}
+          </button>
           <button
             className="quiet-button"
             onClick={() => {
@@ -565,7 +645,11 @@ export function DemoApp() {
         </div>
       )}
       {state.toast && (
-        <div role="status" aria-live="polite" className="demo-toast">
+        <div
+          role="status"
+          aria-live="polite"
+          className={`demo-toast${state.toast.includes("Batch ") && state.toast.includes("finalized") ? " batch-celebration" : ""}`}
+        >
           {state.online ? <BadgeCheck size={16} /> : <WifiOff size={16} />}
           <span>{state.toast}</span>
           <button
@@ -634,6 +718,10 @@ export function DemoApp() {
               entries={listeningEntries}
               onRate={rate}
               onPlay={playEntry}
+              onOpenPlayer={(entry) => {
+                setActiveEntry(entry);
+                startTone(entry);
+              }}
               playing={playing}
               onFinalize={finishBatch}
             />
@@ -659,25 +747,38 @@ export function DemoApp() {
       {state.role === "participant" && (
         <ParticipantTabBar
           phase={state.phase}
-          onSelect={(phase) =>
-            patch((s) => ({ ...s, phase, toast: `Demo view: ${phase}.` }))
-          }
+          onSelect={(phase) => {
+            patch((s) => ({ ...s, phase, toast: "" }));
+            window.scrollTo(0, 0);
+          }}
         />
       )}
       <DemoBottomNav
-        onChange={(phase) =>
-          patch((s) => ({ ...s, phase, toast: `Demo time control: ${phase}.` }))
-        }
-        onFastForward={fastForward}
-        onOpenBatch={openNextBatch}
-        onSkipReveals={() =>
+        onChange={(phase) => {
+          patch((s) => ({
+            ...s,
+            phase,
+            toast: "",
+          }));
+          window.scrollTo(0, 0);
+        }}
+        onFastForward={() => {
+          fastForward();
+          window.scrollTo(0, 0);
+        }}
+        onOpenBatch={() => {
+          openNextBatch();
+          window.scrollTo(0, 0);
+        }}
+        onSkipReveals={() => {
           patch((s) => ({
             ...s,
             phase: "reveals",
             revealed: 0,
-            toast: "Ready for reveals.",
-          }))
-        }
+            toast: "",
+          }));
+          window.scrollTo(0, 0);
+        }}
       />
       {showTour && (
         <div
@@ -791,6 +892,33 @@ export function DemoApp() {
             Send feedback on Instagram <ChevronRight size={16} />
           </a>
         </section>
+      )}
+      {nowPlaying && (
+        <CompactPlayer
+          title={nowPlaying.label}
+          playing={playing}
+          onToggle={() => {
+            if (playing) {
+              void playerRef.current?.suspend();
+              setPlaying(false);
+            } else startTone(nowPlaying);
+          }}
+          onExpand={() => setActiveEntry(nowPlaying)}
+        />
+      )}
+      {activeEntry && (
+        <FullPlayer
+          entry={activeEntry}
+          playing={playing}
+          analyser={analyserRef.current}
+          onPlay={() => {
+            if (playing) {
+              void playerRef.current?.suspend();
+              setPlaying(false);
+            } else startTone(activeEntry);
+          }}
+          onClose={() => setActiveEntry(null)}
+        />
       )}
     </main>
   );
@@ -1072,6 +1200,7 @@ function ListeningPanel({
   entries,
   onRate,
   onPlay,
+  onOpenPlayer,
   playing,
   onFinalize,
 }: {
@@ -1079,6 +1208,7 @@ function ListeningPanel({
   entries: Entry[];
   onRate: (e: Entry, n: number) => void;
   onPlay: (e: Entry) => void;
+  onOpenPlayer: (e: Entry) => void;
   playing: boolean;
   onFinalize: () => void;
 }) {
@@ -1129,6 +1259,14 @@ function ListeningPanel({
                 <small>Original synthesized placeholder sound</small>
               </span>
               <AudioLines size={20} />
+            </button>
+            <button
+              className="open-player-button"
+              onClick={() => onOpenPlayer(entry)}
+              aria-label={`Open fullscreen player for ${entry.label}`}
+            >
+              <ArrowsOut size={16} />
+              Full player
             </button>
             <RatingScale
               value={
@@ -1198,6 +1336,14 @@ function ParticipantResults({
   onPlay: () => void;
   playing: boolean;
 }) {
+  const [revealEntry, setRevealEntry] = useState<Entry | null>(null);
+  const can3D = use3DCapability();
+  const revealDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!revealEntry || !revealDialog.current) return;
+    revealDialog.current.showModal();
+    return () => revealDialog.current?.close();
+  }, [revealEntry]);
   const published = state.revealed;
   const ranked = [...state.entries].sort((a, b) => a.score - b.score);
   const visible = ranked.slice(0, published);
@@ -1229,6 +1375,21 @@ function ParticipantResults({
       </div>
       {groups.length > 0 && (
         <>
+          {published > 0 && (
+            <div className="latest-reveal">
+              <div>
+                <span className="eyebrow">JUST REVEALED</span>
+                <strong>Place {51 - published}</strong>
+                <span>{ranked[published - 1]?.label}</span>
+              </div>
+              <button
+                className="small-button"
+                onClick={() => setRevealEntry(ranked[published - 1])}
+              >
+                Watch reveal <ChevronRight size={16} />
+              </button>
+            </div>
+          )}
           <h3 className="subsection-title">Revealed results</h3>
           <div className="reveal-groups">
             {groups.map((group, i) => (
@@ -1245,8 +1406,8 @@ function ParticipantResults({
                     <SoundtrackCard
                       key={e.id}
                       rank={50 - (i * 10 + j)}
-                      title={e.label}
-                      franchise="Anonymous"
+                      title={e.title}
+                      franchise={e.franchise}
                       score={e.score.toFixed(1)}
                     />
                   ))}
@@ -1266,7 +1427,112 @@ function ParticipantResults({
           </button>
         </div>
       )}
+      {revealEntry && (
+        <dialog
+          ref={revealDialog}
+          className="player-backdrop reveal-backdrop"
+          aria-labelledby="reveal-title"
+          onCancel={(event) => {
+            event.preventDefault();
+            setRevealEntry(null);
+          }}
+        >
+          <section className="reveal-moment">
+            <button
+              className="close-button"
+              onClick={() => setRevealEntry(null)}
+              aria-label="Close reveal"
+            >
+              <X size={20} />
+            </button>
+            <RevealArtwork
+              entryId={revealEntry.id}
+              rank={ranked.length - ranked.indexOf(revealEntry)}
+              enabled={can3D}
+            />
+            <p className="eyebrow">THE SLEEVE OPENS</p>
+            <h2 id="reveal-title">{revealEntry.title}</h2>
+            <p>{revealEntry.franchise}</p>
+            <div
+              className={`reveal-rank reveal-rank-${ranked.length - ranked.indexOf(revealEntry)}`}
+            >
+              Place{" "}
+              <strong>{ranked.length - ranked.indexOf(revealEntry)}</strong>
+            </div>
+            <p className="muted-small">
+              Average rating {revealEntry.score.toFixed(1)} ·{" "}
+              {revealEntry.ratings} ratings
+            </p>
+          </section>
+        </dialog>
+      )}
     </>
+  );
+}
+
+function FullPlayer({
+  entry,
+  playing,
+  analyser,
+  onPlay,
+  onClose,
+}: {
+  entry: Entry;
+  playing: boolean;
+  analyser: AnalyserNode | null;
+  onPlay: () => void;
+  onClose: () => void;
+}) {
+  const can3D = use3DCapability();
+  const playerDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = playerDialog.current;
+    if (!dialog) return;
+    dialog.showModal();
+    return () => dialog.close();
+  }, []);
+  return (
+    <dialog
+      ref={playerDialog}
+      className="player-backdrop"
+      aria-labelledby="fullscreen-player-title"
+      onCancel={(event) => {
+        event.preventDefault();
+        onClose();
+      }}
+    >
+      <section className="fullscreen-player">
+        <button
+          className="close-button player-close"
+          onClick={onClose}
+          aria-label="Close fullscreen player"
+        >
+          <X size={20} />
+        </button>
+        <div className="fullscreen-record">
+          <PlayerArtwork
+            entryId={entry.id}
+            playing={playing}
+            analyser={analyser}
+            enabled={can3D}
+          />
+        </div>
+        <div className="fullscreen-player-copy">
+          <p className="eyebrow">AUDIO ONLY · {entry.label.toUpperCase()}</p>
+          <h2 id="fullscreen-player-title">Mystery listening</h2>
+          <p>Listen for the mood, the instruments, and the little details.</p>
+          <div className="player-meter" aria-hidden="true">
+            <span className={playing ? "is-playing" : ""} />
+          </div>
+          <button className="button primary" onClick={onPlay}>
+            {playing ? "Pause melody" : "Play melody"}
+          </button>
+          <p className="muted-small">
+            Original generated melody · no soundtrack recording
+          </p>
+        </div>
+      </section>
+    </dialog>
   );
 }
 

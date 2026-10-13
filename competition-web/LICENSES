@@ -4,4 +4,10 @@
 - Icons are rendered as inline SVG components; no external icon fonts or Apple SF Symbols files are included.
 - Home-screen icons `public/icons/icon-192.png` and `icon-512.png`: resized from the repository's OSTTracker app icon (`OSTTracker/Assets.xcassets/AppIcon.appiconset/icon_512x512.png`); OSTTracker project asset, no separate third-party license asserted.
 - Demo sound: generated live with Web Audio oscillators in `components/demo-app.tsx`; original synthesized placeholder, no bundled sound recording.
+- Three.js (`three` 0.186.1), MIT License: https://github.com/mrdoob/three.js/blob/dev/LICENSE
+- React Three Fiber (`@react-three/fiber` 9.8.1), MIT License: https://github.com/pmndrs/react-three-fiber/blob/master/LICENSE
+- Drei (`@react-three/drei` 10.7.9), MIT License: https://github.com/pmndrs/drei/blob/master/LICENSE
+- TypeScript definitions for Three.js (`@types/three` 0.186.0), MIT License: https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/types/three/LICENSE
+- Mystery sleeve artwork, generated in the browser from deterministic shapes and colors; original project-made procedural artwork, no third-party imagery.
+- Demo melodies and optional confirmation chime: generated in the browser with the Web Audio API; original project-made sounds, no third-party audio.
 - Web typography: operating-system system font stack; no font files bundled.

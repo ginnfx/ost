@@ -185,7 +185,12 @@ try {
   run("npm", ["run", "lint"]);
   run("npm", ["test"]);
   run("npm", ["run", "test:e2e:demo-only"]);
-  rmSync(join(root, ".next"), { recursive: true, force: true });
+  rmSync(join(root, ".next"), {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 100,
+  });
   run("npm", ["run", "build"]);
   scanBuildOutput();
 

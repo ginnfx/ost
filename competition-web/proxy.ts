@@ -61,10 +61,14 @@ export function proxy(request: NextRequest) {
   } catch {
     /* Invalid config fails closed to local origin. */
   }
+  const isDemoPage =
+    request.nextUrl.pathname === "/demo" ||
+    request.nextUrl.pathname.startsWith("/demo/");
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
     `style-src 'self' 'nonce-${nonce}'`,
+    ...(isDemoPage ? ["style-src-attr 'unsafe-inline'"] : []),
     "img-src 'self' data: blob:",
     "font-src 'self'",
     `media-src 'self' blob: data: ${supabaseOrigin}`,
@@ -77,11 +81,7 @@ export function proxy(request: NextRequest) {
   ].join("; ");
 
   const requestHeaders = new Headers(request.headers);
-  if (
-    request.nextUrl.pathname === "/demo" ||
-    request.nextUrl.pathname.startsWith("/demo/")
-  )
-    requestHeaders.delete("cookie");
+  if (isDemoPage) requestHeaders.delete("cookie");
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
   const response = NextResponse.next({ request: { headers: requestHeaders } });
@@ -114,7 +114,7 @@ export function proxy(request: NextRequest) {
 function demoCsp(nonce: string) {
   const devEval =
     process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : "";
-  return `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}; style-src 'self' 'nonce-${nonce}'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self' blob:`;
+  return `default-src 'self'; script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${devEval}; style-src 'self' 'nonce-${nonce}'; style-src-attr 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; media-src 'self' blob: data:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; worker-src 'self' blob:`;
 }
 
 function demoHeaders(response: NextResponse, csp = demoCsp("blocked-route")) {
