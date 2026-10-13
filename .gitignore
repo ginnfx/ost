@@ -42,6 +42,7 @@ node_modules/
 playwright-report/
 test-results/
 coverage/
+*.tsbuildinfo
 
 # Reference checkouts + font source download — not part of the project.
 # (GlowEffectKit-main stays tracked: the app links it.)

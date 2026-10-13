@@ -6,6 +6,7 @@
   --text: #F1F2EF;
   --muted: #B8BEBC;
   --accent: #69B58D;
+  --accent-text: #69B58D;
   --gold: #F2B705;
   --pink: #FF3D81;
   --rust: #E8541E;
@@ -23,6 +24,7 @@
   --border: #D9DEDA;
   --text: #1B1F1D;
   --muted: #59625D;
+    --accent-text: #286247;
     color-scheme: light;
   }
 }

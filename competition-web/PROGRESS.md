@@ -10,21 +10,22 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Shared roster card, compact player, fullscreen player/lyrics, and ten-choice rating primitives.
 - [x] Focus, hover, pressed, and disabled button states in the shell and shared primitives.
 - [ ] Loading states and complete interaction states will be audited as real forms ship in later phases.
-- [ ] Validate 320 px and touch targets in Playwright WebKit.
-- [ ] WebKit viewport checks (portrait, landscape, throttled).
+- [x] Validate 320 px and touch targets in Playwright WebKit.
+- [x] WebKit viewport checks at 320 px, iPhone portrait, and landscape with throttled requests.
 - [x] Phase checks: static production build, TypeScript, ESLint, and npm audit (zero findings).
 - [x] Phase checkpoint committed (see git history).
 
 ## Phase 2 — Data interface and isolated demo
-- [ ] Shared domain/data interface and mock adapter.
-- [ ] Demo data: 10 fictional participants, 50 invented OSTs, browser-only generated audio.
-- [ ] Participant submission, simulated upload/processing/confirm/replace.
-- [ ] Waiting/listening, ratings, autosave/finalize/lock, own-entry behavior.
-- [ ] Five reveal groups, live reveal, statistics.
-- [ ] Host console and all stated host actions.
-- [ ] Triggerable failures and time controls; reset; optional tour; end screen.
-- [ ] Isolation test (demo never imports real API), sessionStorage only, noindex, banner, generic OG.
-- [ ] Phase checks and commit.
+- [x] Shared domain/data interface and sessionStorage-backed mock adapter.
+- [x] Demo data: 10 fictional participants, 45 other entries plus 5 visitor submissions, original synthesized browser audio.
+- [x] Participant submission, simulated upload progress/processing/confirm/replace.
+- [x] Waiting/listening, ratings, offline queue, finalize/lock, own-entry automatic 10 after opening.
+- [x] Five reveal groups and published aggregate statistics; live group-by-group publishing.
+- [x] Host console for review, simulated flags, batches, progress, reopen, scoring, participant preview, passkey-gated publication, audit and credentials/recovery.
+- [x] Triggerable failures and time controls; reset; skippable tour; end screen.
+- [x] Isolation test (demo never imports real API), sessionStorage only, noindex, banner, generic OG.
+- [x] Phase checks: typecheck, lint, 3 unit tests, 5 WebKit E2E tests including axe, viewport/throttling, participant and host journeys; production build and zero npm audit findings.
+- [x] Phase checkpoint committed (see git history).
 
 ## Phase 3 — Schema and security foundation
 - [ ] Competition schema/migrations in separate Supabase project config.
