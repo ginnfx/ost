@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { headers } from 'next/headers';
 import './tokens.generated.css';
 import './globals.css';
 
@@ -13,6 +14,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { width: 'device-width', initialScale: 1, viewportFit: 'cover', themeColor: '#17191A' };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Reading the per-request header enables strict CSP nonce handling in Next's SSR.
+  await headers();
   return <html lang="en"><body>{children}</body></html>;
 }

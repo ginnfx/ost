@@ -36,3 +36,4 @@ h1 { margin:0; font-size:clamp(42px, 11vw, 72px); line-height:1.02; letter-spaci
 @media (max-width:600px) { .feature-list { grid-template-columns:1fr; gap:18px; }.feature-list article { align-items:center; }.welcome { padding-top:clamp(54px,13vh,100px); padding-bottom:48px; } }
 @media (max-width:340px) { .page-shell { padding-left:14px; padding-right:14px; }.action-row { align-items:stretch; flex-direction:column; gap:8px; }.button { width:100%; }.text-link { justify-content:center; } }
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { scroll-behavior:auto!important; transition-duration:.01ms!important; animation-duration:.01ms!important; } }
+.information-page { width:min(100%,720px); padding-top:clamp(44px,10vh,88px); }.information-page h1 { font-size:clamp(38px,9vw,58px); }.information-page h2 { margin:34px 0 8px; font-size:20px; }.information-page p:not(.eyebrow) { color:var(--muted); font-size:15px; }

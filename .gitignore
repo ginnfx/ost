@@ -43,6 +43,8 @@ playwright-report/
 test-results/
 coverage/
 *.tsbuildinfo
+competition-web/supabase/.branches/
+competition-web/supabase/.temp/
 
 # Reference checkouts + font source download — not part of the project.
 # (GlowEffectKit-main stays tracked: the app links it.)

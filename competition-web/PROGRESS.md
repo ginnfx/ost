@@ -20,7 +20,7 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Demo data: 10 fictional participants, 45 other entries plus 5 visitor submissions, original synthesized browser audio.
 - [x] Participant submission, simulated upload progress/processing/confirm/replace.
 - [x] Waiting/listening, ratings, offline queue, finalize/lock, own-entry automatic 10 after opening.
-- [x] Five reveal groups and published aggregate statistics; live group-by-group publishing.
+- [x] Five reveal groups and published aggregate statistics; the host now publishes one anonymous soundtrack per passkey-confirmed action, from last place upward.
 - [x] Host console for review, simulated flags, batches, progress, reopen, scoring, participant preview, passkey-gated publication, audit and credentials/recovery.
 - [x] Triggerable failures and time controls; reset; skippable tour; end screen.
 - [x] Isolation test (demo never imports real API), sessionStorage only, noindex, banner, generic OG.
@@ -28,12 +28,13 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Phase checkpoint committed (see git history).
 
 ## Phase 3 — Schema and security foundation
-- [ ] Competition schema/migrations in separate Supabase project config.
-- [ ] Default-deny RLS, host config, append-only audit, invoker views, private functions.
-- [ ] Security headers, dynamic private responses, explicit participant DTOs, generic errors.
-- [ ] Security tests for grants, data boundaries, hidden results, storage and host-only routes.
-- [ ] Start local Supabase and test migrations.
-- [ ] Phase checks and commit.
+- [x] Competition schema/migrations in separate Supabase project config.
+- [x] Default-deny forced RLS, server-only host config table, append-only audit, immutable scoring snapshots, and private authorization functions. There are no SQL views yet.
+- [x] Nonced CSP/security headers, dynamic no-store responses, explicit participant DTO shapes, generic errors, origin validation helper.
+- [x] Security foundation checks for direct grants, metadata spoofing, GraphQL, private storage, host function execution, and immutable records.
+- [x] Start local Supabase and apply/reset migrations; tested using the local stack.
+- [x] Phase checks: migration/security SQL, Vitest, typecheck, lint, production build; WebKit suite running after per-entry reveal adjustment.
+- [x] Phase checkpoint committed after the WebKit run.
 
 ## Phase 4 — Authentication
 - [ ] Invite-only participant auth, one-use expiring invite tokens in URL fragment.
