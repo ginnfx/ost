@@ -138,6 +138,15 @@ export function HostRoundControl({ competitionId }: { competitionId: string }) {
       </p>
       {state.isTrial && <p className="trial-chip">TRIAL ROUND</p>}
       <h2>{state.status.replaceAll("_", " ")}</h2>
+      {state.isTrial && state.status === "draft" && (
+        <button
+          className="button primary"
+          disabled={busy}
+          onClick={() => void action("open_trial")}
+        >
+          Open trial submissions
+        </button>
+      )}
       {state.status === "submissions_open" && (
         <button
           className="button primary"

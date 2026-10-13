@@ -42,6 +42,11 @@ export default async function ParticipantHome() {
               Host security
             </Link>
           )}
+          {isHost && (
+            <Link className="text-link" href="/host/trials">
+              Trial round
+            </Link>
+          )}
           <SignOutButton />
         </div>
       </header>

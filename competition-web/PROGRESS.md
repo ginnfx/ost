@@ -9,7 +9,7 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Step 3: host bootstrap, recovery codes, credential and session management. Implemented the operator-only host bootstrap script and expiring one-use browser registration; ten hashed single-use recovery codes and recovery passkey replacement; host credential list/add/remove with backup-key guard; and database-backed global session revocation. The CLI created a local-only host and the bootstrap options API returned WebAuthn options for its one-time token. Local migration reset, SQL security checks, source-boundary tests, typecheck, lint, 21 unit tests, production build, and 8 demo E2E tests pass. A real authenticator recovery drill remains untested and is required before production.
 - [x] Step 4: submissions, resumable uploads, Storage-connected worker and media validation. The submission form includes AniList lookup, per-round size/duration checks, TUS progress/resume while the tab remains open, processed-audio preview and confirmation/replacement. Host checks show same-round duplicates and prior-round reuse privately, while duration mismatches require audited review. A pending-row Storage RLS policy authorizes only each participant's assigned key. Local verification: fresh DB reset, SQL security assertions, disposable authenticated TUS upload/private read/delete, Docker transcode + silent-input rejection, typecheck, lint, 21 unit tests, and production build. Production scale-to-zero processing orchestration remains unimplemented; current processing requires a long-running Node host with Docker access.
 - [x] Step 5: listening batches, rating sync, immutable scoring snapshot, and real reveal publication. Host lock/start/release/reopen/close/score/group-publish/one-at-a-time reveal actions are server authorized and audited. Participants get anonymous, per-person shuffled batches, automatic own 10s, optimistic rating versions, a sessionStorage offline queue with truthful save state, 4-second rating/result refresh, finalize locks and published entries only. Local disposable two-person/four-entry round exercised the whole database state machine, checks own tens, complete nonempty batches, frozen scores, reveal counts, and final completion. Unit tests, SQL security assertions, lint, typecheck and production build pass. Passkey confirmation is a recent verified user-presence window (5 minutes); physical authenticator and live Safari checks remain outstanding.
-- [ ] Step 6: trial round creation and cleanup.
+- [x] Step 6: trial round creation and cleanup. Local trial uses the standard competition flow with two entries per participant, one batch/group, 24/72-hour deadlines, clear trial labels, invite cap, and exclusion from future OST reuse history. Host cleanup removes the trial media, unused invite identities, and dependent competition rows after confirmation while retaining a deletion audit record. Fresh `supabase db reset`, SQL security assertions, and `npm run workflow:test` passed through create, open, single-active-trial rejection, and delete.
 - [ ] Step 7: full API, Storage and page payload security suite.
 - [ ] Step 8: Mac integration, last, on its own branch.
 
@@ -89,9 +89,10 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [ ] Phase checks and commit.
 
 ## Phase 9 — Trial round
-- [ ] Two entries/person, one batch/group, short deadlines; clearly marked Trial.
-- [ ] Exact same domain paths; excluded history/statistics; confirmed full cleanup.
-- [ ] Phase checks and commit.
+- [x] Two entries/person, one batch/group, short deadlines; clearly marked Trial.
+- [x] Exact same domain paths; excluded from prior-round reuse history; confirmed full cleanup.
+- [x] Phase checks: clean migration reset, SQL security checks, trial lifecycle through the local workflow test.
+- [x] Phase checkpoint committed (see git history).
 
 ## Phase 10 — Mac integration (separate branch)
 - [ ] Implement only on a distinct git branch.
@@ -116,6 +117,6 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [ ] Final report includes open risks and manual steps.
 
 
-## Current work checkpoint (2026-10-13 17:08 CEST)
+## Current work checkpoint (2026-10-13 19:10 CEST)
 
-The current branch contains Auth endpoints, scoring foundations, a Docker media worker, and the requested design/reveal/invite adjustments. The resume scoring change is committed as `78d5b5a`. Local Supabase reset and auth migration validation passed. Host controls, real submissions, listening/reveal, and trial cleanup are not yet complete; demo passkey prompts remain simulated. Do not treat the current app as ready for real competition data.
+The active branch contains host access, private submission processing, the listening/scoring/reveal flow, and a host-managed practice trial. Trial cleanup is implemented with an append-only audit record. The complete security exercise and Mac integration remain. Production worker orchestration and real authenticator verification remain untested; do not use real competition data yet.

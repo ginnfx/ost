@@ -43,3 +43,10 @@ Expected ranking values follow the scoring specification, not observed code outp
 ### Visual audit
 
 The home screen was reduced to its title, plain explanation, and direct actions. The three-icon feature row and “Private” badge were removed. Across the implemented routes, icons serve controls and navigation only; the site uses no decorative gradients, floating shapes, marketing card grid, emoji icons, delayed reveal animations, hosted font files, or bundled SF Symbols. Cards remain only where the OSTTracker roster/listening patterns need item boundaries. Recheck new screens against the brief before adding decoration.
+# Trial round
+
+- Choice: a trial is a normal competition row with `is_trial=true`, configured for two entries per participant, one batch, one reveal group, 24-hour submission deadline, and 72-hour rating deadline. It uses the same submission, listening, rating, scoring, and reveal paths as a regular round.
+- Why: friends can exercise the complete flow without mixing the practice round into prior-round reuse history. Trial data has an explicit host cleanup action that removes storage objects, unused invite identities, and the competition's dependent records; a separate append-only audit event remains.
+- Where: `supabase/migrations/20261013220000_trial_round.sql`, host trial API/routes and `components/host-trial-management.tsx`.
+- Change: adjust the preset in `private.host_create_trial()` and its deadline interval in `private.host_open_trial()`. Keep trial filtering in `private.list_host_submission_reviews()` so trial picks do not become later reuse history.
+- Constraint: at most one non-archived trial exists, and a round can accept invites only while submissions are open and the combined participant plus outstanding invite count is below ten.

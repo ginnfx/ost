@@ -220,7 +220,43 @@ try {
     `select status from private.competitions where id='${competitionId}'`,
   );
   if (finalStatus !== "complete") throw new Error("Reveal did not complete the round.");
-  console.log("Local listening, rating, frozen scoring, and reveal workflow passed.");
+
+  const trialId = asUser(hostId, "select private.host_create_trial()")
+    .split("\n")
+    .at(-1);
+  const trialPreset = psql(
+    `select json_build_object('status',status,'isTrial',is_trial,'entries',(settings->>'entries_per_participant')::int,'batches',(settings->>'batch_count')::int,'groups',(settings->>'reveal_group_count')::int)::text from private.competitions where id='${trialId}'`,
+  );
+  const preset = JSON.parse(trialPreset);
+  if (
+    preset.status !== "draft" ||
+    !preset.isTrial ||
+    preset.entries !== 2 ||
+    preset.batches !== 1 ||
+    preset.groups !== 1
+  )
+    throw new Error("Trial preset did not use the required two/one/one configuration.");
+  asUser(hostId, `select private.host_open_trial('${trialId}')`);
+  const deadlines = psql(
+    `select json_build_object('status',status,'submissionHours',round(extract(epoch from (submission_deadline-now()))/3600),'ratingHours',round(extract(epoch from (rating_deadline-now()))/3600))::text from private.competitions where id='${trialId}'`,
+  );
+  const deadlineValues = JSON.parse(deadlines);
+  if (
+    deadlineValues.status !== "submissions_open" ||
+    deadlineValues.submissionHours < 23 ||
+    deadlineValues.submissionHours > 24 ||
+    deadlineValues.ratingHours < 71 ||
+    deadlineValues.ratingHours > 72
+  )
+    throw new Error("Trial deadline presets were not applied on open.");
+  expectSqlFailure(
+    () => asUser(hostId, "select private.host_create_trial()"),
+    "A trial round already exists",
+  );
+  asUser(hostId, `select private.host_delete_trial('${trialId}')`);
+  if (psql(`select count(*) from private.competitions where id='${trialId}'`) !== "0")
+    throw new Error("Trial cleanup left competition rows behind.");
+  console.log("Local listening, rating, scoring, reveal, and trial lifecycle passed.");
 } finally {
   cleanFixture();
   for (const id of userIds)

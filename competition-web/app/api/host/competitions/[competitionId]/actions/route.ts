@@ -9,6 +9,7 @@ const schema = z
   .object({
     action: z.enum([
       "lock_submissions",
+      "open_trial",
       "start_listening",
       "release_batch",
       "reopen_batch",
@@ -54,6 +55,9 @@ export async function POST(
           await db.query("select private.host_lock_submissions($1)", [
             competitionId,
           ]);
+          break;
+        case "open_trial":
+          await db.query("select private.host_open_trial($1)", [competitionId]);
           break;
         case "start_listening": {
           const query = await db.query(
