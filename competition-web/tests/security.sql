@@ -35,6 +35,9 @@ do $$ declare r record; begin
   if has_function_privilege('authenticated','private.finish_submission_processing(uuid,text,numeric,numeric,boolean)','execute') then raise exception 'authenticated can finish media processing'; end if;
   if has_function_privilege('ost_web_app','private.start_submission_upload(uuid,smallint,text,bigint,text,bigint,numeric,text)','execute') is not true then raise exception 'web role cannot start a participant upload'; end if;
   if has_function_privilege('ost_web_app','private.list_host_submission_reviews()','execute') is not true then raise exception 'web role cannot call host review DTO'; end if;
+  if has_function_privilege('anon','private.media_worker_complete(uuid,text,numeric,numeric,boolean,integer)','execute') then raise exception 'anon can complete worker media jobs'; end if;
+  if has_function_privilege('authenticated','private.media_worker_fail(uuid,text,integer)','execute') then raise exception 'participant can forge a media-worker failure'; end if;
+  if has_function_privilege('ost_web_app','private.media_worker_complete(uuid,text,numeric,numeric,boolean,integer)','execute') is not true then raise exception 'web result callback cannot record media output'; end if;
   if has_function_privilege('anon','private.can_upload_competition_object(text)','execute') then raise exception 'anon can authorize Storage uploads'; end if;
   if has_function_privilege('authenticated','private.can_upload_competition_object(text)','execute') is not true then raise exception 'authenticated cannot check its pending Storage key'; end if;
 end $$;

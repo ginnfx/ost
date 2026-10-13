@@ -72,6 +72,14 @@ export async function withAppRole<T>(
       error instanceof StaleRatingError
     )
       throw error;
+    const code =
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      typeof error.code === "string"
+        ? error.code
+        : "unknown";
+    console.error(JSON.stringify({ event: "database_operation_failed", code }));
     throw new Error("The request could not be completed.");
   } finally {
     client.release();

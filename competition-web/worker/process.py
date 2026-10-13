@@ -59,11 +59,19 @@ def duration_for(info: dict, streams: list[dict]) -> float:
     return max(values)
 
 
-def process(source: Path, output: Path, normalize: bool) -> dict:
-    max_bytes = int(os.environ.get("MEDIA_MAX_UPLOAD_BYTES", "524288000"))
-    min_seconds = float(os.environ.get("MEDIA_MIN_CLIP_SECONDS", "20"))
-    max_seconds = float(os.environ.get("MEDIA_MAX_CLIP_SECONDS", "360"))
-    timeout = int(os.environ.get("MEDIA_WORKER_TIMEOUT_SECONDS", "180"))
+def process(
+    source: Path,
+    output: Path,
+    normalize: bool,
+    max_bytes: int | None = None,
+    min_seconds: float | None = None,
+    max_seconds: float | None = None,
+    timeout: int | None = None,
+) -> dict:
+    max_bytes = max_bytes or int(os.environ.get("MEDIA_MAX_UPLOAD_BYTES", "524288000"))
+    min_seconds = min_seconds or float(os.environ.get("MEDIA_MIN_CLIP_SECONDS", "20"))
+    max_seconds = max_seconds or float(os.environ.get("MEDIA_MAX_CLIP_SECONDS", "360"))
+    timeout = timeout or int(os.environ.get("MEDIA_WORKER_TIMEOUT_SECONDS", "180"))
     if not source.is_file() or source.stat().st_size < 1 or source.stat().st_size > max_bytes:
         raise ProcessingError("file_size_invalid")
 
@@ -122,9 +130,21 @@ def main() -> int:
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--normalize", action="store_true")
+    parser.add_argument("--max-bytes", type=int)
+    parser.add_argument("--min-seconds", type=float)
+    parser.add_argument("--max-seconds", type=float)
+    parser.add_argument("--timeout", type=int)
     args = parser.parse_args()
     try:
-        result = process(args.input, args.output, args.normalize)
+        result = process(
+            args.input,
+            args.output,
+            args.normalize,
+            args.max_bytes,
+            args.min_seconds,
+            args.max_seconds,
+            args.timeout,
+        )
         print(json.dumps(result, separators=(",", ":")))
         return 0
     except ProcessingError as error:

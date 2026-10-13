@@ -274,10 +274,40 @@ export function SubmissionWorkspace({
       const processed = await processResponse.json();
       if (!processResponse.ok)
         throw new Error(processed.error || "Audio processing failed.");
+      let processing = true;
+      let completed: { status?: string; errorCode?: string } = {};
+      const deadline = Date.now() + 6 * 60 * 1000;
+      while (processing && Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const statusResponse = await fetch(
+          `/api/submission-uploads/${info.uploadId}`,
+          { cache: "no-store" },
+        );
+        if (!statusResponse.ok)
+          throw new Error(
+            "Processing status could not be loaded. Refresh to check again.",
+          );
+        completed = await statusResponse.json();
+        processing =
+          completed.status === "processing" || completed.status === "uploading";
+        if (processing)
+          setMessages((state) => ({
+            ...state,
+            [slot]: "Processing audio… This can take a minute.",
+          }));
+      }
+      if (processing)
+        throw new Error(
+          "Processing is taking longer than expected. Refresh this page to check again.",
+        );
+      if (completed.status === "failed")
+        throw new Error(
+          "This video could not be processed. Check its format, audio track, size and duration, then retry.",
+        );
       setMessages((state) => ({
         ...state,
         [slot]:
-          processed.status === "needs_review"
+          completed.status === "needs_review"
             ? "Audio is waiting for a private host review."
             : "Audio is ready. Preview it, then confirm your entry.",
       }));
