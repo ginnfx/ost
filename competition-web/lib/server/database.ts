@@ -31,11 +31,18 @@ export class SafeDatabaseError extends Error {}
  * The browser never receives the database connection string or service key.
  */
 export async function withCurrentUser<T>(
-  operation: (db: PoolClient, userId: string) => Promise<T>,
+  operation: (
+    db: PoolClient,
+    userId: string,
+    accessToken: string,
+  ) => Promise<T>,
 ): Promise<T> {
   const identity = await verifiedCurrentUser();
   if (!identity) throw new SignInRequired();
-  return withAppRole((db) => operation(db, identity.user.id), identity.user.id);
+  return withAppRole(
+    (db) => operation(db, identity.user.id, identity.accessToken),
+    identity.user.id,
+  );
 }
 
 export async function withAppRole<T>(

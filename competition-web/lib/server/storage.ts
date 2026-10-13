@@ -1,10 +1,24 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
+import { createWriteStream } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { Readable } from "node:stream";
+import { Transform } from "node:stream";
+import type { ReadableStream as NodeReadableStream } from "node:stream/web";
+import { pipeline } from "node:stream/promises";
 
 export interface PrivateObjectStore {
   signedReadUrl(key: string, expiresInSeconds: number): Promise<string>;
   signedUploadUrl(key: string): Promise<{ url: string; token: string }>;
   remove(keys: string[]): Promise<void>;
+  resumableEndpoint(): string;
+  bucketName(): string;
+  downloadToFile(
+    key: string,
+    destination: string,
+    maxBytes: number,
+  ): Promise<void>;
+  uploadAudio(key: string, source: string): Promise<void>;
 }
 
 /** Swap this adapter for R2 without changing competition services. */
@@ -21,6 +35,21 @@ export class SupabasePrivateObjectStore implements PrivateObjectStore {
     },
   );
   private readonly bucket = required("SUPABASE_STORAGE_BUCKET");
+
+  resumableEndpoint(): string {
+    const url = new URL(required("SUPABASE_URL"));
+    if (url.hostname.endsWith(".supabase.co"))
+      url.hostname = url.hostname.replace(
+        ".supabase.co",
+        ".storage.supabase.co",
+      );
+    url.pathname = "/storage/v1/upload/resumable";
+    url.search = "";
+    return url.toString();
+  }
+  bucketName(): string {
+    return this.bucket;
+  }
 
   async signedReadUrl(key: string, expiresInSeconds: number): Promise<string> {
     assertOpaqueStorageKey(key);
@@ -45,10 +74,54 @@ export class SupabasePrivateObjectStore implements PrivateObjectStore {
     const { error } = await this.client.storage.from(this.bucket).remove(keys);
     if (error) throw new Error("Media could not be removed.");
   }
+
+  async downloadToFile(
+    key: string,
+    destination: string,
+    maxBytes: number,
+  ): Promise<void> {
+    assertOpaqueStorageKey(key);
+    const url = await this.signedReadUrl(key, 300);
+    const response = await fetch(url, { cache: "no-store", redirect: "error" });
+    if (!response.ok || !response.body)
+      throw new Error("Media could not be downloaded for processing.");
+    const declaredLength = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declaredLength) && declaredLength > maxBytes)
+      throw new Error("Media file exceeds the configured size limit.");
+    let received = 0;
+    const limiter = new Transform({
+      transform(chunk: Buffer, _encoding, callback) {
+        received += chunk.length;
+        if (received > maxBytes)
+          callback(new Error("Media file exceeds the configured size limit."));
+        else callback(null, chunk);
+      },
+    });
+    await pipeline(
+      Readable.fromWeb(response.body as unknown as NodeReadableStream),
+      limiter,
+      createWriteStream(destination, { flags: "wx", mode: 0o600 }),
+    );
+  }
+
+  async uploadAudio(key: string, source: string): Promise<void> {
+    assertOpaqueStorageKey(key);
+    const content = await readFile(source);
+    const { error } = await this.client.storage
+      .from(this.bucket)
+      .upload(key, content, {
+        contentType: "audio/mp4",
+        cacheControl: "0",
+        upsert: false,
+      });
+    if (error) throw new Error("Processed audio could not be stored.");
+  }
 }
 
 function isOpaqueStorageKey(key: string): boolean {
-  return /^[a-f0-9]{32,64}\/(?:[a-f0-9]{32,64})\.(?:mp4|m4a)$/.test(key);
+  return /^[a-f0-9]{32,64}\/(?:[a-f0-9]{32,64})\.(?:mp4|mov|webm|mkv|m4a)$/.test(
+    key,
+  );
 }
 function assertOpaqueStorageKey(key: string): void {
   if (!isOpaqueStorageKey(key)) throw new Error("Media is unavailable.");
