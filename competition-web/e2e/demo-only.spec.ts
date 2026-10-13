@@ -5,6 +5,39 @@ import { readFileSync } from "node:fs";
 const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
+async function checkAxe(page: import("@playwright/test").Page) {
+  await page.evaluate((source) => eval(source), axeSource);
+  const violations = await page.evaluate(async () => {
+    const axe = (
+      window as unknown as Window & {
+        axe: {
+          run: (
+            doc: Document,
+            options: unknown,
+          ) => Promise<{
+            violations: {
+              id: string;
+              help: string;
+              nodes: { target: string[] }[];
+            }[];
+          }>;
+        };
+      }
+    ).axe;
+    return axe.run(document, {
+      runOnly: {
+        type: "tag",
+        values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+      },
+    });
+  });
+  expect(
+    violations.violations.map(
+      (item) => `${item.id}: ${item.help}: ${JSON.stringify(item.nodes)}`,
+    ),
+  ).toEqual([]);
+}
+
 test("demo-only root redirects and all other app/API paths stop before handlers", async ({
   page,
   request,
@@ -56,7 +89,13 @@ test("demo-only pages have no axe WCAG A/AA violations on iPhone", async ({
                 run: (
                   document: Document,
                   options: unknown,
-                ) => Promise<{ violations: { id: string; help: string }[] }>;
+                ) => Promise<{
+                  violations: {
+                    id: string;
+                    help: string;
+                    nodes: { target: string[] }[];
+                  }[];
+                }>;
               };
             }
           ).axe;
@@ -67,9 +106,55 @@ test("demo-only pages have no axe WCAG A/AA violations on iPhone", async ({
             },
           });
         });
-        expect(violations.violations.map((v) => `${v.id}: ${v.help}`)).toEqual(
-          [],
-        );
+        expect(
+          violations.violations.map(
+            (v) => `${v.id}: ${v.help}: ${JSON.stringify(v.nodes)}`,
+          ),
+        ).toEqual([]);
       }
   }
+});
+
+test("participant grid and full player stay accessible on a phone", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.emulateMedia({ colorScheme: "dark", reducedMotion: "reduce" });
+  await page.goto("/demo");
+  await expect(page.locator(".intro-fallback")).toBeVisible();
+  await checkAxe(page);
+  await page.getByRole("button", { name: "Enter the listening room" }).click();
+  await page.getByRole("button", { name: "Skip to listening" }).last().click();
+  await expect(
+    page.getByRole("heading", { name: "Batch 1 of 5" }),
+  ).toBeVisible();
+  await page.waitForFunction(() => window.scrollY === 0);
+  await checkAxe(page);
+  await page
+    .getByRole("button", { name: /^Open fullscreen player for Mystery OST/ })
+    .first()
+    .click();
+  await expect(page.locator(".vinyl-fallback")).toBeVisible();
+  await checkAxe(page);
+  await page.getByRole("button", { name: "Close fullscreen player" }).click();
+  await page.getByRole("button", { name: "Skip to reveals" }).click();
+  await page.getByRole("button", { name: "Host" }).click();
+  await page.getByRole("tab", { name: "Publish results" }).click();
+  const confirm = page.getByRole("button", {
+    name: "Hold to confirm next reveal group",
+  });
+  const box = await confirm.boundingBox();
+  if (!box) throw new Error("Reveal confirmation button was not visible.");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(1700);
+  await page.mouse.up();
+  await page
+    .getByRole("button", { name: "Simulate passkey verification" })
+    .click();
+  await page.getByRole("button", { name: "Reveal next soundtrack" }).click();
+  await page.getByRole("button", { name: "Participant" }).click();
+  await page.getByRole("button", { name: "Watch reveal" }).click();
+  await expect(page.locator(".reveal-fallback")).toBeVisible();
+  await checkAxe(page);
 });

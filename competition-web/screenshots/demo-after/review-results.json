@@ -1,0 +1,692 @@
+{
+  "origin": "https://ost-comp-demo.vercel.app",
+  "screenshotReviewPasses": 3,
+  "iterations": [
+    {
+      "name": "iphone-dark-3d",
+      "screenshots": {
+        "intro": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-iphone-dark-3d/intro.png",
+        "grid": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-iphone-dark-3d/listening-grid.png",
+        "player": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-iphone-dark-3d/fullscreen-player.png",
+        "reveal": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-iphone-dark-3d/reveal.png"
+      },
+      "bundles": {
+        "intro": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "07ex6m4l809y4.js",
+              "bytes": 250787
+            }
+          ],
+          "totalEncodedBytes": 433440
+        },
+        "listening": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "07ex6m4l809y4.js",
+              "bytes": 250787
+            }
+          ],
+          "totalEncodedBytes": 433440
+        },
+        "player": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "07ex6m4l809y4.js",
+              "bytes": 250787
+            }
+          ],
+          "totalEncodedBytes": 433440
+        },
+        "reveal": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "07ex6m4l809y4.js",
+              "bytes": 250787
+            }
+          ],
+          "totalEncodedBytes": 433440
+        }
+      },
+      "metrics": {
+        "inpEstimateMs": 136,
+        "eventDurationsMs": [
+          136,
+          32,
+          32,
+          24,
+          24,
+          24,
+          24,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16
+        ],
+        "cls": 0
+      },
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "desktop-light-3d",
+      "screenshots": {
+        "intro": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-desktop-light-3d/intro.png",
+        "grid": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-desktop-light-3d/listening-grid.png",
+        "player": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-desktop-light-3d/fullscreen-player.png",
+        "reveal": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-desktop-light-3d/reveal.png"
+      },
+      "bundles": {
+        "intro": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            },
+            {
+              "file": "07ex6m4l809y4.js",
+              "bytes": 250787
+            }
+          ],
+          "totalEncodedBytes": 433440
+        },
+        "listening": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            },
+            {
+              "file": "07ex6m4l809y4.js",
+              "bytes": 250787
+            }
+          ],
+          "totalEncodedBytes": 433440
+        },
+        "player": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            },
+            {
+              "file": "07ex6m4l809y4.js",
+              "bytes": 250787
+            }
+          ],
+          "totalEncodedBytes": 433440
+        },
+        "reveal": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            },
+            {
+              "file": "07ex6m4l809y4.js",
+              "bytes": 250787
+            }
+          ],
+          "totalEncodedBytes": 433440
+        }
+      },
+      "metrics": {
+        "inpEstimateMs": 48,
+        "eventDurationsMs": [
+          48,
+          40,
+          32,
+          32,
+          32,
+          32,
+          32,
+          24,
+          24,
+          24,
+          24,
+          16,
+          16
+        ],
+        "cls": 0
+      },
+      "consoleErrors": [],
+      "pageErrors": []
+    },
+    {
+      "name": "iphone-reduced-motion-2d",
+      "screenshots": {
+        "intro": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-iphone-reduced-motion-2d/intro.png",
+        "grid": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-iphone-reduced-motion-2d/listening-grid.png",
+        "player": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-iphone-reduced-motion-2d/fullscreen-player.png",
+        "reveal": "/Users/brajanzalta/Desktop/code/ost/competition-web/screenshots/demo-after/iteration-iphone-reduced-motion-2d/reveal.png"
+      },
+      "bundles": {
+        "intro": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            }
+          ],
+          "totalEncodedBytes": 182653
+        },
+        "listening": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            }
+          ],
+          "totalEncodedBytes": 182653
+        },
+        "player": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            }
+          ],
+          "totalEncodedBytes": 182653
+        },
+        "reveal": {
+          "chunks": [
+            {
+              "file": "2c_2b2prcozy6.js",
+              "bytes": 2065
+            },
+            {
+              "file": "0k46l0-jsw7tw.js",
+              "bytes": 9051
+            },
+            {
+              "file": "3co30c1rhlkyh.js",
+              "bytes": 73422
+            },
+            {
+              "file": "turbopack-1byz1flvc-bu1.js",
+              "bytes": 4603
+            },
+            {
+              "file": "03cxw2abnx7c6.js",
+              "bytes": 3521
+            },
+            {
+              "file": "2pz9vw_m4154-.js",
+              "bytes": 46037
+            },
+            {
+              "file": "2iuzmgod6w76v.js",
+              "bytes": 3652
+            },
+            {
+              "file": "24tv0v9d2mu2f.js",
+              "bytes": 754
+            },
+            {
+              "file": "0ux2rfohz_99r.js",
+              "bytes": 36091
+            },
+            {
+              "file": "2fl-10sxxqne_.js",
+              "bytes": 3457
+            }
+          ],
+          "totalEncodedBytes": 182653
+        }
+      },
+      "metrics": {
+        "inpEstimateMs": 40,
+        "eventDurationsMs": [
+          40,
+          24,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16,
+          16
+        ],
+        "cls": 0
+      },
+      "consoleErrors": [],
+      "pageErrors": []
+    }
+  ],
+  "mobilePerf": {
+    "profile": "Chromium iPhone 375x812, 2x DPR, 4x CPU, 150ms RTT, 1.6Mbps down",
+    "gridReadyMs": 1582,
+    "listeningGridLcpAndCls": {
+      "lcpMs": 736,
+      "cls": 0
+    },
+    "playerWasPlaying": true,
+    "fpsDuringPlayer": 61,
+    "metrics": {
+      "inpEstimateMs": 80,
+      "cls": 0
+    },
+    "bundles": {
+      "listeningGrid": 182653,
+      "playerAfter3DScene": 433440,
+      "threePayloadAddedAtPlayer": 250787
+    }
+  }
+}

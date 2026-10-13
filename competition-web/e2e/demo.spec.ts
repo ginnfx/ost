@@ -4,10 +4,53 @@ import { readFileSync } from "node:fs";
 const require = createRequire(import.meta.url);
 const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
+async function checkAxe(page: import("@playwright/test").Page) {
+  await page.evaluate((source) => eval(source), axeSource);
+  const violations = await page.evaluate(async () => {
+    const axe = (
+      window as unknown as Window & {
+        axe: {
+          run: (
+            document: Document,
+            options: unknown,
+          ) => Promise<{
+            violations: {
+              id: string;
+              help: string;
+              nodes: { target: string[] }[];
+            }[];
+          }>;
+        };
+      }
+    ).axe;
+    return axe.run(document, {
+      runOnly: {
+        type: "tag",
+        values: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"],
+      },
+    });
+  });
+  expect(
+    violations.violations.map(
+      (item) => `${item.id}: ${item.help}: ${JSON.stringify(item.nodes)}`,
+    ),
+  ).toEqual([]);
+}
+
+async function enterDemo(page: import("@playwright/test").Page) {
+  await page.goto("/demo");
+  await page.waitForSelector(".demo-intro-shell, .demo-shell");
+  const enter = page.getByRole("button", { name: "Enter the listening room" });
+  if (await enter.isVisible()) await enter.click();
+  await expect(
+    page.getByRole("heading", { name: "Glass Harbor Trial" }),
+  ).toBeVisible();
+}
+
 test("demo advertises isolation and stays within phone width", async ({
   page,
 }) => {
-  await page.goto("/demo");
+  await enterDemo(page);
   await expect(page.getByText("Nothing here is saved or real.")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Glass Harbor Trial" }),
@@ -24,7 +67,7 @@ test("demo advertises isolation and stays within phone width", async ({
 test("participant can upload, preview, confirm, wait, and enter listening", async ({
   page,
 }) => {
-  await page.goto("/demo");
+  await enterDemo(page);
   for (let i = 1; i <= 5; i++) {
     await page.getByLabel("Anime or franchise").fill(`Glass Harbor ${i}`);
     await page.getByLabel("OST title").fill(`First Light ${i}`);
@@ -55,6 +98,71 @@ test("participant can upload, preview, confirm, wait, and enter listening", asyn
   ).toBeVisible();
 });
 
+test("intro shelf opens an accessible fullscreen listening player", async ({
+  page,
+}) => {
+  await page.goto("/demo");
+  await expect(
+    page.getByRole("heading", { name: "Hear the track. Guess the story." }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Next mystery record" }).click();
+  await page.getByRole("button", { name: "Enter the listening room" }).click();
+  await page.getByRole("button", { name: "Skip to listening" }).last().click();
+  const playerButton = page
+    .getByRole("button", { name: /^Open fullscreen player for Mystery OST/ })
+    .first();
+  await playerButton.click();
+  await expect(
+    page.getByRole("dialog", { name: "Mystery listening" }),
+  ).toBeVisible();
+  await expect(page.getByText(/Original generated melody/)).toBeVisible();
+  await checkAxe(page);
+  await page.getByRole("button", { name: "Close fullscreen player" }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Mystery listening" }),
+  ).toHaveCount(0);
+});
+
+test("reduced motion uses the drawn sleeve, vinyl, and gem instead of WebGL", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/demo");
+  await expect(page.locator(".intro-fallback")).toBeVisible();
+  await page.getByRole("button", { name: "Enter the listening room" }).click();
+  await page.getByRole("button", { name: "Skip to listening" }).last().click();
+  await checkAxe(page);
+  await page
+    .getByRole("button", { name: /^Open fullscreen player for Mystery OST/ })
+    .first()
+    .click();
+  await expect(page.locator(".vinyl-fallback")).toBeVisible();
+  await page.getByRole("button", { name: "Close fullscreen player" }).click();
+  await page.getByRole("button", { name: "Skip to reveals" }).click();
+  await page.getByRole("button", { name: "Host" }).click();
+  await page.getByRole("tab", { name: "Publish results" }).click();
+  const hold = page.getByRole("button", {
+    name: "Hold to confirm next reveal group",
+  });
+  const box = await hold.boundingBox();
+  if (!box) throw new Error("Reveal control was not visible.");
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.waitForTimeout(1700);
+  await page.mouse.up();
+  await page
+    .getByRole("button", { name: "Simulate passkey verification" })
+    .click();
+  await page.getByRole("button", { name: "Reveal next soundtrack" }).click();
+  await page.getByRole("button", { name: "Participant" }).click();
+  await page.getByRole("button", { name: "Watch reveal" }).click();
+  await expect(page.locator(".reveal-fallback")).toBeVisible();
+  await checkAxe(page);
+  await expect(
+    page.getByRole("dialog").getByRole("heading", { name: /Movement/ }),
+  ).toBeVisible();
+});
+
 test("layout reflows at 320px, iPhone portrait, and landscape under throttled requests", async ({
   page,
   context,
@@ -69,7 +177,7 @@ test("layout reflows at 320px, iPhone portrait, and landscape under throttled re
     { width: 844, height: 390 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.goto("/demo");
+    await enterDemo(page);
     await expect(
       page.getByText("Nothing here is saved or real."),
     ).toBeVisible();
@@ -183,7 +291,10 @@ test("responses use fresh strict CSP nonces and privacy headers", async ({
   const csp = first.headers()["content-security-policy"] ?? "";
   expect(csp).toContain("script-src 'self' 'nonce-");
   expect(csp).toContain("'strict-dynamic'");
-  expect(csp).not.toContain("'unsafe-inline'");
+  const scriptPolicy =
+    csp.split(";").find((item) => item.trim().startsWith("script-src")) ?? "";
+  expect(scriptPolicy).not.toContain("'unsafe-inline'");
+  expect(csp).toContain("style-src-attr 'unsafe-inline'");
   const nonceOne = csp.match(/'nonce-([^']+)'/)?.[1];
   const nonceTwo = (second.headers()["content-security-policy"] ?? "").match(
     /'nonce-([^']+)'/,
@@ -199,7 +310,7 @@ test("responses use fresh strict CSP nonces and privacy headers", async ({
 test("host explores review, progress, recovery, scoring, and group-confirmed one-at-a-time reveals", async ({
   page,
 }) => {
-  await page.goto("/demo");
+  await enterDemo(page);
   await page.getByRole("button", { name: "Host" }).click();
   await page.getByRole("tab", { name: "Submissions" }).click();
   await page.getByRole("button", { name: /Flagged audio/ }).click();

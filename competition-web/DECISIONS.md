@@ -51,6 +51,15 @@ Expected ranking values follow the scoring specification, not observed code outp
 ### Visual audit
 
 The home screen was reduced to its title, plain explanation, and direct actions. The three-icon feature row and “Private” badge were removed. Across the implemented routes, icons serve controls and navigation only; the site uses no decorative gradients, floating shapes, marketing card grid, emoji icons, delayed reveal animations, hosted font files, or bundled SF Symbols. Cards remain only where the OSTTracker roster/listening patterns need item boundaries. Recheck new screens against the brief before adding decoration.
+
+### Demo listening-room visuals
+
+- Choice: use one lazy R3F scene module for the intro sleeve shelf, explicit fullscreen vinyl player, and reveal; ordinary participant and host screens remain 2D. The 3D import starts only when a visitor flicks the intro shelf or opens the full player/reveal. Cap pixel ratio at 2, choose low-power WebGL, and fall back to CSS artwork for reduced motion, low-memory/low-core devices, or unavailable WebGL.
+- Why: a 3D moment should explain the mystery record, audio playback, or rank. Keeping the 3D entry points explicit keeps the rating grid fast and avoids one WebGL context per card. Postprocessing was left out to preserve the mobile frame budget.
+- Where: `components/demo/intro.tsx`, `components/demo/scene-viewport.tsx`, `components/demo/scenes.tsx`, `components/demo-app.tsx`, `app/demo/demo.css`.
+- Change: keep generated art deterministic by entry ID, and keep every label, rank, player action, and reveal detail as accessible HTML. Add only a screen when it makes the requested experience clearer.
+- CSP note: R3F's Canvas wrapper uses an inline style attribute to size its internal renderer. `style-src-attr 'unsafe-inline'` is enabled only for `/demo` (or for the isolated demo deployment); script execution stays nonce-only with `strict-dynamic`. Revisit if the Canvas renderer gains a CSP-compatible class-only wrapper.
+- Assets: Three.js, React Three Fiber, Drei, and their Three typings are pinned and MIT-licensed. All demo art and sounds are generated locally; see `LICENSES`.
 # Trial round
 
 - Choice: a trial is a normal competition row with `is_trial=true`, configured for two entries per participant, one batch, one reveal group, 24-hour submission deadline, and 72-hour rating deadline. It uses the same submission, listening, rating, scoring, and reveal paths as a regular round.
