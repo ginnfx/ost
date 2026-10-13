@@ -45,8 +45,7 @@ export async function verifiedCurrentUser() {
       data: { session },
     },
   ] = await Promise.all([supabase.auth.getUser(), supabase.auth.getSession()]);
-  if (userError || !user || !session || session.user.id !== user.id)
-    return null;
+  if (userError || !user || !session?.access_token) return null;
   return { user, accessToken: session.access_token };
 }
 
