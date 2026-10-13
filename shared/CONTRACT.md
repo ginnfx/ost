@@ -7,16 +7,17 @@ Codable) mirrors them. Wire keys are snake_case; Swift decodes with
 
 ## Transport
 
-- HTTP + one WebSocket on `127.0.0.1:<ephemeral>`.
+- By default, HTTP + one WebSocket on `127.0.0.1:<ephemeral>`.
+- With Mac LAN access enabled, the same sidecar binds port 8765 on all local
+  interfaces. The iPhone connects to that endpoint and uses the Mac database.
 - Handshake: sidecar prints exactly one stdout line when ready:
   `OSTTRACKER_READY port=<port> token=<secret>`
-- iOS (in-process sidecar): the sandbox forbids subprocesses, so `backend/api.py`
-  runs on an embedded CPython thread inside the app instead of as a child. The
-  ready line is identical but written to a handshake file in the app container
-  (`<Documents>/sidecar-handshake.txt`), which the app polls; the token is
-  app-generated and injected via `OST_API_TOKEN` before interpreter init.
+- iOS (LAN companion): the phone connects to the Mac-hosted `backend/api.py`.
+  Its pairing token is kept in Keychain. The Mac keeps that token in its app
+  data directory so pairing survives app restarts.
 - Every HTTP request and the `/ws` upgrade require header `X-OST-Token: <secret>`
-  (401 / close 4401 otherwise). `/ws` also accepts `?token=` for dev tooling.
+  (401 / close 4401 otherwise), except the per-play, unguessable audio stream
+  URL used by AVPlayer. `/ws` also accepts `?token=` for dev tooling.
 - Timestamps: ISO-8601 UTC strings (`2026-07-15T21:14:20Z`).
 - Errors: `{"detail": <string>}`; domain `ValueError`s map to 400.
 - Sidecar self-terminates when its parent dies (ppid watchdog) and is a

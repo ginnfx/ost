@@ -16,6 +16,11 @@ final class AppStore {
     }
 
     private(set) var phase: Phase = .launching
+    private var isStarting = false
+    #if os(macOS)
+    private(set) var lanPairingCode: String?
+    private(set) var isReconfiguringLAN = false
+    #endif
     private(set) var people: [Person] = []
     private(set) var leaderboard: [RankEntry] = []
     private(set) var notes: [Note] = []
@@ -52,10 +57,18 @@ final class AppStore {
     let player = PlayerSink()
 
     #if os(macOS)
-    private let sidecar = SidecarProcess()
+    private var sidecar = SidecarProcess()
     #endif
-    private(set) var client: BackendClient?
+    private(set) var client: (any OSTBackend)?
+    #if os(iOS)
+    private var macPlaybackClient: BackendClient?
+    private var playbackUsesMacService = false
+    #endif
     private var eventPump: Task<Void, Never>?
+    private var cloudSyncTask: Task<Void, Never>?
+    private var cloudSyncDebounceTask: Task<Void, Never>?
+    private var coverSyncTask: Task<Void, Never>?
+    private var cloudSyncInFlight = false
     // Ordering token for leaderboard fetches: without it, two in-flight GETs can
     // land out of issue order and a stale response clobbers a fresher one.
     private var leaderboardFetchSeq = 0
@@ -76,6 +89,19 @@ final class AppStore {
     // MARK: - Lifecycle
 
     func start() async {
+        // SwiftUI can re-run a scene task when macOS reopens a window for an
+        // external URL (including the Supabase auth callback). The Mac sidecar
+        // owns a single Foundation Process instance, so a second launch would
+        // raise an Objective-C exception before auth can finish.
+        guard !isStarting else { return }
+        if case .running = phase { return }
+        isStarting = true
+        defer { isStarting = false }
+        #if os(iOS)
+        eventPump?.cancel()
+        eventPump = nil
+        phase = .launching
+        #endif
         // When a track plays to its end, tell Python to leave the .playing state
         // so every audio-reactive animation quiets down instead of compositing on
         // silence forever.
@@ -92,18 +118,30 @@ final class AppStore {
         #endif
         do {
             #if os(iOS)
-            let shake = try await EmbeddedSidecar.start()
+            let client: any OSTBackend = IOSLocalBackend.shared
+            let port = 0
+            configurePlaybackBackend()
             #else
             let shake = try await sidecar.launch()
+            lanPairingCode = UserDefaults.standard.bool(forKey: "ost.lan.enabled") ? shake.token : nil
+            let client: any OSTBackend = BackendClient(port: shake.port, token: shake.token)
+            let port = shake.port
             #endif
-            let client = BackendClient(port: shake.port, token: shake.token)
             self.client = client
-            try await client.waitUntilHealthy()
+            try await client.waitUntilHealthy(timeout: .seconds(10))
+            await synchronizeCloud(using: client)
+            #if os(iOS)
+            await bootstrapPhoneFromMacIfFresh()
+            #endif
             print("GATE health ok")
             try await refreshAll(client)
             print("GATE osts count=\(leaderboard.count)")
+            #if os(macOS)
             startEventPump(client)
-            phase = .running(port: shake.port)
+            #endif
+            startCloudSyncLoop(client)
+            startCoverSyncLoop(client)
+            phase = .running(port: port)
         } catch {
             phase = .failed(String(describing: error))
             print("GATE failed error=\(error)")
@@ -112,17 +150,183 @@ final class AppStore {
 
     func shutdown() {
         eventPump?.cancel()
+        cloudSyncTask?.cancel()
+        cloudSyncDebounceTask?.cancel()
+        coverSyncTask?.cancel()
         #if os(macOS)
         sidecar.terminate()
         #endif
     }
 
+    /// A portable backup uses the same snapshot as Supabase, excluding device
+    /// sandbox paths. Restoring applies locally first, refreshes the UI, then
+    /// schedules the ordinary cloud sync so both devices converge as usual.
+    func makeBackupSnapshot() async throws -> Data {
+        guard let client else { throw BackupError.notReady }
+        return try await client.syncSnapshot()
+    }
+
+    func restoreBackupSnapshot(_ snapshot: Data) async throws {
+        guard let client else { throw BackupError.notReady }
+        try await client.applySyncSnapshot(snapshot)
+        try await refreshAll(client)
+        scheduleCloudSync()
+    }
+
+    enum BackupError: LocalizedError {
+        case notReady
+        var errorDescription: String? { "OST Tracker is still connecting. Try again in a moment." }
+    }
+
+    #if os(macOS)
+    /// The backend chooses its listening interface at launch, so apply a LAN
+    /// setting change by replacing the sidecar while keeping this window open.
+    func reconfigureLAN() async {
+        guard !isReconfiguringLAN else { return }
+        isReconfiguringLAN = true
+        defer { isReconfiguringLAN = false }
+        eventPump?.cancel()
+        eventPump = nil
+        client = nil
+        lanPairingCode = nil
+        phase = .launching
+        player.reset()
+        playback = nil
+        sidecar.terminate()
+        sidecar = SidecarProcess()
+        await start()
+    }
+    #endif
+
+    #if os(iOS)
+    func configurePlaybackBackend() {
+        guard let address = UserDefaults.standard.string(forKey: LANConnection.addressKey),
+              let url = URL(string: address), let token = LANConnection.token else {
+            macPlaybackClient = nil
+            return
+        }
+        macPlaybackClient = BackendClient(baseURL: url, token: token)
+    }
+
+    func disconnectFromMac() {
+        eventPump?.cancel()
+        eventPump = nil
+        client = nil
+        phase = .launching
+        player.reset()
+        LANConnection.forget()
+        macPlaybackClient = nil
+    }
+
+    /// A fresh phone can receive the current Mac database once over the
+    /// already-paired LAN connection. This is only a bootstrap: once the phone
+    /// has persisted data, Supabase owns cross-device synchronization and this
+    /// path never replaces offline phone edits.
+    func bootstrapPhoneFromMacIfFresh() async {
+        guard let macPlaybackClient else { return }
+        let local = IOSLocalBackend.shared
+        guard await local.isFreshInstall else { return }
+        do {
+            let snapshot = try await macPlaybackClient.syncSnapshot()
+            guard await local.snapshotHasPortableData(snapshot) else { return }
+            try await local.applySyncSnapshot(snapshot)
+            if let client { try await refreshAll(client) }
+            print("GATE phone_bootstrap_from_mac rows=available")
+        } catch {
+            // The Mac is optional. Cloud sync and the offline app still work
+            // when it is asleep, off-network, or not paired.
+            print("GATE phone_bootstrap_from_mac_failed error=\(error.localizedDescription)")
+        }
+    }
+    #endif
+
+    private func startCloudSyncLoop(_ client: any OSTBackend) {
+        cloudSyncTask?.cancel()
+        cloudSyncTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(8))
+                guard !Task.isCancelled, let self else { return }
+                await self.synchronizeCloud(using: client)
+            }
+        }
+    }
+
+    private func startCoverSyncLoop(_ client: any OSTBackend) {
+        coverSyncTask?.cancel()
+        coverSyncTask = Task { [weak self] in
+            guard let self else { return }
+            await self.synchronizeCoverAssets(using: client)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30))
+                guard !Task.isCancelled else { return }
+                await self.synchronizeCoverAssets(using: client)
+            }
+        }
+    }
+
+    private func synchronizeCoverAssets(using client: any OSTBackend) async {
+        do {
+            let snapshot = try await client.syncSnapshot()
+            #if os(macOS)
+            let isMac = true
+            #else
+            let isMac = false
+            #endif
+            let changed = try await CloudAccount.shared.synchronizeCoverAssets(
+                using: client,
+                localSnapshot: snapshot,
+                isMac: isMac
+            )
+            if !changed.isEmpty {
+                for id in changed { bumpCoverEpoch(id) }
+                try await refreshAll(client)
+            }
+        } catch {
+            // Artwork is ancillary: a temporary storage/auth error should not
+            // interrupt the rest of the app or its row synchronization.
+            if CloudAccount.shared.isSignedIn {
+                print("GATE cover_sync_failed error=\(error.localizedDescription)")
+            }
+        }
+    }
+
+    private func scheduleCloudSync() {
+        guard let client else { return }
+        cloudSyncDebounceTask?.cancel()
+        cloudSyncDebounceTask = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled, let self else { return }
+            await self.synchronizeCloud(using: client)
+        }
+    }
+
+    private func synchronizeCloud(using client: any OSTBackend) async {
+        guard !cloudSyncInFlight else { return }
+        cloudSyncInFlight = true
+        defer { cloudSyncInFlight = false }
+        do {
+            let local = try await client.syncSnapshot()
+            #if os(macOS)
+            let isMac = true
+            #else
+            let isMac = false
+            #endif
+            if let replacement = try await CloudAccount.shared.synchronize(localSnapshot: local, isMac: isMac) {
+                try await client.applySyncSnapshot(replacement)
+                try await refreshAll(client)
+            }
+        } catch {
+            await CloudAccount.shared.reportSyncFailure(error)
+            print("GATE cloud_sync_failed error=\(error.localizedDescription)")
+        }
+    }
+
     func markRevealed() { hasRevealed = true }
 
-    private func refreshAll(_ client: BackendClient) async throws {
+    private func refreshAll(_ client: any OSTBackend) async throws {
         async let people = client.people()
         async let board = client.leaderboard()
-        async let ratings = client.ratings()
+        async let ratings = client.ratings(raterID: nil)
         async let notes = client.notes()
         async let batches = client.batches()
         // Never fatal to launch: an elimination board that fails to load just
@@ -174,6 +378,7 @@ final class AppStore {
             if Date().timeIntervalSince(lastBoardEventAt) > 1.5 {
                 await refreshLeaderboard()
             }
+            scheduleCloudSync()
         } catch {
             // Server rejected the write — roll the optimistic change back and surface it.
             setLocalScore(ostID: ostID, raterID: raterID, score: previous)
@@ -201,27 +406,80 @@ final class AppStore {
 
     func play(ostID: Int) async {
         #if os(iOS)
-        reportError("Playback is not supported on iOS yet.")
-        return
-        #endif
+        // Resolve on the phone first. If its local extractor cannot handle a
+        // result, the optional Mac service remains a compatibility fallback.
+        if let client {
+            do {
+                let state = try await client.play(ostID: ostID)
+                playbackUsesMacService = false
+                playback = state
+                player.apply(state)
+                return
+            } catch let phoneError {
+                if let macPlaybackClient {
+                    do {
+                        let state = try await macPlaybackClient.play(ostID: ostID)
+                        playbackUsesMacService = true
+                        playback = state
+                        player.apply(state)
+                        return
+                    } catch {
+                        reportError("iPhone lookup failed (\(phoneError.localizedDescription)); Mac fallback failed (\(error.localizedDescription)).")
+                        return
+                    }
+                } else {
+                    reportError("Couldn't find or play this OST on the iPhone (\(phoneError.localizedDescription)).")
+                    return
+                }
+            }
+        }
+        #else
         guard let client else { return }
         do {
-            _ = try await client.play(ostID: ostID)
+            let state = try await client.play(ostID: ostID)
+            playback = state
+            player.apply(state)
         } catch {
             reportError("Couldn't start playback (\(error.localizedDescription)).")
         }
+        #endif
     }
 
     func pause() async {
+        #if os(iOS)
+        if playbackUsesMacService, let macPlaybackClient, let state = try? await macPlaybackClient.pause() {
+            playback = state; player.apply(state); return
+        }
+        if let state = try? await client?.pause() {
+            playback = state; player.apply(state); return
+        }
+        return
+        #else
         do { _ = try await client?.pause() } catch { reportError("Couldn't pause (\(error.localizedDescription)).") }
+        #endif
     }
 
     func stop() async {
+        #if os(iOS)
+        if playbackUsesMacService, let macPlaybackClient, let state = try? await macPlaybackClient.stop() {
+            playbackUsesMacService = false
+            playback = state; player.apply(state); return
+        }
+        if let state = try? await client?.stop() {
+            playbackUsesMacService = false
+            playback = state; player.apply(state); return
+        }
+        return
+        #else
         do { _ = try await client?.stop() } catch { reportError("Couldn't stop (\(error.localizedDescription)).") }
+        #endif
     }
 
     func seek(to seconds: Double) async {
         player.seek(to: seconds)
+        #if os(iOS)
+        if playbackUsesMacService, let macPlaybackClient, let state = try? await macPlaybackClient.seek(position: seconds) { playback = state; return }
+        #endif
         do { _ = try await client?.seek(position: seconds) } catch { reportError("Couldn't seek (\(error.localizedDescription)).") }
     }
 
@@ -287,6 +545,7 @@ final class AppStore {
         // if the /ws coverArtReady event is missed.
         await resync()
         bumpCoverEpoch(ostID)
+        Task { await synchronizeCoverAssets(using: client) }
     }
 
     func addPerson(name: String) async {
@@ -294,6 +553,7 @@ final class AppStore {
         do {
             let person = try await client.addPerson(name: name)
             people = (people + [person]).sorted { $0.name.lowercased() < $1.name.lowercased() }
+            scheduleCloudSync()
         } catch {
             reportError("Couldn't add \"\(name)\" (\(error.localizedDescription)).")
         }
@@ -360,6 +620,7 @@ final class AppStore {
                 title: title, note: body, source: source, artist: artist, externalLink: externalLink
             ))
             notes = [note] + notes
+            scheduleCloudSync()
             return true
         } catch {
             reportError("Couldn't save that note (\(error.localizedDescription)).")
@@ -372,6 +633,7 @@ final class AppStore {
         do {
             let updated = try await client.updateNote(id: id, NotePatch(title: title, note: body))
             notes = notes.map { $0.id == id ? updated : $0 }
+            scheduleCloudSync()
         } catch {
             reportError("Couldn't update that note (\(error.localizedDescription)).")
         }
@@ -386,6 +648,7 @@ final class AppStore {
             return
         }
         notes.removeAll { $0.id == id }
+        scheduleCloudSync()
     }
 
     /// Re-shuffle the private batch key. Pins stay fixed server-side; every
@@ -397,6 +660,7 @@ final class AppStore {
             let result = try await client.randomizeBatches()
             batches = result.batches
             batchesGeneratedAt = result.generatedAt
+            scheduleCloudSync()
         } catch {
             reportError("Couldn't randomize batches (\(error.localizedDescription)).")
         }
@@ -410,6 +674,7 @@ final class AppStore {
             let result = try await client.setBatchCount(count)
             batches = result.batches
             batchesGeneratedAt = result.generatedAt
+            scheduleCloudSync()
         } catch {
             reportError("Couldn't change batch count (\(error.localizedDescription)).")
         }
@@ -423,6 +688,7 @@ final class AppStore {
             let result = try await client.arrangeBatches(arrangement)
             batches = result.batches
             batchesGeneratedAt = result.generatedAt
+            scheduleCloudSync()
         } catch {
             reportError("Couldn't save that arrangement (\(error.localizedDescription)).")
         }
@@ -435,6 +701,7 @@ final class AppStore {
             let result = try await client.setPin(ostID: ostID, pinned: pinned)
             batches = result.batches
             batchesGeneratedAt = result.generatedAt
+            scheduleCloudSync()
         } catch {
             reportError("Couldn't \(pinned ? "pin" : "unpin") that OST (\(error.localizedDescription)).")
         }
@@ -445,7 +712,7 @@ final class AppStore {
     /// Long-lived /ws pump that survives socket drops. On any drop it resyncs
     /// missed state over HTTP and reconnects with capped exponential backoff, so
     /// a sleep/wake or network blip never leaves the UI permanently stale.
-    private func startEventPump(_ client: BackendClient) {
+    private func startEventPump(_ client: any OSTBackend) {
         eventPump = Task { [weak self] in
             var needsResync = false
             var backoffMs: UInt64 = 400
@@ -533,6 +800,7 @@ final class AppStore {
         do {
             elimination = try await client.setEliminationThreshold(threshold)
             eliminationFetchSeq += 1   // this response is the freshest board
+            scheduleCloudSync()
         } catch {
             reportError("Couldn't change the elimination threshold (\(error.localizedDescription)).")
         }
@@ -583,8 +851,9 @@ final class AppStore {
         guard let client else { return }
         await refreshLeaderboard()
         await refreshBatches()
-        if let ratings = try? await client.ratings() { scores = Self.index(ratings) }
+        if let ratings = try? await client.ratings(raterID: nil) { scores = Self.index(ratings) }
         if let status = try? await client.roundStatus() { roundInfo = status }
+        scheduleCloudSync()
         print("GATE ws resynced osts=\(leaderboard.count)")
     }
 
@@ -604,6 +873,7 @@ final class AppStore {
         do { roundInfo = try await client.startRound(name: name) }
         catch { reportError("Couldn't start that ranking (\(error.localizedDescription))."); return false }
         hasRevealed = false
+        scheduleCloudSync()
         return true
     }
 
@@ -623,6 +893,7 @@ final class AppStore {
         hasRevealed = false
         do { try await refreshAll(client) }
         catch { reportError("Round retired; refresh the app to reload its new state.") }
+        scheduleCloudSync()
         return true
     }
 
@@ -635,6 +906,7 @@ final class AppStore {
         playback = nil
         do { try await refreshAll(client) }
         catch { reportError("Round restored; refresh the app to reload its state.") }
+        scheduleCloudSync()
         return true
     }
 
@@ -650,6 +922,7 @@ final class AppStore {
         catch { reportError("Couldn't rename that ranking (\(error.localizedDescription))."); return false }
         await refreshHistory()
         _ = await roundStatus()
+        scheduleCloudSync()
         return true
     }
 
@@ -664,9 +937,17 @@ final class AppStore {
     /// Called on scenePhase == .active (e.g. sleep/wake): reconnect the socket
     /// immediately rather than waiting out the backoff, and resync.
     func onBecameActive() {
-        guard case .running = phase, client != nil else { return }
+        guard case .running = phase, let client else { return }
+        #if os(iOS)
+        Task {
+            await synchronizeCloud(using: client)
+            await bootstrapPhoneFromMacIfFresh()
+            try? await refreshAll(client)
+        }
+        #else
         restartEventPump()
         Task { await resync() }
+        #endif
     }
 
     private func apply(_ event: WSEvent) {

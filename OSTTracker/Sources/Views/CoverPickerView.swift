@@ -25,7 +25,11 @@ struct CoverPickerView: View {
             candidateArea
         }
         .padding(24)
+        #if os(iOS)
+        .frame(maxWidth: 540)
+        #else
         .frame(width: 540)
+        #endif
         .preferredColorScheme(.dark)
         .task {
             candidates = await store.coverCandidates(ostID: ostID)

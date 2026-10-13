@@ -8,6 +8,7 @@ struct NowPlayingBar: View {
     var active: Bool = true
     /// macOS keeps the transport in the window even before a track is selected.
     var desktop: Bool = false
+    var onExpand: () -> Void = {}
 
     @State private var scrubbing = false
     @State private var scrubValue = 0.0
@@ -117,6 +118,7 @@ struct NowPlayingBar: View {
             .frame(maxWidth: 470)
 
             HStack(spacing: 10) {
+                expandButton
                 Image(systemName: "speaker.wave.2")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.textDim)
@@ -205,7 +207,21 @@ struct NowPlayingBar: View {
         HStack(spacing: 10) {
             playPauseButton
             stopButton
+            expandButton
         }
+    }
+
+    private var expandButton: some View {
+        Button(action: onExpand) {
+            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.textDim)
+                .frame(width: transportHitSize, height: transportHitSize)
+        }
+        .buttonStyle(.borderless)
+        .accessibilityLabel("Open fullscreen player")
+        .help("Open fullscreen player")
+        .disabled(!hasTrack)
     }
 
     private var playPauseButton: some View {

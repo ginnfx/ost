@@ -58,6 +58,24 @@ struct AddOstView: View {
     }
 
     var body: some View {
+        Group {
+            #if os(iOS)
+            ScrollView { formContent }
+                .presentationDetents([.large])
+            #else
+            formContent
+            #endif
+        }
+        .preferredColorScheme(.dark)
+        .interactiveDismissDisabled(isDirty)
+        .task(id: "\(title)\u{1}\(source)") {
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            historyConflict = AddOstRules.historyConflict(title: title, source: source, history: store.history)
+        }
+    }
+
+    private var formContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("ADD OST")
                 .font(.ostDisplay(18, weight: .bold))
@@ -118,29 +136,11 @@ struct AddOstView: View {
             }
         }
         .padding(28)
+        #if os(iOS)
+        .frame(maxWidth: 420)
+        #else
         .frame(width: 420)
-        // No custom background here: the sheet receives automatic Liquid Glass
-        // from the macOS 26+ SDK. A .background(.ultraThinMaterial) or any solid
-        // fill would override that glass — keep this view background-free.
-        .preferredColorScheme(.dark)
-        // RootView presents this via .sheet(item:), giving each open a fresh
-        // identity so the submitter-filter default is re-honored every time —
-        // but that also means an accidental Escape/click-outside destroys a
-        // half-typed form with no undo. Block dismissal while dirty; Cancel
-        // still calls dismiss() directly so it keeps working either way.
-        .interactiveDismissDisabled(isDirty)
-        // Debounced live pre-submit hint, checked locally against the
-        // already-loaded store.history (no network round trip — see
-        // AddOstRules.historyConflict, which mirrors the backend's match
-        // rule). The task is cancelled and restarted on every keystroke of
-        // either field (via id:); the short sleep only smooths the warning
-        // banner from flickering mid-word. The backend's 400 is the real
-        // enforcement — this is a proactive UX nicety only.
-        .task(id: "\(title)\u{1}\(source)") {
-            try? await Task.sleep(for: .milliseconds(200))
-            guard !Task.isCancelled else { return }
-            historyConflict = AddOstRules.historyConflict(title: title, source: source, history: store.history)
-        }
+        #endif
     }
 
     private func historyConflictMessage(_ entry: HistoryEntry) -> String {

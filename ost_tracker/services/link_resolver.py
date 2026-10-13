@@ -33,7 +33,7 @@ from typing import Callable, Optional
 from urllib.parse import urlparse
 
 from ost_tracker import config
-from ost_tracker.services.playback import resolve_stream_url
+from ost_tracker.services.playback import resolve_stream
 
 logger = logging.getLogger("ost_tracker.playback")
 
@@ -56,6 +56,7 @@ class Resolution:
     the best thing to open in a browser when ``stream_url`` is None."""
 
     stream_url: Optional[str]
+    stream_headers: Optional[dict[str, str]]
     watch_url: Optional[str]
     fallback_link: Optional[str]
 
@@ -223,22 +224,24 @@ def resolve_playback(
     direct_candidates = [cached_watch_url]
     if external_link and is_youtube_url(external_link):
         direct_candidates.append(external_link)
-    for candidate in direct_candidates:
+    # The cached page and the submitted page are often the same YouTube URL.
+    # Avoid repeating a slow yt-dlp extraction against the identical link.
+    for candidate in dict.fromkeys(direct_candidates):
         if not candidate:
             continue
-        stream = resolve_stream_url(candidate)
-        if stream:
+        media = resolve_stream(candidate)
+        if media:
             logger.info("resolved directly from %s in %.2fs", candidate, time.monotonic() - started)
-            return Resolution(stream_url=stream, watch_url=candidate, fallback_link=candidate)
+            return Resolution(stream_url=media.url, stream_headers=media.headers, watch_url=candidate, fallback_link=candidate)
         logger.info("direct extraction failed for %s", candidate)
 
     # Stage 2: parallel search for a candidate page, then extract from it.
     winner = _parallel_search(title, source) if title else None
     if winner:
-        stream = resolve_stream_url(winner)
-        if stream:
+        media = resolve_stream(winner)
+        if media:
             logger.info("resolved via search in %.2fs total", time.monotonic() - started)
-            return Resolution(stream_url=stream, watch_url=winner, fallback_link=winner)
+            return Resolution(stream_url=media.url, stream_headers=media.headers, watch_url=winner, fallback_link=winner)
         logger.info("extraction failed for search winner %s", winner)
 
     # Stage 3: nothing playable — browser fallback with the best link we have.
@@ -248,4 +251,4 @@ def resolve_playback(
         time.monotonic() - started,
         fallback or "nothing to open",
     )
-    return Resolution(stream_url=None, watch_url=None, fallback_link=fallback)
+    return Resolution(stream_url=None, stream_headers=None, watch_url=None, fallback_link=fallback)

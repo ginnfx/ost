@@ -41,7 +41,7 @@ final class PlayerSink {
         case .resolving:
             break
         case .playing:
-            if let stream = state.streamUrl, let url = URL(string: stream),
+            if let stream = routedStreamURL(state.streamUrl), let url = URL(string: stream),
                stream != currentStreamURL || player?.currentItem?.status == .failed {
                 load(url, stream: stream)
             }
@@ -51,6 +51,21 @@ final class PlayerSink {
         case .idle, .stopped:
             tearDown()
         }
+    }
+
+    private func routedStreamURL(_ stream: String?) -> String? {
+        guard let stream else { return nil }
+        #if os(iOS)
+        guard var relay = URLComponents(string: stream),
+              relay.host == "127.0.0.1" || relay.host == "localhost",
+              let address = UserDefaults.standard.string(forKey: LANConnection.addressKey),
+              let backend = URLComponents(string: address) else { return stream }
+        relay.host = backend.host
+        relay.port = backend.port
+        return relay.url?.absoluteString ?? stream
+        #else
+        return stream
+        #endif
     }
 
     func seek(to seconds: Double) {

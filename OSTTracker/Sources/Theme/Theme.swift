@@ -208,7 +208,7 @@ nonisolated extension Font {
         case .semibold, .medium: face = "SpotifyMix-Medium"
         default: face = "SpotifyMix-Regular"
         }
-        return .custom(face, size: size)
+        return .custom(face, size: size, relativeTo: .body)
     }
 
     /// The "OST TRACKER" wordmark — heaviest weight for a punchy brand mark.

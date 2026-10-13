@@ -2,12 +2,14 @@ import SwiftUI
 #if os(macOS)
 import AppKit
 
-// TODO(iOS): the sidecar lifecycle is macOS-only (it spawns a local process).
-// An iOS LAN-companion build would talk to a Mac-hosted sidecar instead and
-// tear down via scenePhase rather than an AppKit terminate hook.
+// macOS owns the Python backend; iOS starts with its on-device offline store.
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         AppStore.shared.shutdown()
+    }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        urls.forEach { CloudAccount.shared.handle($0) }
     }
 }
 #endif
@@ -31,9 +33,11 @@ struct OSTTrackerApp: App {
             #if os(iOS)
             IOSRootView(store: AppStore.shared)
                 .task { await AppStore.shared.start() }
+                .onOpenURL { CloudAccount.shared.handle($0) }
             #else
             RootView(store: AppStore.shared)
                 .task { await AppStore.shared.start() }
+                .onOpenURL { CloudAccount.shared.handle($0) }
                 .frame(minWidth: 980, minHeight: 640)
             #endif
         }

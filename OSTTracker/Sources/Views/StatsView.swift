@@ -318,6 +318,24 @@ private struct StatTile: View {
     let subject: String
 
     var body: some View {
+        Group {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text(superlative)
+                    .font(.ostBody(11, weight: .medium))
+                    .foregroundStyle(Theme.textDim)
+                Spacer(minLength: 8)
+                Text(value)
+                    .font(.ostMono(14, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+            }
+            Text(subject)
+                .font(.ostBody(12))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        #else
         HStack(alignment: .firstTextBaseline, spacing: 16) {
             Text(superlative)
                 .font(.ostBody(11, weight: .medium))
@@ -330,6 +348,8 @@ private struct StatTile: View {
             Text(value)
                 .font(.ostMono(14, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
+        }
+        #endif
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.horizontal, 16)
@@ -354,6 +374,16 @@ private struct OverviewStripCard: View {
     let metrics: [OverviewMetric]
 
     var body: some View {
+        #if os(iOS)
+        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
+                OverviewMetricColumn(metric: metric, index: index)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .padding(16)
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
+        #else
         HStack(spacing: 0) {
             ForEach(Array(metrics.enumerated()), id: \.element.id) { index, metric in
                 OverviewMetricColumn(metric: metric, index: index)
@@ -369,6 +399,7 @@ private struct OverviewStripCard: View {
         }
         .padding(16)
         .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 7))
+        #endif
     }
 }
 
@@ -409,6 +440,23 @@ private struct BarRow: View {
     let index: Int
 
     var body: some View {
+        Group {
+        #if os(iOS)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Text(data.label)
+                    .font(.ostBody(12, weight: .medium))
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+                Text(String(format: "%.2f", data.value))
+                    .font(.ostMono(12, weight: .semibold))
+                Text(data.detail)
+                    .font(.ostMono(10))
+                    .foregroundStyle(Theme.textDim)
+            }
+            bar
+        }
+        #else
         HStack(spacing: 12) {
             Text(data.label)
                 .font(.ostBody(12, weight: .medium))
@@ -416,16 +464,7 @@ private struct BarRow: View {
                 .lineLimit(1)
                 .frame(width: 110, alignment: .leading)
 
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Rectangle()
-                        .fill(Theme.bg)
-                    Rectangle()
-                        .fill(Theme.accent)
-                        .frame(width: geo.size.width * CGFloat(min(max(data.value, 0), 10) / 10))
-                }
-            }
-            .frame(height: 8)
+            bar
 
             Text(String(format: "%.2f", data.value))
                 .font(.ostMono(12, weight: .semibold))
@@ -437,8 +476,22 @@ private struct BarRow: View {
                 .foregroundStyle(Theme.textDim)
                 .frame(width: 66, alignment: .trailing)
         }
+        #endif
+        }
         .padding(.vertical, 4)
         .padding(.horizontal, 6)
+    }
+
+    private var bar: some View {
+        GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Rectangle().fill(Theme.bg)
+                Rectangle()
+                    .fill(Theme.accent)
+                    .frame(width: geo.size.width * CGFloat(min(max(data.value, 0), 10) / 10))
+            }
+        }
+        .frame(height: 8)
     }
 }
 

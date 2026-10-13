@@ -40,6 +40,7 @@ struct RootView: View {
     @State private var hoveredTab: AppTab?
     @State private var sidebarWidth: CGFloat = 200
     @State private var sidebarDragStart: CGFloat?
+    @State private var showVisualizer = false
     @Namespace private var navigationSelection
 
     @Environment(\.scenePhase) private var scenePhase
@@ -77,8 +78,9 @@ struct RootView: View {
                 }
                 NowPlayingBar(
                     store: store,
-                    active: !attract.isActive,
-                    desktop: true
+                    active: !attract.isActive && !showVisualizer,
+                    desktop: true,
+                    onExpand: { showVisualizer = true }
                 )
             }
 
@@ -87,6 +89,12 @@ struct RootView: View {
                     .zIndex(3)
                     .transition(.opacity)
                     .allowsHitTesting(false)
+            }
+
+            if showVisualizer {
+                VisualizerView(store: store) { showVisualizer = false }
+                    .zIndex(5)
+                    .transition(.opacity)
             }
 
             if let message = store.lastError {

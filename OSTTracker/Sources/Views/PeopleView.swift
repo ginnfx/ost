@@ -8,6 +8,7 @@ struct PeopleView: View {
     @State private var pendingDelete: Person?
 
     var body: some View {
+        ScrollView {
         VStack(alignment: .leading, spacing: 16) {
             Text("People")
                 .font(.ostDisplay(22, weight: .semibold))
@@ -18,14 +19,16 @@ struct PeopleView: View {
                     .font(.ostBody(14))
                     .padding(10)
                     .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
-                    .frame(width: 260)
+                    .frame(maxWidth: 260)
                     .onSubmit(submit)
                 Button("Add", action: submit)
                     .buttonStyle(.borderedProminent)
                     .font(.ostDisplay(12, weight: .semibold))
             }
             VStack(spacing: 0) {
-                    if store.people.isEmpty {
+                    if store.people.isEmpty && store.phase == .launching {
+                        LoadingSkeleton(rows: 3, style: .list)
+                    } else if store.people.isEmpty {
                         Text("No people yet")
                             .font(.ostBody(13))
                             .foregroundStyle(Theme.textDim)
@@ -52,11 +55,12 @@ struct PeopleView: View {
                     }
             }
             .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
-            Spacer()
         }
-        .padding(24)
+        .padding(16)
         .frame(maxWidth: 560, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollDismissesKeyboard(.interactively)
         .confirmationDialog(
             pendingDelete.map { "Delete \($0.name)?" } ?? "",
             isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
@@ -110,12 +114,15 @@ struct NotesView: View {
                         .font(.ostBody(12))
                         .foregroundStyle(Theme.textDim)
                 }
-                if store.notes.isEmpty { emptyState } else { notesList }
+                if store.notes.isEmpty && store.phase == .launching {
+                    LoadingSkeleton(rows: 3, style: .list)
+                } else if store.notes.isEmpty { emptyState } else { notesList }
             }
             .frame(maxWidth: 1050)
-            .padding(24)
+            .padding(16)
             .frame(maxWidth: .infinity)
         }
+        .scrollDismissesKeyboard(.interactively)
         .sheet(item: $promoteNote) { note in
             AddOstView(store: store, initialTitle: note.title,
                        initialSource: note.source ?? "", initialLink: note.externalLink ?? "")
@@ -238,17 +245,31 @@ struct NotesView: View {
                 .lineLimit(2...4)
                 .textFieldStyle(.plain).font(.ostBody(13))
                 .padding(10).background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
+            #if os(iOS)
+            Text("Ideas carry over to new rankings.")
+                .font(.ostMono(10))
+                .foregroundStyle(Theme.textDim)
+            HStack {
+                Spacer()
+                saveButton
+            }
+            #else
             HStack {
                 Text("Ideas carry over to new rankings.")
                     .font(.ostMono(10))
                     .foregroundStyle(Theme.textDim)
                 Spacer()
-                Button("Save for later") { saveNote() }
-                    .buttonStyle(.borderedProminent)
-                    .font(.ostDisplay(12, weight: .semibold))
-                    .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
+                saveButton
             }
+            #endif
         }
+    }
+
+    private var saveButton: some View {
+        Button("Save for later") { saveNote() }
+            .buttonStyle(.borderedProminent)
+            .font(.ostDisplay(12, weight: .semibold))
+            .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isSaving)
     }
 
     private var emptyState: some View {

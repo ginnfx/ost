@@ -11,6 +11,8 @@ struct IOSRootView: View {
     @State private var addOstRequest: AddOstRequest?
     @State private var submitterFilter: Int?
     @State private var attract = AttractModeController()
+    @State private var showVisualizer = false
+    @State private var showSettings = false
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @AppStorage(Theme.presetKey) private var themePreset = "emerald"
@@ -31,17 +33,41 @@ struct IOSRootView: View {
                 Tab("Notes", systemImage: AppTab.notes.systemImage, value: AppTab.notes) {
                     NotesView(store: store)
                 }
-                Tab("Stats", systemImage: AppTab.stats.systemImage, value: AppTab.stats) {
-                    StatsView(store: store)
-                }
-                Tab("Batches", systemImage: AppTab.batches.systemImage, value: AppTab.batches) {
-                    BatchesView(store: store)
-                }
-                Tab("History", systemImage: AppTab.history.systemImage, value: AppTab.history) {
-                    HistoryView(store: store)
-                }
-                Tab("Settings", systemImage: AppTab.settings.systemImage, value: AppTab.settings) {
-                    SettingsView()
+                Tab("More", systemImage: "ellipsis.circle", value: AppTab.settings) {
+                    NavigationStack {
+                        List {
+                            Section("Your data") {
+                            NavigationLink {
+                                StatsView(store: store)
+                            } label: {
+                                Label("Stats", systemImage: AppTab.stats.systemImage)
+                            }
+                            NavigationLink {
+                                BatchesView(store: store)
+                            } label: {
+                                Label("Batches", systemImage: AppTab.batches.systemImage)
+                            }
+                            NavigationLink {
+                                HistoryView(store: store)
+                            } label: {
+                                Label("History", systemImage: AppTab.history.systemImage)
+                            }
+                            }
+                            Section("App") {
+                            NavigationLink {
+                                SettingsView()
+                            } label: {
+                                Label("Settings", systemImage: AppTab.settings.systemImage)
+                            }
+                            NavigationLink {
+                                MacConnectionView()
+                            } label: {
+                                Label("Mac connection", systemImage: "desktopcomputer")
+                            }
+                            }
+                        }
+                        .navigationTitle("More")
+                    }
                 }
             }
             // Float the NowPlayingBar above the tab bar, inside the safe area.
@@ -49,7 +75,8 @@ struct IOSRootView: View {
                 if store.playback?.status != nil, store.playback?.status != .idle {
                     NowPlayingBar(
                         store: store,
-                        active: !attract.isActive
+                        active: !attract.isActive && !showVisualizer,
+                        onExpand: { showVisualizer = true }
                     )
                     .padding(.horizontal, 12)
                     .padding(.bottom, 8)
@@ -57,7 +84,26 @@ struct IOSRootView: View {
                 }
             }
             // Overlay for the iOS navigation bar header (title + action buttons).
-            .safeAreaInset(edge: .top) { topBar }
+            .safeAreaInset(edge: .top) {
+                VStack(spacing: 0) {
+                    topBar
+                    if case .failed(let reason) = store.phase {
+                        HStack(spacing: 10) {
+                            Image(systemName: "wifi.slash")
+                            Text(reason)
+                                .font(.caption)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                            Button("Retry") { Task { await store.start() } }
+                                .font(.caption.weight(.semibold))
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .foregroundStyle(Theme.textPrimary)
+                        .background(Theme.rust.opacity(0.25))
+                    }
+                }
+            }
             .id("theme-\(themePreset)-\(customAccent)")
 
             if attract.isActive {
@@ -86,6 +132,20 @@ struct IOSRootView: View {
         .animation(Theme.motion(.overlay, reduceMotion: reduceMotion), value: attract.isActive)
         .sheet(item: $addOstRequest) { request in
             AddOstView(store: store, defaultSubmitterID: request.submitterID)
+        }
+        .fullScreenCover(isPresented: $showVisualizer) {
+            VisualizerView(store: store) { showVisualizer = false }
+        }
+        .sheet(isPresented: $showSettings) {
+            NavigationStack {
+                SettingsView()
+                    .navigationTitle("Settings")
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { showSettings = false }
+                        }
+                    }
+            }
         }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active { store.onBecameActive() }
@@ -119,7 +179,7 @@ struct IOSRootView: View {
                     .foregroundStyle(Theme.rust)
                     .accessibilityLabel("Backend unavailable")
             }
-            Button { tab = .settings } label: {
+            Button { showSettings = true } label: {
                 Image(systemName: "gearshape")
                     .frame(width: 44, height: 44)
             }

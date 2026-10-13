@@ -52,6 +52,7 @@ final class LyricsService {
     private struct LrclibTrack: Decodable {
         let trackName: String?
         let artistName: String?
+        let albumName: String?
         let duration: Double?
         let syncedLyrics: String?
     }
@@ -65,15 +66,15 @@ final class LyricsService {
             guard let results = await search(query) else { continue }
             let synced = results.filter { !($0.syncedLyrics ?? "").isEmpty }
             guard !synced.isEmpty else { continue }
-            let best = pick(from: synced, title: ost.title, duration: duration)
+            let best = pick(from: synced, title: ost.title, source: ost.source, duration: duration)
             if best == nil {
-                let durs = synced.map { "\($0.trackName ?? "?")=\(Int($0.duration ?? -1))s" }
-                print("LYRICS no duration match for \"\(query)\" target=\(Int(duration ?? -1))s candidates: \(durs.joined(separator: ", "))")
+                let metadata = synced.map { "\($0.trackName ?? "?") / \($0.artistName ?? "?") / \($0.albumName ?? "?")" }
+                print("LYRICS no metadata match for \"\(query)\" target=\(Int(duration ?? -1))s candidates: \(metadata.joined(separator: "; "))")
             }
             if let raw = best?.syncedLyrics {
                 let lines = parseLRC(raw)
                 if lines.count >= 4 {
-                    print("LYRICS matched \"\(best?.trackName ?? "?")\" (\(Int(best?.duration ?? -1))s) for \"\(query)\" target=\(Int(duration ?? -1))s")
+                    print("LYRICS matched \"\(best?.trackName ?? "?")\" by \(best?.artistName ?? "unknown") on \(best?.albumName ?? "unknown album") for \"\(query)\"")
                     return lines
                 }
             }
@@ -81,38 +82,34 @@ final class LyricsService {
         return nil
     }
 
-    /// Duration is the strongest same-version signal we have, but our source is
-    /// a YouTube stream that routinely runs a few seconds longer than the
-    /// official track (intro/outro padding). So: prefer the CLOSEST duration,
-    /// accept within 15s outright, stretch to 30s when the track title also
-    /// matches ours, and only reject when nothing comes close — wrong-version
-    /// lyrics drift out of sync, which is worse than none.
     private static func pick(
-        from candidates: [LrclibTrack], title: String, duration: Double?
+        from candidates: [LrclibTrack], title: String, source: String?, duration: Double?
     ) -> LrclibTrack? {
-        guard let target = duration else {
-            // No duration yet (player still resolving). A blind first-hit is
-            // routinely a different song for generic titles like "Main Theme"
-            // — at minimum the track name has to match ours.
-            return candidates.first { titleMatches($0.trackName, title) }
+        let credible = candidates.filter {
+            titleMatches($0.trackName, title) && sourceMatches($0.albumName, source)
         }
-        let ranked = candidates
-            .map { (track: $0, delta: abs(($0.duration ?? -1000) - target)) }
-            .sorted { $0.delta < $1.delta }
-        guard let closest = ranked.first else { return nil }
-        if closest.delta < 15 { return closest.track }
-        return ranked.first {
-            $0.delta < 30 && titleMatches($0.track.trackName, title)
-        }?.track
+        guard let target = duration else { return credible.first }
+        return credible
+            .compactMap { track -> (LrclibTrack, Double)? in
+                guard let trackDuration = track.duration else { return nil }
+                let delta = abs(trackDuration - target)
+                return delta <= 30 ? (track, delta) : nil
+            }
+            .min { $0.1 < $1.1 }?.0
     }
 
-    /// Loose containment on lowercased alphanumerics, both directions — so
-    /// "Nameless Faces - English Ver." matches "Nameless Faces" and vice versa.
     private static func titleMatches(_ candidate: String?, _ ours: String) -> Bool {
         guard let candidate else { return false }
         let a = normalize(candidate), b = normalize(ours)
         guard !a.isEmpty, !b.isEmpty else { return false }
-        return a.contains(b) || b.contains(a)
+        return a == b
+    }
+
+    private static func sourceMatches(_ album: String?, _ source: String?) -> Bool {
+        guard let source, !source.isEmpty else { return true }
+        guard let album, !album.isEmpty else { return false }
+        let a = normalize(album), s = normalize(source)
+        return a.contains(s) || s.contains(a)
     }
 
     private static func normalize(_ s: String) -> String {
