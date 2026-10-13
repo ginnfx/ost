@@ -106,10 +106,11 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 
 ## Phase 11 — End-to-end and security exercises
 - [x] Local Supabase, Storage, media worker checks, and Next production build were run together.
-- [ ] Simulated 10-account complete round, host flow, demo, recovery drill.
+- [ ] Simulated 10-account complete round through the browser UI (lifecycle fixture passes separately; host bootstrap/invite/recovery browser flow passes for one participant).
 - [x] Unauthorized reads/actions, storage access, participant host-grant attempt (local SQL, HTTP/API, Storage, and rendered-payload probes passed).
 - [x] Playwright WebKit viewport/throttle and demo/participant/host demo journeys pass; axe passes on implemented public pages in dark and light modes.
-- [ ] Axe coverage for every authenticated route, physical authenticator/recovery verification, and production performance measurements.
+- [x] Axe coverage for authenticated host and participant pages, both color schemes, passed in Chromium.
+- [ ] Physical authenticator/recovery verification, production performance measurements, and iPhone Safari performance/viewport checks.
 - [ ] Full Python suite is not fully green: 145 passed; one pre-existing assertion in `tests/test_data_layer.py::test_statistics_edge_cases` expects `"—"`, while the unchanged `spread_label(None, None)` implementation returns an empty string. The Mac scoring/history-focused subset passes (30 tests); this unrelated OSTTracker behavior was left unchanged.
 
 ## Phase 12 — Documentation and report
@@ -121,13 +122,13 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [ ] Final report includes open risks and manual steps.
 
 
-## Current work checkpoint (2026-10-13 20:01 CEST)
+## Current work checkpoint (2026-10-13 21:15 CEST)
 
-The Mac integration branch includes the website native-session bridge, SwiftUI Mac competition account, offline batch/audio cache and rating queue, history imports, local media archive flow, and Python scoring parity tests. The deployment-only demo was built and browser-checked without local env files or Supabase/demo-origin variables. The local media worker now completes the full TUS-to-playable-AAC path through the same HTTP handler used in Cloud Run; only real GCP deployment remains unverified. The full local API/Storage/page security probe passes. A full ten-account competition, physical passkey/recovery exercise, real-Mac offline retry/archive playback, complete authenticated-route axe sweep, and performance measurements remain unverified; keep real participant data off the current local setup.
+The Mac integration branch includes the website native-session bridge, SwiftUI Mac competition account, offline batch/audio cache and rating queue, history imports, local media archive flow, and Python scoring parity tests. The deployment-only demo was built and browser-checked without local env files or Supabase/demo-origin variables. The local media worker completes the full TUS-to-playable-AAC path through the same HTTP handler used in Cloud Run; only real GCP deployment remains unverified. The full local API/Storage/page security probe passes. A complete ten-account UI journey in Playwright, a physical passkey, real-Mac offline retry/archive playback, and production performance measurements remain outstanding; keep real participant data off the current local setup.
 
 ## User-requested follow-up (2026-10-13)
 - [x] 1. Cloud Run/Cloud Tasks deployment configuration, authenticated trigger/callback, retries, failure reporting, setup instructions, and local TUS-to-decodable-AAC orchestration test.
-- [ ] 2. Full 10-account Chromium competition with virtual authenticators, including host recovery-code drill.
-- [ ] 3. Axe across every authenticated route for participant and host in light and dark modes.
-- [ ] 4. Mobile-throttled LCP/INP/CLS measurements on participant routes.
+- [ ] 2. Full 10-account Chromium competition with virtual authenticators, including host recovery-code drill. A separate lifecycle fixture passed with 10 accounts, 50 entries, five batches, scoring, all five reveal groups, and trial cleanup. Chromium virtual-authenticator testing passed host bootstrap, trial creation, one nickname-only invite, participant enrollment, a rating save, and the host recovery-code drill. Still incomplete: the 10-account lifecycle has not run through Playwright; the lifecycle fixture drives the state machine at the database layer, and browser submissions use seeded fixture media rather than ten UI uploads.
+- [x] 3. Axe across authenticated pages in light and dark modes: host `/app`, `/host/security`, `/host/trials`, `/host/submissions`, `/host/competitions/[id]`; participant `/app`, `/competition/[id]/submit`, and `/competition/[id]/listen`. No WCAG 2.2 A/AA axe violations were reported in Chromium.
+- [x] 4. Mobile profile measurements on participant pages in Chromium at 375×812, 4× CPU slowdown, 150 ms RTT, 1.6 Mbps down / 750 Kbps up. Local dev results: `/app` LCP 328 ms, CLS 0; `/submit` LCP 336 ms, CLS 0, no Event Timing event reached the 16 ms observer threshold; active `/listen` LCP 340 ms, CLS 0.0077, INP 24 ms. These are synthetic local measurements, not production or real-iPhone results. No interaction was performed on `/app`, so its INP was not sampled.
 - [x] 5. Run the Python statistics edge-case test on the main branch: confirmed it fails there with the same expected "—" versus actual empty string mismatch. No OSTTracker code was changed.

@@ -16,12 +16,15 @@ const admin = createClient(
 );
 const competitionId = randomUUID();
 const hostId = randomUUID();
-const participantId = randomUUID();
+const participantIds = Array.from({ length: 9 }, () => randomUUID());
+const participantId = participantIds[0];
 const hostEmail = `host-${competitionId}@example.invalid`;
-const participantEmail = `player-${competitionId}@example.invalid`;
+const participantSql = participantIds
+  .map((id, index) => `('${competitionId}','${id}','Player ${index + 1}')`)
+  .join(",");
 const dbContainer =
   process.env.LOCAL_SUPABASE_DB_CONTAINER ?? "supabase_db_ost-competition-private";
-const userIds = [hostId, participantId];
+const userIds = [hostId, ...participantIds];
 
 function psql(query) {
   try {
@@ -93,20 +96,21 @@ function cleanFixture() {
 
 try {
   await createUser(hostId, hostEmail);
-  await createUser(participantId, participantEmail);
+  for (const [index, id] of participantIds.entries())
+    await createUser(id, `player-${index}-${competitionId}@example.invalid`);
   psql(`
     insert into private.platform_config(singleton,host_user_id) values(true,'${hostId}');
     insert into private.competitions(id,name,status,settings)
     values ('${competitionId}','Local listening test','submissions_open',
-      '{"entries_per_participant":2,"batch_count":2,"reveal_group_count":2,"min_clip_seconds":20,"max_clip_seconds":360,"max_upload_bytes":524288000,"loudness_normalization":false}');
+      '{"entries_per_participant":5,"batch_count":5,"reveal_group_count":5,"min_clip_seconds":20,"max_clip_seconds":360,"max_upload_bytes":524288000,"loudness_normalization":false}');
     insert into private.participants(competition_id,user_id,nickname) values
-      ('${competitionId}','${hostId}','Host'),('${competitionId}','${participantId}','Player');
+      ('${competitionId}','${hostId}','Host'),${participantSql};
     insert into private.submissions(competition_id,participant_id,slot,franchise,ost_title,status,
       original_storage_key,audio_storage_key,original_bytes,original_seconds,audio_seconds,confirmed_at)
     select '${competitionId}',p.id,n,'Series '||n,'Track '||p.nickname||n,'confirmed',
       repeat(md5(p.id::text||n),1)||'/'||md5(p.id::text||n||'original')||'.mp4',
       repeat(md5(p.id::text||n),1)||'/'||md5(p.id::text||n||'audio')||'.m4a',1024,60,60,now()
-    from private.participants p cross join generate_series(1,2) n where p.competition_id='${competitionId}';
+    from private.participants p cross join generate_series(1,5) n where p.competition_id='${competitionId}';
   `);
 
   asUser(hostId, `select private.host_lock_submissions('${competitionId}')`);
@@ -114,8 +118,8 @@ try {
     hostId,
     `select private.host_start_listening('${competitionId}')`,
   );
-  if (!startResult.endsWith("2")) throw new Error("Expected two listening batches.");
-  for (const batch of [1, 2])
+  if (!startResult.endsWith("5")) throw new Error("Expected five listening batches.");
+  for (const batch of [1, 2, 3, 4, 5])
     asUser(hostId, `select private.host_release_batch('${competitionId}',${batch}::smallint)`);
 
   for (const userId of userIds) {
@@ -123,8 +127,8 @@ try {
       userId,
       `select coalesce(json_agg(to_jsonb(x) order by x.batch_number),'[]'::json) from private.my_listening_batches('${competitionId}') x`,
     );
-    if (batchRows.length !== 2 || batchRows.some((batch) => batch.entry_count === 0))
-      throw new Error("Expected each participant to have nonempty batches.");
+    if (batchRows.length !== 5 || batchRows.some((batch) => batch.entry_count === 0))
+      throw new Error(`Expected five nonempty batches; got ${batchRows.map((batch) => `${batch.number}:${batch.entry_count}`).join(",")}.`);
     for (const batch of batchRows) {
       const entries = asUserJSON(
         userId,
@@ -191,8 +195,8 @@ try {
     hostId,
     `select private.host_record_score_snapshot('${competitionId}','${scoringInput.seed}',$payload$${JSON.stringify(snapshot)}$payload$::jsonb)`,
   );
-  if (snapshot.ranked.length !== 4 || snapshot.revealGroups.length !== 2)
-    throw new Error("Scoring snapshot has an unexpected shape.");
+  if (snapshot.ranked.length !== 50 || snapshot.revealGroups.length !== 5)
+    throw new Error("10-account scoring snapshot should rank 50 entries in five groups.");
 
   for (const group of snapshot.revealGroups) {
     asUser(
@@ -256,7 +260,7 @@ try {
   asUser(hostId, `select private.host_delete_trial('${trialId}')`);
   if (psql(`select count(*) from private.competitions where id='${trialId}'`) !== "0")
     throw new Error("Trial cleanup left competition rows behind.");
-  console.log("Local listening, rating, scoring, reveal, and trial lifecycle passed.");
+  console.log("10-account/50-entry listening, five batches, autosave/finalize, scoring, all five reveal groups, and trial lifecycle passed.");
 } finally {
   cleanFixture();
   for (const id of userIds)

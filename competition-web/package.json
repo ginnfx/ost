@@ -18,6 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:e2e:chromium": "playwright test --config playwright.chromium.config.ts",
     "test:e2e:install": "playwright install webkit",
     "security:audit": "npm audit --audit-level=high",
     "security:integration": "node scripts/test-security-integration.mjs",
