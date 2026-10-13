@@ -1,6 +1,8 @@
 import { expect, test } from '@playwright/test';
 import { createRequire } from 'node:module';
+import { readFileSync } from 'node:fs';
 const require=createRequire(import.meta.url);
+const axeSource=readFileSync(require.resolve('axe-core/axe.min.js'),'utf8');
 
 test('demo advertises isolation and stays within phone width',async({page})=>{
   await page.goto('/demo');
@@ -38,10 +40,10 @@ test('layout reflows at 320px, iPhone portrait, and landscape under throttled re
   }
 });
 
-test('home and demo have no automated WCAG A/AA axe violations in dark or light mode',async({page})=>{
-  for(const route of ['/','/demo']) for(const colorScheme of ['dark','light'] as const){
+test('public pages have no automated WCAG A/AA axe violations in dark or light mode',async({page})=>{
+  for(const route of ['/','/how-it-works','/demo']) for(const colorScheme of ['dark','light'] as const){
     await page.emulateMedia({colorScheme});await page.goto(route);
-    await page.addScriptTag({path:require.resolve('axe-core/axe.min.js')});
+    await page.evaluate((source)=>{eval(source);},axeSource);
     const report=await page.evaluate(async()=>{
       const axe=(window as unknown as Window & {axe:{run:(document:Document,options:unknown)=>Promise<{violations:{id:string;help:string;nodes:{target:string[]}[]}[]}>}}).axe;
       return axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21a','wcag21aa','wcag22aa']}});
@@ -50,7 +52,22 @@ test('home and demo have no automated WCAG A/AA axe violations in dark or light 
   }
 });
 
-test('host explores review, progress, recovery, scoring, and five passkey-gated reveals',async({page})=>{
+test('responses use fresh strict CSP nonces and privacy headers',async({request})=>{
+  const first=await request.get('/demo');
+  const second=await request.get('/demo');
+  const csp=first.headers()['content-security-policy']??'';
+  expect(csp).toContain("script-src 'self' 'nonce-");
+  expect(csp).toContain("'strict-dynamic'");
+  expect(csp).not.toContain("'unsafe-inline'");
+  const nonceOne=csp.match(/'nonce-([^']+)'/)?.[1];
+  const nonceTwo=(second.headers()['content-security-policy']??'').match(/'nonce-([^']+)'/)?.[1];
+  expect(nonceOne).toBeTruthy();expect(nonceTwo).toBeTruthy();expect(nonceTwo).not.toBe(nonceOne);
+  expect(first.headers()['x-robots-tag']).toContain('noindex');
+  expect(first.headers()['x-content-type-options']).toBe('nosniff');
+  expect(first.headers()['referrer-policy']).toBe('no-referrer');
+});
+
+test('host explores review, progress, recovery, scoring, and per-entry passkey-gated reveals',async({page})=>{
   await page.goto('/demo');
   await page.getByRole('button',{name:'Host'}).click();
   await page.getByRole('tab',{name:'Submissions'}).click();
@@ -69,13 +86,15 @@ test('host explores review, progress, recovery, scoring, and five passkey-gated 
   await page.getByRole('tab',{name:'Score'}).click();
   await page.getByRole('button',{name:'Score and freeze round'}).click();
   await page.getByRole('tab',{name:'Publish results'}).click();
-  for(let group=1;group<=5;group++){
-    const button=page.getByRole('button',{name:'Hold to publish next group'});
+  for(let entry=1;entry<=50;entry++){
+    const button=page.getByRole('button',{name:'Hold to publish next soundtrack'});
+    if(entry===1){
     await button.scrollIntoViewIfNeeded();
     const box=await button.boundingBox();if(!box)throw new Error('Publish control is not visible.');
     await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();await page.waitForTimeout(1750);await page.mouse.up();
+    }else await page.getByRole('button',{name:'Reveal next soundtrack'}).click();
     await page.getByRole('button',{name:'Simulate passkey verification'}).click();
-    if(group<5) await expect(page.getByText(`${group} of 5 reveal groups visible`)).toBeVisible();
+    if(entry<50) await expect(page.getByText(`Participant preview: ${entry} soundtracks visible.`)).toBeVisible();
   }
   await page.getByRole('button',{name:'Participant'}).click();
   await expect(page.getByRole('heading',{name:'The round is complete'})).toBeVisible();

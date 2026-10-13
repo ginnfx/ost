@@ -1,0 +1,59 @@
+project_id = "ost-competition-private"
+
+[api]
+enabled = true
+port = 54341
+# Only an empty public schema is exposed. The GraphQL endpoint/schema is omitted.
+schemas = ["public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54342
+shadow_port = 54340
+major_version = 17
+health_timeout = "2m"
+
+[studio]
+enabled = true
+port = 54343
+api_url = "http://127.0.0.1"
+
+[inbucket]
+enabled = true
+port = 54344
+smtp_port = 54345
+pop3_port = 54346
+
+[storage]
+enabled = true
+file_size_limit = "500MiB"
+
+[storage.buckets.competition-media]
+public = false
+file_size_limit = "500MiB"
+allowed_mime_types = ["video/mp4", "video/quicktime", "video/webm", "video/x-matroska", "audio/mp4", "audio/aac"]
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["http://localhost:3000/**"]
+jwt_expiry = 3600
+enable_signup = false
+enable_anonymous_sign_ins = false
+enable_manual_linking = false
+
+[auth.email]
+enable_signup = false
+enable_confirmations = true
+secure_password_change = true
+max_frequency = "1m"
+
+[auth.mfa]
+max_enrolled_factors = 5
+
+[analytics]
+enabled = false
+
+[edge_runtime]
+enabled = false
