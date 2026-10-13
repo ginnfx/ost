@@ -26,7 +26,8 @@
     "format:check": "prettier --check \"**/*.{ts,tsx,css}\"",
     "media:build": "docker build -f worker/Dockerfile -t ost-competition-media-worker:local worker",
     "media:process": "node scripts/media-worker.mjs",
-    "media:test": "node scripts/test-media-worker.mjs"
+    "media:test": "node scripts/test-media-worker.mjs",
+    "storage:test": "node scripts/test-storage-tus.mjs"
   },
   "keywords": [],
   "author": "",
@@ -42,6 +43,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "server-only": "0.0.1",
+    "tus-js-client": "4.3.1",
     "zod": "4.6.7"
   },
   "devDependencies": {

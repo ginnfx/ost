@@ -7,11 +7,14 @@ const image = process.env.MEDIA_WORKER_IMAGE ?? 'ost-competition-media-worker:lo
 const timeoutSeconds = Number(process.env.MEDIA_WORKER_TIMEOUT_SECONDS ?? '180');
 const maxBytes = Number(process.env.MEDIA_MAX_UPLOAD_BYTES ?? `${500 * 1024 * 1024}`);
 
-export async function processClip(inputPath, outputPath, normalize = false) {
+export async function processClip(inputPath, outputPath, normalize = false, limits = {}) {
+  const maxUploadBytes = Math.min(Number(limits.maxUploadBytes ?? maxBytes), 500 * 1024 * 1024);
+  const minClipSeconds = Number(limits.minClipSeconds ?? process.env.MEDIA_MIN_CLIP_SECONDS ?? 20);
+  const maxClipSeconds = Number(limits.maxClipSeconds ?? process.env.MEDIA_MAX_CLIP_SECONDS ?? 360);
   const input = await realpath(inputPath);
   const output = resolve(outputPath);
   const inputInfo = await stat(input);
-  if (!inputInfo.isFile() || inputInfo.size < 1 || inputInfo.size > maxBytes) {
+  if (!inputInfo.isFile() || inputInfo.size < 1 || inputInfo.size > maxUploadBytes) {
     throw new Error('Input file size is invalid.');
   }
   await mkdir(dirname(output), { recursive: true });
@@ -27,7 +30,9 @@ export async function processClip(inputPath, outputPath, normalize = false) {
     '--tmpfs', '/tmp:rw,noexec,nosuid,size=64m',
     '--mount', `type=bind,src=${input},dst=/input/source,readonly`,
     '--mount', `type=bind,src=${work},dst=/output`,
-    '-e', `MEDIA_MAX_UPLOAD_BYTES=${maxBytes}`,
+    '-e', `MEDIA_MAX_UPLOAD_BYTES=${maxUploadBytes}`,
+    '-e', `MEDIA_MIN_CLIP_SECONDS=${minClipSeconds}`,
+    '-e', `MEDIA_MAX_CLIP_SECONDS=${maxClipSeconds}`,
     '-e', `MEDIA_WORKER_TIMEOUT_SECONDS=${timeoutSeconds}`,
     image, '--input', '/input/source', '--output', '/output/processed.m4a',
     ...(normalize ? ['--normalize'] : []),
@@ -52,6 +57,9 @@ export async function processClip(inputPath, outputPath, normalize = false) {
         try {
           const result = JSON.parse(outputText);
           if (!result.ok) return reject(new Error(`Media processing rejected: ${result.code}.`));
+          if (result.audio_codec !== 'aac' || result.sample_rate !== 48000 || result.channels !== 2 || result.duration_mismatch !== (Math.abs(result.original_seconds - result.audio_seconds) > 0.1)) {
+            return reject(new Error('Media worker output did not match the required audio format.'));
+          }
           if (code !== 0) return reject(new Error(`Media worker failed (${code ?? 'signal'}).`));
           resolvePromise(result);
         } catch (error) {

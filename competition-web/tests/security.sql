@@ -4,7 +4,12 @@ begin;
 
 do $$ declare r record; begin
   if has_schema_privilege('anon','private','usage') then raise exception 'anon can use private schema'; end if;
-  if has_schema_privilege('authenticated','private','usage') then raise exception 'authenticated can use private schema'; end if;
+  if has_schema_privilege('authenticated','private','usage') is not true then raise exception 'authenticated cannot call the scoped Storage policy helper'; end if;
+  if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='private' and p.proname<>'can_upload_competition_object'
+      and has_function_privilege('authenticated',p.oid,'execute')) then
+    raise exception 'authenticated can execute an unapproved private function';
+  end if;
   if has_schema_privilege('ost_web_app','private','usage') is not true then raise exception 'web role cannot execute private DTO functions'; end if;
   for r in select c.relname,c.relrowsecurity,c.relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='private' and c.relkind='r' loop
     if not r.relrowsecurity or not r.relforcerowsecurity then raise exception 'RLS not forced for %',r.relname; end if;
@@ -15,6 +20,12 @@ do $$ declare r record; begin
   if has_function_privilege('anon','private.complete_host_bootstrap(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') then raise exception 'anon can bootstrap host credentials'; end if;
   if has_function_privilege('authenticated','private.complete_host_recovery(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') then raise exception 'authenticated can invoke host recovery directly'; end if;
   if has_function_privilege('ost_web_app','private.complete_host_bootstrap(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') is not true then raise exception 'web role cannot complete a token-authorized bootstrap'; end if;
+  if has_function_privilege('anon','private.start_submission_upload(uuid,smallint,text,bigint,text,bigint,numeric,text)','execute') then raise exception 'anon can start a private submission upload'; end if;
+  if has_function_privilege('authenticated','private.finish_submission_processing(uuid,text,numeric,numeric,boolean)','execute') then raise exception 'authenticated can finish media processing'; end if;
+  if has_function_privilege('ost_web_app','private.start_submission_upload(uuid,smallint,text,bigint,text,bigint,numeric,text)','execute') is not true then raise exception 'web role cannot start a participant upload'; end if;
+  if has_function_privilege('ost_web_app','private.list_host_submission_reviews()','execute') is not true then raise exception 'web role cannot call host review DTO'; end if;
+  if has_function_privilege('anon','private.can_upload_competition_object(text)','execute') then raise exception 'anon can authorize Storage uploads'; end if;
+  if has_function_privilege('authenticated','private.can_upload_competition_object(text)','execute') is not true then raise exception 'authenticated cannot check its pending Storage key'; end if;
 end $$;
 
 -- A participant-controlled metadata claim must never mint host privileges.
@@ -40,8 +51,11 @@ do $$ begin
   if (select public from storage.buckets where id='competition-media') is distinct from false then
     raise exception 'competition media bucket is not private';
   end if;
-  if exists(select 1 from pg_policies where schemaname='storage' and tablename='objects') then
-    raise exception 'unexpected storage object policy grants access';
+  if (select count(*) from pg_policies where schemaname='storage' and tablename='objects')<>1
+     or not exists(select 1 from pg_policies where schemaname='storage' and tablename='objects'
+       and policyname='competition_participant_upload' and cmd='INSERT'
+       and with_check like '%can_upload_competition_object%') then
+    raise exception 'Storage insert must be restricted to a participant pending-upload key';
   end if;
 end $$;
 

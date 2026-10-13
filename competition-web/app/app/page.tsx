@@ -6,6 +6,7 @@ import { verifiedCurrentUser } from "@/lib/server/auth";
 
 export const dynamic = "force-dynamic";
 type Membership = {
+  competition_id: string;
   round_name: string;
   round_status: string;
   nickname: string;
@@ -31,6 +32,11 @@ export default async function ParticipantHome() {
           OST TRACKER <span>COMPETITION</span>
         </Link>
         <div className="signout-control">
+          {isHost && (
+            <Link className="text-link" href="/host/submissions">
+              Flagged clips
+            </Link>
+          )}
           {isHost && (
             <Link className="text-link" href="/host/security">
               Host security
@@ -66,7 +72,17 @@ export default async function ParticipantHome() {
                     {round.nickname} · {round.round_status.replaceAll("_", " ")}
                   </p>
                 </div>
-                {round.is_trial && <span className="trial-chip">TRIAL</span>}
+                <div className="round-actions">
+                  {round.is_trial && <span className="trial-chip">TRIAL</span>}
+                  {round.round_status === "submissions_open" && (
+                    <Link
+                      className="button secondary"
+                      href={`/competition/${round.competition_id}/submit`}
+                    >
+                      Submit entries
+                    </Link>
+                  )}
+                </div>
               </article>
             ))}
           </div>

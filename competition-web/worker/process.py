@@ -99,6 +99,10 @@ def process(source: Path, output: Path, normalize: bool) -> dict:
     output_streams = [stream for stream in output_info.get("streams", []) if stream.get("codec_type") == "audio"]
     if len(output_streams) != 1:
         raise ProcessingError("transcode_failed")
+    if output_streams[0].get("codec_name") != "aac":
+        raise ProcessingError("transcode_failed")
+    if int(output_streams[0].get("sample_rate", 0)) != 48000 or int(output_streams[0].get("channels", 0)) != 2:
+        raise ProcessingError("transcode_failed")
     audio_duration = duration_for(output_info.get("format", {}), output_streams)
     return {
         "ok": True,

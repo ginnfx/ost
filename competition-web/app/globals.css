@@ -591,6 +591,129 @@ h1 {
   padding: 7px 0;
   break-inside: avoid;
 }
+.submission-workspace {
+  margin-top: 28px;
+}
+.submission-slot {
+  margin: 18px 0;
+  padding: 22px 0;
+  border-top: 1px solid var(--border);
+}
+.submission-slot-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.submission-slot-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+.submission-slot-heading span,
+.submission-existing p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.submission-existing {
+  display: grid;
+  justify-items: start;
+  gap: 10px;
+  margin: 18px 0;
+}
+.submission-existing p {
+  margin: 0;
+}
+.submission-existing audio {
+  width: min(100%, 520px);
+}
+.submission-form {
+  display: grid;
+  gap: 9px;
+  margin: 20px 0;
+  max-width: 520px;
+}
+.submission-form label {
+  font-size: 14px;
+  font-weight: 650;
+}
+.submission-form input:not([type="file"]) {
+  min-height: 46px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--raised);
+}
+.submission-form input[type="file"] {
+  width: 100%;
+  min-height: 48px;
+  padding: 8px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+}
+.submission-form progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+.submission-slot > p[role="status"] {
+  min-height: 22px;
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.round-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.host-review-list {
+  margin-top: 28px;
+}
+.host-review-list > p[role="status"] {
+  color: var(--muted);
+}
+.host-review {
+  padding: 24px 0;
+  border-top: 1px solid var(--border);
+}
+.host-review h2,
+.host-review h3 {
+  margin: 0;
+}
+.host-review header p:not(.eyebrow) {
+  color: var(--muted);
+}
+.review-duplicate {
+  color: var(--accent-text);
+  font-weight: 650;
+}
+.review-media-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 22px;
+  margin: 18px 0;
+}
+.review-media-grid > div {
+  min-width: 0;
+}
+.review-media-grid h3 {
+  margin-bottom: 8px;
+  font-size: 15px;
+}
+.review-media-grid video,
+.review-media-grid audio {
+  width: 100%;
+  border-radius: var(--radius-md);
+  background: #000;
+}
+.review-media-grid video {
+  max-height: 350px;
+}
+.review-media-grid p {
+  color: var(--muted);
+  font-size: 13px;
+}
 .browser-prompt {
   margin-top: 22px;
   padding: 12px 14px;
