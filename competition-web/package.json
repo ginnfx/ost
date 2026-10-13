@@ -20,6 +20,7 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install webkit",
     "security:audit": "npm audit --audit-level=high",
+    "security:integration": "node scripts/test-security-integration.mjs",
     "host:bootstrap": "node scripts/bootstrap-host.mjs",
     "host:rotate-bootstrap": "node scripts/rotate-host-bootstrap.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,css}\"",

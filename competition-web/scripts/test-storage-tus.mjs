@@ -8,10 +8,12 @@ nextEnv.loadEnvConfig(process.cwd());
 
 for (const name of [
   "SUPABASE_URL",
+  "SUPABASE_ANON_KEY",
   "SUPABASE_SERVICE_ROLE_KEY",
   "SUPABASE_STORAGE_BUCKET",
 ]) {
-  if (!process.env[name]) throw new Error(`${name} is required for this local test.`);
+  if (!process.env[name])
+    throw new Error(`${name} is required for this local test.`);
 }
 
 const supabase = createClient(
@@ -24,10 +26,12 @@ const id = randomUUID();
 const userId = randomUUID();
 const email = `tus-${id}@example.invalid`;
 const key = `${id.replaceAll("-", "")}/${randomUUID().replaceAll("-", "")}.mp4`;
+const unassignedKey = `${id.replaceAll("-", "")}/${randomUUID().replaceAll("-", "")}.mp4`;
 const databaseContainer =
-  process.env.LOCAL_SUPABASE_DB_CONTAINER ?? "supabase_db_ost-competition-private";
+  process.env.LOCAL_SUPABASE_DB_CONTAINER ??
+  "supabase_db_ost-competition-private";
 let createdUser = false;
-let createdObject = false;
+const createdObjects = [];
 
 function sql(statement) {
   execFileSync(
@@ -73,9 +77,11 @@ try {
     );
   `);
 
-  const signed = await supabase.storage.from(bucket).createSignedUploadUrl(key, {
-    upsert: false,
-  });
+  const signed = await supabase.storage
+    .from(bucket)
+    .createSignedUploadUrl(key, {
+      upsert: false,
+    });
   if (signed.error || !signed.data)
     throw signed.error ?? new Error("Could not issue the local upload token.");
 
@@ -95,9 +101,11 @@ try {
     .split("\n")
     .find((line) => line.startsWith("AUTH_JWT_SECRET="))
     ?.slice("AUTH_JWT_SECRET=".length);
-  if (!jwtSecret) throw new Error("The local Supabase JWT secret is unavailable.");
+  if (!jwtSecret)
+    throw new Error("The local Supabase JWT secret is unavailable.");
   const issuedAt = Math.floor(Date.now() / 1000);
-  const encode = (value) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  const encode = (value) =>
+    Buffer.from(JSON.stringify(value)).toString("base64url");
   const unsignedToken = `${encode({ alg: "HS256", typ: "JWT" })}.${encode({
     aud: "authenticated",
     role: "authenticated",
@@ -117,26 +125,50 @@ try {
     .digest("base64url")}`;
 
   const body = Buffer.from("local signed resumable upload integration probe");
-  await new Promise((resolve, reject) => {
-    new Upload(body, {
-      endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
-      headers: {
-        authorization: `Bearer ${accessToken}`,
-        "x-signature": signed.data.token,
-        "x-upsert": "false",
-      },
-      metadata: {
-        bucketName: bucket,
-        objectName: key,
-        contentType: "video/mp4",
-        cacheControl: "0",
-      },
-      chunkSize: 6 * 1024 * 1024,
-      onError: reject,
-      onSuccess: resolve,
-    }).start();
-  });
-  createdObject = true;
+  async function tusUpload(objectKey, signature) {
+    return new Promise((resolve, reject) => {
+      new Upload(body, {
+        endpoint: `${process.env.SUPABASE_URL}/storage/v1/upload/resumable`,
+        headers: {
+          authorization: `Bearer ${accessToken}`,
+          "x-signature": signature,
+          "x-upsert": "false",
+        },
+        metadata: {
+          bucketName: bucket,
+          objectName: objectKey,
+          contentType: "video/mp4",
+          cacheControl: "0",
+        },
+        chunkSize: 6 * 1024 * 1024,
+        onError: reject,
+        onSuccess: resolve,
+      }).start();
+    });
+  }
+  await tusUpload(key, signed.data.token);
+  createdObjects.push(key);
+
+  const unauthorized = await supabase.storage
+    .from(bucket)
+    .createSignedUploadUrl(unassignedKey, { upsert: false });
+  if (unauthorized.error || !unauthorized.data)
+    throw (
+      unauthorized.error ??
+      new Error("Could not issue the negative test upload token.")
+    );
+  let unauthorizedUploadSucceeded = false;
+  try {
+    await tusUpload(unassignedKey, unauthorized.data.token);
+    unauthorizedUploadSucceeded = true;
+    createdObjects.push(unassignedKey);
+  } catch {
+    // Expected: the authenticated participant has no pending row for this random key.
+  }
+  if (unauthorizedUploadSucceeded)
+    throw new Error(
+      "Storage accepted a participant upload without a matching pending submission.",
+    );
 
   const downloaded = await supabase.storage.from(bucket).download(key);
   if (
@@ -145,9 +177,28 @@ try {
     (await downloaded.data.text()) !== body.toString()
   )
     throw downloaded.error ?? new Error("Uploaded bytes did not match.");
-  console.log("Local participant-scoped signed TUS upload and private read passed.");
+
+  const participantStorage = createClient(
+    process.env.SUPABASE_URL,
+    process.env.SUPABASE_ANON_KEY,
+    {
+      global: { headers: { authorization: `Bearer ${accessToken}` } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    },
+  );
+  const directRead = await participantStorage.storage
+    .from(bucket)
+    .download(key);
+  if (!directRead.error)
+    throw new Error(
+      "Storage exposed private media through direct participant reads.",
+    );
+  console.log(
+    "Local participant-scoped signed TUS upload and private read passed.",
+  );
 } finally {
-  if (createdObject) await supabase.storage.from(bucket).remove([key]);
+  if (createdObjects.length)
+    await supabase.storage.from(bucket).remove(createdObjects);
   sql(`delete from private.competitions where id='${id}'`);
   if (createdUser) await supabase.auth.admin.deleteUser(userId);
 }

@@ -11,6 +11,15 @@ do $$ declare r record; begin
     raise exception 'authenticated can execute an unapproved private function';
   end if;
   if has_schema_privilege('ost_web_app','private','usage') is not true then raise exception 'web role cannot execute private DTO functions'; end if;
+  if exists(select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='private' and p.prosecdef and not coalesce(p.proconfig,'{}') @> array['search_path=""']) then
+    raise exception 'A private security-definer function lacks an empty search_path';
+  end if;
+  if exists(select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
+    where n.nspname='private' and c.relkind in ('v','m')
+      and not coalesce(c.reloptions,'{}') @> array['security_invoker=true']) then
+    raise exception 'A private view is not security_invoker';
+  end if;
   for r in select c.relname,c.relrowsecurity,c.relforcerowsecurity from pg_class c join pg_namespace n on n.oid=c.relnamespace where n.nspname='private' and c.relkind='r' loop
     if not r.relrowsecurity or not r.relforcerowsecurity then raise exception 'RLS not forced for %',r.relname; end if;
     if has_table_privilege('anon',format('private.%I',r.relname),'select') then raise exception 'anon can read %',r.relname; end if;
@@ -40,6 +49,21 @@ do $$ begin
   exception when sqlstate 'P0002' then
     null;
   end;
+end $$;
+reset role;
+
+-- Ordinary authenticated clients cannot query private rows directly, even when
+-- they know another participant's UUID or the host audit table name.
+set local role authenticated;
+do $$ declare table_name text; begin
+  foreach table_name in array array['competitions','participants','submissions','ratings','score_snapshots','host_audit_log'] loop
+    begin
+      execute format('select count(*) from private.%I',table_name);
+      raise exception 'authenticated directly read private.%',table_name;
+    exception when insufficient_privilege then
+      null;
+    end;
+  end loop;
 end $$;
 reset role;
 
