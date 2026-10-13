@@ -9,7 +9,10 @@ import { pipeline } from "node:stream/promises";
 
 export interface PrivateObjectStore {
   signedReadUrl(key: string, expiresInSeconds: number): Promise<string>;
-  signedUploadUrl(key: string): Promise<{ url: string; token: string }>;
+  signedUploadUrl(
+    key: string,
+    upsert?: boolean,
+  ): Promise<{ url: string; token: string }>;
   remove(keys: string[]): Promise<void>;
   resumableEndpoint(): string;
   bucketName(): string;
@@ -55,16 +58,19 @@ export class SupabasePrivateObjectStore implements PrivateObjectStore {
     assertOpaqueStorageKey(key);
     const { data, error } = await this.client.storage
       .from(this.bucket)
-      .createSignedUrl(key, Math.min(Math.max(expiresInSeconds, 15), 300));
+      .createSignedUrl(key, Math.min(Math.max(expiresInSeconds, 15), 7200));
     if (error || !data?.signedUrl)
       throw new Error("Media could not be made available.");
     return data.signedUrl;
   }
-  async signedUploadUrl(key: string): Promise<{ url: string; token: string }> {
+  async signedUploadUrl(
+    key: string,
+    upsert = false,
+  ): Promise<{ url: string; token: string }> {
     assertOpaqueStorageKey(key);
     const { data, error } = await this.client.storage
       .from(this.bucket)
-      .createSignedUploadUrl(key, { upsert: false });
+      .createSignedUploadUrl(key, { upsert });
     if (error || !data) throw new Error("Upload could not be started.");
     return { url: data.signedUrl, token: data.token };
   }

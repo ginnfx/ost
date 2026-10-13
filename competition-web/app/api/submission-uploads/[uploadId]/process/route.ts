@@ -1,12 +1,10 @@
-import { randomBytes } from "node:crypto";
-import { mkdtemp, mkdir, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { z } from "zod";
-import { processClip } from "@/scripts/media-worker.mjs";
+import { dispatchMediaTask } from "@/lib/server/media-tasks";
 import { withCurrentUser } from "@/lib/server/database";
 import { privateJson, sameOriginRequest, unavailable } from "@/lib/server/http";
 import { SupabasePrivateObjectStore } from "@/lib/server/storage";
+import { sha256 } from "@/lib/server/webauthn";
 
 const schema = z.object({}).strict();
 
@@ -14,108 +12,112 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ uploadId: string }> },
 ) {
-  if (!sameOriginRequest(request)) return unavailable();
-  if (!schema.safeParse(await request.json().catch(() => null)).success)
+  if (!sameOriginRequest(request)) {
+    console.error(
+      JSON.stringify({ event: "media_task_rejected", reason: "origin" }),
+    );
     return unavailable();
+  }
+  if (!schema.safeParse(await request.json().catch(() => null)).success) {
+    console.error(
+      JSON.stringify({ event: "media_task_rejected", reason: "body" }),
+    );
+    return unavailable();
+  }
   const { uploadId } = await context.params;
-  if (!/^[0-9a-f-]{36}$/i.test(uploadId)) return unavailable();
-  const root = process.env.MEDIA_WORKER_TEMP_DIR ?? tmpdir();
-  let work = "";
-  let audioKey = "";
-  let audioUploaded = false;
+  if (!/^[0-9a-f-]{36}$/i.test(uploadId)) {
+    console.error(
+      JSON.stringify({ event: "media_task_rejected", reason: "id" }),
+    );
+    return unavailable();
+  }
   const store = new SupabasePrivateObjectStore();
   try {
-    const contextData = await withCurrentUser(async (db) => {
+    const data = await withCurrentUser(async (db, _userId) => {
+      const limit = await db.query<{ allowed: boolean }>(
+        "select private.rate_limit_hit($1,$2,$3,$4) as allowed",
+        ["upload", sha256(_userId), 30, 3600],
+      );
+      if (!limit.rows[0]?.allowed) throw new Error("RATE_LIMITED");
       const { rows } = await db.query<{
         upload_id: string;
         storage_key: string;
-        upload_bytes: string;
         min_clip_seconds: string;
         max_clip_seconds: string;
         max_upload_bytes: string;
         normalize_loudness: boolean;
       }>("select * from private.begin_submission_processing($1)", [uploadId]);
-      if (!rows[0]) throw new Error("RESOURCE_UNAVAILABLE");
+      if (!rows[0]) {
+        console.error(
+          JSON.stringify({
+            event: "media_task_rejected",
+            reason: "upload_scope",
+          }),
+        );
+        throw new Error("RESOURCE_UNAVAILABLE");
+      }
       return rows[0];
     });
-    await mkdir(root, { recursive: true });
-    work = await mkdtemp(join(root, "ost-web-process-"));
-    const source = join(work, "original.video");
-    const output = join(work, "processed.m4a");
-    await store.downloadToFile(
-      contextData.storage_key,
-      source,
-      Number(contextData.max_upload_bytes),
+
+    const audioKey = `${createHash("sha256").update(`${uploadId}:audio-folder`).digest("hex").slice(0, 32)}/${createHash("sha256").update(`${uploadId}:audio-file`).digest("hex").slice(0, 32)}.m4a`;
+    const [sourceUrl, destination] = await Promise.all([
+      store.signedReadUrl(data.storage_key, 7200),
+      store.signedUploadUrl(audioKey, true),
+    ]);
+    const callbackUrl = process.env.NEXT_PUBLIC_SITE_URL
+      ? new URL(
+          "/api/internal/media-worker/result",
+          process.env.NEXT_PUBLIC_SITE_URL,
+        ).toString()
+      : new URL("/api/internal/media-worker/result", request.url).toString();
+
+    const queued = await withCurrentUser((db) =>
+      db.query<{ media_worker_queued: number }>(
+        "select private.media_worker_queued($1)",
+        [uploadId],
+      ),
     );
-    const metadata = await processClip(
-      source,
-      output,
-      contextData.normalize_loudness,
-      {
-        maxUploadBytes: Number(contextData.max_upload_bytes),
-        minClipSeconds: Number(contextData.min_clip_seconds),
-        maxClipSeconds: Number(contextData.max_clip_seconds),
-      },
-    );
-    audioKey = `${randomBytes(16).toString("hex")}/${randomBytes(16).toString("hex")}.m4a`;
-    await store.uploadAudio(audioKey, output);
-    audioUploaded = true;
-    const finished = await withCurrentUser(async (db) => {
-      const { rows } = await db.query<{
-        submission_id: string;
-        status: string;
-        old_original_key: string | null;
-        old_audio_key: string | null;
-      }>("select * from private.finish_submission_processing($1,$2,$3,$4,$5)", [
-        uploadId,
-        audioKey,
-        metadata.original_seconds,
-        metadata.audio_seconds,
-        metadata.duration_mismatch,
-      ]);
-      if (!rows[0]) throw new Error("RESOURCE_UNAVAILABLE");
-      return rows[0];
+    const dispatchAttempt =
+      Number(queued.rows[0]?.media_worker_queued ?? 1) - 1;
+    await dispatchMediaTask({
+      uploadId,
+      dispatchAttempt,
+      sourceUrl,
+      destinationUrl: destination.url,
+      audioKey,
+      normalize: data.normalize_loudness,
+      minClipSeconds: Number(data.min_clip_seconds),
+      maxClipSeconds: Number(data.max_clip_seconds),
+      maxUploadBytes: Number(data.max_upload_bytes),
+      callbackUrl,
     });
-    await store
-      .remove(
-        [finished.old_original_key, finished.old_audio_key].filter(
-          (key): key is string =>
-            !!key && key !== contextData.storage_key && key !== audioKey,
-        ),
-      )
-      .catch(() => undefined);
-    return privateJson({
-      submissionId: finished.submission_id,
-      status: finished.status,
-      durationMismatch: metadata.duration_mismatch,
-    });
+    return privateJson({ uploadId, status: "processing" }, 202);
   } catch (error) {
-    if (audioUploaded && audioKey)
-      await store.remove([audioKey]).catch(() => undefined);
-    const code =
-      error instanceof Error &&
-      error.message.startsWith("Media processing rejected:")
-        ? error.message
-            .slice("Media processing rejected: ".length)
-            .replace(/\.$/, "")
-        : "processing_failed";
+    const errorCode =
+      error instanceof Error && error.message === "RATE_LIMITED"
+        ? "rate_limited"
+        : error instanceof Error && error.message === "RESOURCE_UNAVAILABLE"
+          ? "resource_unavailable"
+          : "task_dispatch_failed";
+    console.error(
+      JSON.stringify({ event: "media_task_start_failed", reason: errorCode }),
+    );
     await withCurrentUser((db) =>
-      db.query("select private.fail_submission_processing($1,$2)", [
+      db.query("select private.media_worker_fail($1,$2,$3)", [
         uploadId,
-        code,
+        errorCode,
+        -1,
       ]),
     ).catch(() => undefined);
-    if (error instanceof Error && error.message === "RESOURCE_UNAVAILABLE")
-      return unavailable();
+    if (errorCode === "resource_unavailable") return unavailable();
+    if (errorCode === "rate_limited")
+      return privateJson(
+        { error: "Upload limit reached. Try again later." },
+        429,
+      );
     return privateJson(
-      {
-        error:
-          "This video could not be processed. Check its format, audio track, size and duration.",
-      },
-      422,
+      { error: "Processing could not be queued. Retry this upload." },
+      503,
     );
-  } finally {
-    if (work)
-      await rm(work, { recursive: true, force: true }).catch(() => undefined);
   }
 }

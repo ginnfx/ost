@@ -34,7 +34,7 @@ export async function processClip(inputPath, outputPath, normalize = false, limi
     '-e', `MEDIA_MIN_CLIP_SECONDS=${minClipSeconds}`,
     '-e', `MEDIA_MAX_CLIP_SECONDS=${maxClipSeconds}`,
     '-e', `MEDIA_WORKER_TIMEOUT_SECONDS=${timeoutSeconds}`,
-    image, '--input', '/input/source', '--output', '/output/processed.m4a',
+    '--entrypoint', 'python3', image, '/app/process.py', '--input', '/input/source', '--output', '/output/processed.m4a',
     ...(normalize ? ['--normalize'] : []),
   ];
   try {

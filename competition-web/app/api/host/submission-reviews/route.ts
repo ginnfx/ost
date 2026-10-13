@@ -5,28 +5,41 @@ import { SupabasePrivateObjectStore } from "@/lib/server/storage";
 export async function GET() {
   try {
     const reviews = await withHost(async (db) => {
-      const { rows } = await db.query<{
-        submission_id: string;
-        competition_id: string;
-        round_name: string;
-        nickname: string;
-        slot: number;
-        franchise: string;
-        anilist_id: number | null;
-        ost_title: string;
-        original_seconds: number;
-        audio_seconds: number;
-        original_key: string;
-        audio_key: string;
-        status: string;
-        duplicate_count: number;
-        history_reuse_count: number;
-      }>("select * from private.list_host_submission_reviews()");
-      return rows;
+      const [reviewResult, failureResult] = await Promise.all([
+        db.query<{
+          submission_id: string;
+          competition_id: string;
+          round_name: string;
+          nickname: string;
+          slot: number;
+          franchise: string;
+          anilist_id: number | null;
+          ost_title: string;
+          original_seconds: number;
+          audio_seconds: number;
+          original_key: string;
+          audio_key: string;
+          status: string;
+          duplicate_count: number;
+          history_reuse_count: number;
+        }>("select * from private.list_host_submission_reviews()"),
+        db.query<{
+          upload_id: string;
+          competition_id: string;
+          round_name: string;
+          nickname: string;
+          slot: number;
+          ost_title: string;
+          error_code: string;
+          attempt_count: number;
+          updated_at: string;
+        }>("select * from private.host_list_media_failures()"),
+      ]);
+      return { reviews: reviewResult.rows, failures: failureResult.rows };
     });
     const storage = new SupabasePrivateObjectStore();
     const dto = await Promise.all(
-      reviews.map(async (item) => ({
+      reviews.reviews.map(async (item) => ({
         submissionId: item.submission_id,
         competitionId: item.competition_id,
         roundName: item.round_name,
@@ -44,7 +57,19 @@ export async function GET() {
         audioUrl: await storage.signedReadUrl(item.audio_key, 120),
       })),
     );
-    return privateJson({ reviews: dto });
+    return privateJson({
+      reviews: dto,
+      failures: reviews.failures.map((item) => ({
+        uploadId: item.upload_id,
+        roundName: item.round_name,
+        nickname: item.nickname,
+        slot: item.slot,
+        ostTitle: item.ost_title,
+        errorCode: item.error_code,
+        attemptCount: item.attempt_count,
+        updatedAt: item.updated_at,
+      })),
+    });
   } catch (error) {
     return error instanceof HostAccessDenied ? unavailable() : unavailable();
   }

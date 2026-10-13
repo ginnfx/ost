@@ -20,8 +20,20 @@ type Review = {
   audioUrl: string;
 };
 
+type FailedJob = {
+  uploadId: string;
+  roundName: string;
+  nickname: string;
+  slot: number;
+  ostTitle: string;
+  errorCode: string;
+  attemptCount: number;
+  updatedAt: string;
+};
+
 export function HostSubmissionReviews() {
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [failures, setFailures] = useState<FailedJob[]>([]);
   const [message, setMessage] = useState("Loading flagged submissions…");
   const [busy, setBusy] = useState("");
   async function reload() {
@@ -34,8 +46,9 @@ export function HostSubmissionReviews() {
     }
     const data = await response.json();
     setReviews(data.reviews);
+    setFailures(data.failures ?? []);
     setMessage(
-      data.reviews.length
+      data.reviews.length || data.failures?.length
         ? "Private checks for this round's submissions."
         : "No submissions yet.",
     );
@@ -71,6 +84,29 @@ export function HostSubmissionReviews() {
       <p role="status" aria-live="polite">
         {message}
       </p>
+      {failures.length > 0 && (
+        <section aria-labelledby="processing-failures-heading">
+          <h2 id="processing-failures-heading">Processing failures</h2>
+          <p>These uploads stopped after retries or failed validation.</p>
+          {failures.map((failure) => (
+            <article className="host-review" key={failure.uploadId}>
+              <p className="eyebrow">
+                {failure.roundName} · ENTRY {failure.slot}
+              </p>
+              <h3>{failure.ostTitle}</h3>
+              <p>
+                Submitted by {failure.nickname}. Reason:{" "}
+                {failure.errorCode.replaceAll("_", " ")}. Attempts:{" "}
+                {failure.attemptCount}.
+              </p>
+              <p>
+                The participant can retry the upload. Check Cloud Run logs for
+                service errors.
+              </p>
+            </article>
+          ))}
+        </section>
+      )}
       {reviews.map((review) => (
         <article className="host-review" key={review.submissionId}>
           <header>
