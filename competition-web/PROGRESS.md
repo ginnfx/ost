@@ -4,7 +4,7 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 
 ## User-directed resume sequence (2026-10-13)
 - [x] Scoring clarification: remove tie-boundary movement; fixed nonempty groups, with the last group absorbing remainders. Fixture ranking and score expectations were unchanged; group boundaries were updated to match the revised rule.
-- [ ] Step 1: reset local Supabase with auth migration and verify schema/security baseline.
+- [x] Step 1: reset local Supabase with auth migration and verify schema/security baseline. `supabase db reset` applied both competition and auth migrations locally; `supabase migration list --local` agreed. `tests/security.sql`, typecheck, lint, and 19 unit tests passed before proceeding. Supabase reports that optional local services are stopped and `inbucket` config is deprecated; neither blocked the reset.
 - [ ] Step 2: prove `/demo` production build/runtime without Supabase variables; add standalone Vercel deployment instructions.
 - [ ] Step 3: host bootstrap, recovery codes, credential and session management.
 - [ ] Step 4: submissions, resumable uploads, Storage-connected worker and full media validation.
@@ -116,4 +116,4 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 
 ## Current work checkpoint (2026-10-13 17:08 CEST)
 
-The latest uncommitted changes add Auth endpoints, scoring foundations, a Docker media worker, and the requested icon/reveal/invite adjustments. Phases 4, 5, and 7 remain in progress; demo passkey prompts are simulated. TypeScript, lint, 18 unit tests, 8 WebKit E2E tests, production build, Prettier check, npm audit, local Supabase placeholder identity, and isolated Docker media smoke checks passed. Do not treat the current app as ready for real competition data.
+The current branch contains Auth endpoints, scoring foundations, a Docker media worker, and the requested design/reveal/invite adjustments. The resume scoring change is committed as `78d5b5a`. Local Supabase reset and auth migration validation passed. Host controls, real submissions, listening/reveal, and trial cleanup are not yet complete; demo passkey prompts remain simulated. Do not treat the current app as ready for real competition data.
