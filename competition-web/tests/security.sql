@@ -29,6 +29,8 @@ do $$ declare r record; begin
   if has_function_privilege('anon','private.complete_host_bootstrap(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') then raise exception 'anon can bootstrap host credentials'; end if;
   if has_function_privilege('authenticated','private.complete_host_recovery(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') then raise exception 'authenticated can invoke host recovery directly'; end if;
   if has_function_privilege('ost_web_app','private.complete_host_bootstrap(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') is not true then raise exception 'web role cannot complete a token-authorized bootstrap'; end if;
+  if has_function_privilege('authenticated','private.consume_native_authorization_code(bytea)','execute') then raise exception 'participant can consume native login codes directly'; end if;
+  if has_function_privilege('ost_web_app','private.consume_native_authorization_code(bytea)','execute') is not true then raise exception 'server cannot consume native login codes'; end if;
   if has_function_privilege('anon','private.start_submission_upload(uuid,smallint,text,bigint,text,bigint,numeric,text)','execute') then raise exception 'anon can start a private submission upload'; end if;
   if has_function_privilege('authenticated','private.finish_submission_processing(uuid,text,numeric,numeric,boolean)','execute') then raise exception 'authenticated can finish media processing'; end if;
   if has_function_privilege('ost_web_app','private.start_submission_upload(uuid,smallint,text,bigint,text,bigint,numeric,text)','execute') is not true then raise exception 'web role cannot start a participant upload'; end if;

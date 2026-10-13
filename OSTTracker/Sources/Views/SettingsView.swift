@@ -39,6 +39,9 @@ struct SettingsView: View {
     var body: some View {
         Form {
             CloudAccountSection()
+            #if os(macOS)
+            CompetitionAccountSection()
+            #endif
             backupSection
             appearance
             competition

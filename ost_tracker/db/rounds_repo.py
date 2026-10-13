@@ -68,6 +68,23 @@ def list_rounds() -> list[dict]:
     return result
 
 
+def get_round_archive(round_id: int) -> dict | None:
+    row = get_db().query_one(
+        "SELECT id, retired_at, ost_count, restored_at, name, payload FROM retired_rounds WHERE id = ?",
+        (round_id,),
+    )
+    if row is None:
+        return None
+    return {
+        "id": row["id"],
+        "retired_at": row["retired_at"],
+        "ost_count": row["ost_count"],
+        "restored_at": row["restored_at"],
+        "name": row["name"] or f"Retired {row['retired_at']}",
+        "payload_json": row["payload"],
+    }
+
+
 def active_ost_count() -> int:
     return int(get_db().scalar("SELECT COUNT(*) FROM osts") or 0)
 

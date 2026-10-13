@@ -72,6 +72,12 @@ CREATE TABLE IF NOT EXISTS retired_rounds (
     restored_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS imported_competitions (
+    source_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    imported_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE INDEX IF NOT EXISTS idx_history_title ON ost_history(title COLLATE NOCASE);
 CREATE INDEX IF NOT EXISTS idx_ratings_ost   ON ratings(ost_id);
 CREATE INDEX IF NOT EXISTS idx_ratings_rater ON ratings(rater_id);

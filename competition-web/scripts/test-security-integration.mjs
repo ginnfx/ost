@@ -21,8 +21,10 @@ const hostId = randomUUID();
 const participantA = randomUUID();
 const participantB = randomUUID();
 const competitionId = randomUUID();
+const legacySourceId = randomUUID();
 const participantARecord = randomUUID();
 const participantBRecord = randomUUID();
+const hostParticipantRecord = randomUUID();
 const submissionA = randomUUID();
 const submissionB = randomUUID();
 const labelA = randomUUID();
@@ -178,14 +180,15 @@ async function waitForServer() {
   throw new Error("Next production server did not become ready.");
 }
 
-async function request(path, { cookie, method = "GET", body } = {}) {
+async function request(path, { cookie, bearer, method = "GET", body, includeOrigin = true } = {}) {
   return fetch(`${siteOrigin}${path}`, {
     method,
     headers: {
       ...(cookie ? { cookie } : {}),
+      ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
       ...(body === undefined
         ? {}
-        : { "content-type": "application/json", origin: siteOrigin }),
+        : { "content-type": "application/json", ...(includeOrigin ? { origin: siteOrigin } : {}) }),
     },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     redirect: "manual",
@@ -209,7 +212,8 @@ try {
       '{"entries_per_participant":2,"batch_count":2,"reveal_group_count":1,"min_clip_seconds":20,"max_clip_seconds":360,"max_upload_bytes":524288000,"loudness_normalization":false}');
     insert into private.participants(id,competition_id,user_id,nickname) values
       ('${participantARecord}','${competitionId}','${participantA}','Participant A Secret'),
-      ('${participantBRecord}','${competitionId}','${participantB}','Participant B Only');
+      ('${participantBRecord}','${competitionId}','${participantB}','Participant B Only'),
+      ('${hostParticipantRecord}','${competitionId}','${hostId}','Local Host');
     insert into private.submissions(id,competition_id,participant_id,slot,franchise,ost_title,status,original_storage_key,audio_storage_key,original_bytes,original_seconds,audio_seconds,confirmed_at) values
       ('${submissionA}','${competitionId}','${participantARecord}',1,'Secret Franchise A','Secret OST Title A','confirmed','${originalKeyA}','${keyA}',100,30,30,now()),
       ('${submissionB}','${competitionId}','${participantBRecord}',1,'Secret Franchise B','Secret OST Title B','confirmed','${originalKeyB}','${keyB}',100,30,30,now());
@@ -251,6 +255,13 @@ try {
     uploaded.push(key);
   }
 
+  sql(`begin; set local role ost_web_app;
+    select set_config('request.jwt.claim.sub','${participantB}',true);
+    select set_config('request.jwt.claims','{"sub":"${participantB}","role":"authenticated"}',true);
+    select private.create_native_authorization_code(decode(repeat('cd',32),'hex'),now()+interval '1 minute');
+    select * from private.my_competition_memberships();
+    rollback;`);
+
   await waitForServer();
   const authCheck = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
     headers: {
@@ -262,6 +273,85 @@ try {
     authCheck.ok,
     `Auth test session is invalid (HTTP ${authCheck.status}).`,
   );
+  const nativeApiMemberships = await request("/api/competitions", { bearer: b.accessToken });
+  const nativeApiMembershipsBody = await nativeApiMemberships.text();
+  assert(nativeApiMemberships.ok, `Bearer session could not reach the authenticated competition API (HTTP ${nativeApiMemberships.status}: ${nativeApiMembershipsBody}).`);
+  const authorization = await request("/api/auth/native/authorize", {
+    bearer: b.accessToken,
+    method: "POST",
+    body: {},
+  });
+  const authorizationBody = await authorization.text();
+  assert(
+    authorization.ok,
+    `Signed-in participant could not authorize the Mac client (HTTP ${authorization.status}: ${authorizationBody}).`,
+  );
+  const callbackUrl = new URL(JSON.parse(authorizationBody).callbackUrl);
+  assert(callbackUrl.protocol === "osttracker:" && callbackUrl.hostname === "competition", "Native authorization callback is not the fixed app URL.");
+  const code = callbackUrl.searchParams.get("code");
+  assert(code?.length === 43, "Native authorization code is not high entropy.");
+  const exchange = await request("/api/auth/native/exchange", {
+    method: "POST",
+    body: { code },
+    includeOrigin: false,
+  });
+  assert(exchange.ok, "Native one-time authorization code could not be exchanged.");
+  const nativeSession = await exchange.json();
+  assert(typeof nativeSession.refreshToken === "string" && nativeSession.refreshToken.length >= 8, "Native exchange omitted a valid refresh token.");
+  const refresh = await request("/api/auth/native/refresh", {
+    method: "POST",
+    body: { refreshToken: nativeSession.refreshToken },
+    includeOrigin: false,
+  });
+  const refreshBody = await refresh.text();
+  assert(refresh.ok, `Native refresh-token renewal failed (HTTP ${refresh.status}: ${refreshBody}).`);
+  const refreshedSession = JSON.parse(refreshBody);
+  const bearerMemberships = await request("/api/competitions", { bearer: refreshedSession.accessToken });
+  const bearerMembershipsBody = await bearerMemberships.text();
+  assert(bearerMemberships.ok && bearerMembershipsBody.includes(competitionId), "Bearer-authenticated Mac session could not use the competition API.");
+  const nativeRating = {
+    competitionId,
+    batch: 1,
+    listeningId: listeningA,
+    score: 7,
+    expectedVersion: 0,
+  };
+  const nativeWrite = await request("/api/ratings", {
+    bearer: refreshedSession.accessToken,
+    method: "PUT",
+    body: nativeRating,
+  });
+  assert(nativeWrite.ok && (await nativeWrite.json()).version === 1, "Mac bearer session could not save an assigned rating.");
+  const staleNativeWrite = await request("/api/ratings", {
+    bearer: refreshedSession.accessToken,
+    method: "PUT",
+    body: nativeRating,
+  });
+  assert(staleNativeWrite.status === 409, "Mac stale rating version was silently overwritten.");
+  const replay = await request("/api/auth/native/exchange", {
+    method: "POST",
+    body: { code },
+    includeOrigin: false,
+  });
+  assert(replay.status === 404, "Native authorization code was reusable.");
+  const legacyArchive = {
+    sourceId: legacySourceId,
+    name: "Legacy import probe",
+    payload: { osts: [{ title: "Old OST" }], ratings: [], settings: [] },
+  };
+  const legacyImport = await request("/api/host/legacy-import", {
+    bearer: identities[0].accessToken,
+    method: "POST",
+    body: legacyArchive,
+  });
+  assert(legacyImport.ok && (await legacyImport.json()).imported, "Authenticated Mac host could not import a legacy ranking.");
+  const legacyReplay = await request("/api/host/legacy-import", {
+    bearer: identities[0].accessToken,
+    method: "POST",
+    body: legacyArchive,
+  });
+  assert(legacyReplay.ok && !(await legacyReplay.json()).imported, "Legacy archive import was not idempotent.");
+
   const appCheck = await request("/app", { cookie: b.cookie });
   if (appCheck.status !== 200)
     console.log(
@@ -322,9 +412,9 @@ try {
     (entry) => entry.listeningId === listeningA,
   );
   assert(
-    otherRatingView?.rating === null &&
+    otherRatingView?.rating === 7 &&
       otherRatingView?.automaticScore === null,
-    "Listening response exposed another participant's rating.",
+    "Listening response did not return only the participant's own Mac-saved rating.",
   );
   const playable = await fetch(releasedBody.entries[0].audioUrl);
   assert(
@@ -365,7 +455,7 @@ try {
     body: {
       competitionId,
       batch: 1,
-      listeningId: listeningA,
+      listeningId: randomUUID(),
       score: 1,
       expectedVersion: 0,
     },
@@ -479,8 +569,48 @@ try {
     "Anonymous Storage read succeeded for private media.",
   );
 
+  sql(`update private.competitions set status='complete' where id='${competitionId}';
+    update private.reveal_groups set published_at=now() where competition_id='${competitionId}';
+    insert into private.reveal_events(competition_id,listening_id,group_number)
+      values('${competitionId}','${listeningA}',1),('${competitionId}','${listeningB}',1);`);
+  const participantArchive = await request(
+    `/api/competitions/${competitionId}/archive`,
+    { bearer: b.accessToken },
+  );
+  const participantArchiveBody = await participantArchive.json();
+  assert(
+    participantArchive.ok && participantArchiveBody.entries.length === 2 && participantArchiveBody.originals.length === 0,
+    "Participant archive did not contain only published audio and metadata.",
+  );
+  const hostArchive = await request(
+    `/api/competitions/${competitionId}/archive`,
+    { bearer: identities[0].accessToken },
+  );
+  const hostArchiveBody = await hostArchive.json();
+  assert(
+    hostArchive.ok && hostArchiveBody.entries.length === 2 && hostArchiveBody.originals.length === 2,
+    `Host archive did not include private originals (HTTP ${hostArchive.status}, entries ${hostArchiveBody.entries?.length ?? 0}, originals ${hostArchiveBody.originals?.length ?? 0}).`,
+  );
+  const archiveRemoval = await request(
+    `/api/host/competitions/${competitionId}/archive-originals`,
+    {
+      bearer: identities[0].accessToken,
+      method: "POST",
+      body: {
+        confirmation: "ARCHIVE VERIFIED",
+        digest: "ab".repeat(32),
+      },
+    },
+  );
+  assert(
+    archiveRemoval.ok && (await archiveRemoval.json()).archivedOriginals === 2,
+    "Host could not remove originals after local archive confirmation.",
+  );
+  const removedOriginal = await admin.storage.from(bucket).download(originalKeyA);
+  assert(removedOriginal.error, "Archived original remained downloadable from Storage.");
+
   console.log(
-    "Local API, Storage, and rendered-payload authorization probes passed.",
+    "Local API, Storage, rendered-payload, native-session, legacy-import, stale-write, and archive authorization probes passed.",
   );
 } finally {
   server.kill("SIGTERM");
@@ -496,7 +626,7 @@ try {
       .catch(() => undefined);
   if (seeded) {
     sql(
-      `delete from private.platform_config where host_user_id='${hostId}'; delete from private.competitions where id='${competitionId}';`,
+      `delete from private.legacy_competition_imports where source_id='${legacySourceId}'; delete from private.platform_config where host_user_id='${hostId}'; delete from private.competitions where id='${competitionId}';`,
     );
   }
   for (const userId of users)

@@ -271,6 +271,17 @@ actor BackendClient: OSTBackend {
         _ = try await run(request("POST", "/rounds/\(id)/restore"))
     }
 
+    func roundArchive(id: Int) async throws -> RoundArchiveDetail {
+        try await get("/rounds/\(id)")
+    }
+
+    func importCompetitionHistory(sourceId: String, name: String, entries: [CompetitionHistoryEntry]) async throws {
+        let body = CompetitionHistoryImport(sourceId: sourceId, name: name, entries: entries)
+        let _: CompetitionHistoryImportResponse = try await send(
+            "POST", "/history/import-competition", body: body
+        )
+    }
+
     // GET /history/matches (?title=&source=) has no Swift caller — the
     // Add-OST pre-submit hint matches locally against store.history (see
     // AddOstRules.historyConflict). The endpoint stays server-side for

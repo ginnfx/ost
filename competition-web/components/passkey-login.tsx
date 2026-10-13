@@ -37,6 +37,26 @@ export function PasskeyLogin() {
         throw new Error(
           "This passkey could not sign you in. Try again or ask the host for help.",
         );
+      if (new URLSearchParams(window.location.search).get("native") === "1") {
+        const authorization = await fetch("/api/auth/native/authorize", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: "{}",
+          cache: "no-store",
+        });
+        if (!authorization.ok)
+          throw new Error("Mac sign-in could not be completed. Try again.");
+        const { callbackUrl } = await authorization.json();
+        const callback = new URL(callbackUrl);
+        if (
+          callback.protocol !== "osttracker:" ||
+          callback.hostname !== "competition" ||
+          !callback.searchParams.has("code")
+        )
+          throw new Error("The Mac sign-in response was invalid.");
+        window.location.assign(callback.href);
+        return;
+      }
       router.replace("/app");
     } catch (error) {
       setMessage(

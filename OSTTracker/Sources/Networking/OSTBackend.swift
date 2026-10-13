@@ -36,6 +36,8 @@ protocol OSTBackend: Sendable {
     func retireChallenge() async throws -> RetireChallenge
     func retireRound(challengeId: String, word: String) async throws
     func restoreRound(id: Int) async throws
+    func roundArchive(id: Int) async throws -> RoundArchiveDetail
+    func importCompetitionHistory(sourceId: String, name: String, entries: [CompetitionHistoryEntry]) async throws
     func leaderboard() async throws -> [RankEntry]
     func elimination() async throws -> EliminationBoard
     func setEliminationThreshold(_ threshold: Int) async throws -> EliminationBoard
@@ -45,4 +47,11 @@ protocol OSTBackend: Sendable {
     func seek(position: Double) async throws -> PlaybackState
     func stop() async throws -> PlaybackState
     func events() async -> AsyncThrowingStream<WSEvent, Error>
+}
+
+nonisolated extension OSTBackend {
+    func roundArchive(id: Int) async throws -> RoundArchiveDetail { throw BackendError.healthTimeout }
+    func importCompetitionHistory(sourceId: String, name: String, entries: [CompetitionHistoryEntry]) async throws {
+        throw BackendError.healthTimeout
+    }
 }

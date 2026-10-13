@@ -5,6 +5,10 @@
   padding: 0 max(14px, env(safe-area-inset-right))
     max(20px, env(safe-area-inset-bottom)) max(14px, env(safe-area-inset-left));
 }
+.demo-content :is(button, input, select, textarea),
+.host-content :is(button, input, select, textarea) {
+  scroll-margin-block: 124px 96px;
+}
 .demo-banner {
   position: sticky;
   top: 0;

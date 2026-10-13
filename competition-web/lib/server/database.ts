@@ -24,6 +24,7 @@ function databasePool(): Pool {
 
 export class SignInRequired extends Error {}
 export class SafeDatabaseError extends Error {}
+export class StaleRatingError extends Error {}
 
 /**
  * Verify the Supabase session with Auth first, then execute private-schema
@@ -65,7 +66,11 @@ export async function withAppRole<T>(
     return result;
   } catch (error) {
     await client.query("rollback").catch(() => undefined);
-    if (error instanceof HostAccessDenied || error instanceof SafeDatabaseError)
+    if (
+      error instanceof HostAccessDenied ||
+      error instanceof SafeDatabaseError ||
+      error instanceof StaleRatingError
+    )
       throw error;
     throw new Error("The request could not be completed.");
   } finally {

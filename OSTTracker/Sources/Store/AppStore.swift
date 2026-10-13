@@ -173,6 +173,22 @@ final class AppStore {
         scheduleCloudSync()
     }
 
+    func importCompetitionHistory(sourceId: String, name: String, entries: [CompetitionHistoryEntry]) async throws {
+        guard let client else { throw BackupError.notReady }
+        try await client.importCompetitionHistory(sourceId: sourceId, name: name, entries: entries)
+        self.history = try await client.history()
+    }
+
+    func legacyRoundArchives() async throws -> [RoundArchiveDetail] {
+        guard let client else { throw BackupError.notReady }
+        let status = try await client.roundStatus()
+        var archives: [RoundArchiveDetail] = []
+        for archive in status.archives {
+            archives.append(try await client.roundArchive(id: archive.id))
+        }
+        return archives
+    }
+
     enum BackupError: LocalizedError {
         case notReady
         var errorDescription: String? { "OST Tracker is still connecting. Try again in a moment." }
@@ -316,7 +332,7 @@ final class AppStore {
                 try await refreshAll(client)
             }
         } catch {
-            await CloudAccount.shared.reportSyncFailure(error)
+            CloudAccount.shared.reportSyncFailure(error)
             print("GATE cloud_sync_failed error=\(error.localizedDescription)")
         }
     }

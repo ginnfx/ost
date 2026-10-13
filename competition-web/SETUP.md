@@ -25,7 +25,7 @@ The demo can run as a separate Vercel deployment without a Supabase project or S
 3. Use Vercel's default build command (`npm run build`) and deploy. Open `/demo` on the deployment and confirm the persistent demo notice appears and the demo can be reset.
 4. Keep the demo on its own hostname when a real competition site is deployed. Do not add a production Supabase key to this Vercel project. Confirm browser network tools show no calls to Supabase while using `/demo`.
 
-This documents and locally validates the standalone build path; it does not claim that a Vercel deployment has been created from this account.
+This path was tested locally on 2026-10-13: production build with `.env.local` moved aside, then a WebKit visit to `/demo` with all Supabase variables and `NEXT_PUBLIC_DEMO_ORIGIN` unset. The banner appeared without page errors. Vercel itself has not been deployed from this account. In Vercel, set `competition-web` as the project Root Directory as described in [Vercel's monorepo guide](https://vercel.com/docs/monorepos).
 
 ## Before a real deployment
 
@@ -37,8 +37,14 @@ This documents and locally validates the standalone build path; it does not clai
 6. Configure production secrets through the deployment provider. Do not expose the Supabase service key, database login, WebAuthn challenge secret, or host identifier through NEXT_PUBLIC_ variables.
 7. Apply the host access migration, then run `npm run host:bootstrap` once from a trusted operator shell with `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `HOST_BOOTSTRAP_DB_URL`, and the permanent `NEXT_PUBLIC_SITE_URL` set. The command creates a non-mail host identity, writes the single host ID and a 10-minute hashed bootstrap token through the privileged database connection, and prints a one-time setup link. It does not grant host status through the website or user metadata. Do not put the bootstrap DB URL or service key into Vercel; unset them after the command.
 8. Open the link on the permanent HTTPS domain and register the primary passkey. Then open `/host/security`, sign in again with the new passkey, add a backup passkey, and generate ten recovery codes. Store the codes offline; they are shown only once. Test recovery in a separate local/test project before inviting friends.
-10. Create the short trial round through the host UI after trial cleanup is tested. Confirm each transition, invitation, submission, rating, reveal and deletion step with test accounts first.
+9. Create the short trial round through the host UI after trial cleanup is tested. Confirm each transition, invitation, submission, rating, reveal and deletion step with test accounts first.
 10. Keep originals until 30 days after archive by default, then run and verify the retention job. Never put active competition media into a public bucket.
+
+## OSTTracker macOS competition client
+
+The Mac competition client is on the separate `feature/ost-competition-mac-integration` branch. After reviewing/merging that branch, regenerate the Xcode project with `xcodegen generate --spec OSTTracker/project.yml` and build the `OSTTracker` macOS scheme. In OSTTracker Settings, enter the permanent HTTPS competition website address, choose **Sign in with passkey**, and finish in the system browser. The Mac keeps the resulting refresh token in Keychain; it does not receive the Supabase service key. Host actions are authorized by the server.
+
+Use the Competition section to load released batches, play anonymous audio, and rate it from 1 to 10. If another device changed a rating, the Mac reports a conflict and reloads the current server value. After the competition is complete, **Archive on this Mac** saves audio locally and imports the revealed titles into OSTTracker history. For the host, the confirmation step also saves the private originals and then removes them from cloud Storage. Old OSTTracker rounds can be imported as a separate private archive; their historical ratings are not included in competition scoring. OSTTracker's existing personal snapshot sync remains a separate account and data path.
 
 ## Break-glass host access
 

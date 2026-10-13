@@ -5,13 +5,13 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 ## User-directed resume sequence (2026-10-13)
 - [x] Scoring clarification: remove tie-boundary movement; fixed nonempty groups, with the last group absorbing remainders. Fixture ranking and score expectations were unchanged; group boundaries were updated to match the revised rule.
 - [x] Step 1: reset local Supabase with auth migration and verify schema/security baseline. `supabase db reset` applied both competition and auth migrations locally; `supabase migration list --local` agreed. `tests/security.sql`, typecheck, lint, and 19 unit tests passed before proceeding. Supabase reports that optional local services are stopped and `inbucket` config is deprecated; neither blocked the reset.
-- [x] Step 2: prove `/demo` production build/runtime without Supabase variables; add standalone Vercel deployment instructions. A clean copy without `.env*` built successfully with all Supabase variables and `NEXT_PUBLIC_DEMO_ORIGIN` unset; production server returned the demo notice in WebKit with zero page errors. Removed an unnecessary CSP upgrade directive that had broken local HTTP production-mode asset loading. Vercel itself was not deployed because no account access was provided.
+- [x] Step 2: prove `/demo` production build/runtime without Supabase variables; add standalone Vercel deployment instructions. Built with `.env.local` moved aside and no Supabase or `NEXT_PUBLIC_DEMO_ORIGIN` variables, then loaded `/demo` in WebKit at 375 px and verified its isolation banner and zero page errors. Vercel itself was not deployed because no account access was provided.
 - [x] Step 3: host bootstrap, recovery codes, credential and session management. Implemented the operator-only host bootstrap script and expiring one-use browser registration; ten hashed single-use recovery codes and recovery passkey replacement; host credential list/add/remove with backup-key guard; and database-backed global session revocation. The CLI created a local-only host and the bootstrap options API returned WebAuthn options for its one-time token. Local migration reset, SQL security checks, source-boundary tests, typecheck, lint, 21 unit tests, production build, and 8 demo E2E tests pass. A real authenticator recovery drill remains untested and is required before production.
 - [x] Step 4: submissions, resumable uploads, Storage-connected worker and media validation. The submission form includes AniList lookup, per-round size/duration checks, TUS progress/resume while the tab remains open, processed-audio preview and confirmation/replacement. Host checks show same-round duplicates and prior-round reuse privately, while duration mismatches require audited review. A pending-row Storage RLS policy authorizes only each participant's assigned key. Local verification: fresh DB reset, SQL security assertions, disposable authenticated TUS upload/private read/delete, Docker transcode + silent-input rejection, typecheck, lint, 21 unit tests, and production build. Production scale-to-zero processing orchestration remains unimplemented; current processing requires a long-running Node host with Docker access.
 - [x] Step 5: listening batches, rating sync, immutable scoring snapshot, and real reveal publication. Host lock/start/release/reopen/close/score/group-publish/one-at-a-time reveal actions are server authorized and audited. Participants get anonymous, per-person shuffled batches, automatic own 10s, optimistic rating versions, a sessionStorage offline queue with truthful save state, 4-second rating/result refresh, finalize locks and published entries only. Local disposable two-person/four-entry round exercised the whole database state machine, checks own tens, complete nonempty batches, frozen scores, reveal counts, and final completion. Unit tests, SQL security assertions, lint, typecheck and production build pass. Passkey confirmation is a recent verified user-presence window (5 minutes); physical authenticator and live Safari checks remain outstanding.
 - [x] Step 6: trial round creation and cleanup. Local trial uses the standard competition flow with two entries per participant, one batch/group, 24/72-hour deadlines, clear trial labels, invite cap, and exclusion from future OST reuse history. Host cleanup removes the trial media, unused invite identities, and dependent competition rows after confirmation while retaining a deletion audit record. Fresh `supabase db reset`, SQL security assertions, and `npm run workflow:test` passed through create, open, single-active-trial rejection, and delete.
 - [x] Step 7: full API, Storage and page payload security suite. SQL checks enforce role grants/RLS, empty search paths for definer functions, private/no-view rules, append-only audit, snapshot immutability, and nonpublic storage. Disposable Auth-backed HTTP probes tested participant/host access, metadata host spoofing, own-submission scoping, anonymous batch output, other-rating isolation, unreleased audio, unpublished results, CSRF, host review/security/trial APIs, PostgREST private-schema denial, direct original/audio reads, and no-store page payloads. Storage integration verified exact pending-key TUS upload succeeds while unmatched-key upload and direct reads fail. All tests passed locally.
-- [ ] Step 8: Mac integration, last, on its own branch.
+- [x] Step 8: Mac integration on `feature/ost-competition-mac-integration`, branched from the completed platform commit. Added passkey browser login with a short-lived one-use native code, Keychain-backed refreshable Supabase session, authenticated competition list/batch/rating access, per-rating version conflicts, completed media archive/import, and host-only import of old rankings. Added Python scorer parity against the shared JSON fixture. Mac/iOS targets compile; native-session, stale-write, legacy-import, archive, Storage and page-payload probes pass. Hardware passkey handoff and archive playback on a real Mac remain unverified.
 
 ## Phase 1 — Design system
 - [x] Inspect OSTTracker SwiftUI theme, shapes, roster/detail/player views, project setup, asset catalog, and existing backend terminology.
@@ -95,18 +95,20 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Phase checkpoint committed (see git history).
 
 ## Phase 10 — Mac integration (separate branch)
-- [ ] Implement only on a distinct git branch.
-- [ ] Authenticated API client; host power stays server-authorized; no secret key in Mac.
-- [ ] Per-record versions and visible stale-write rejection.
-- [ ] Archive completed round/media locally and import into OSTTracker history.
-- [ ] Import old OSTTracker competitions.
-- [ ] Verify existing personal snapshot sync remains untouched.
+- [x] Implemented only on `feature/ost-competition-mac-integration`.
+- [x] Authenticated native API client; host powers remain server-authorized; no service key in Mac.
+- [x] Per-rating versions and visible stale-write rejection; HTTP 409 behavior exercised locally.
+- [x] Archive completed audio locally; host can save originals, import results into OSTTracker history, then confirm cloud-original cleanup.
+- [x] Import old OSTTracker rankings into a private legacy archive; repeated imports are idempotent.
+- [x] Existing personal snapshot sync code was not changed; the competition account section is separate.
 
 ## Phase 11 — End-to-end and security exercises
-- [ ] Full local Supabase + worker + Next dev + production stack.
+- [x] Local Supabase, Storage, media worker checks, and Next production build were run together.
 - [ ] Simulated 10-account complete round, host flow, demo, recovery drill.
 - [x] Unauthorized reads/actions, storage access, participant host-grant attempt (local SQL, HTTP/API, Storage, and rendered-payload probes passed).
-- [ ] Playwright WebKit viewport/throttle, axe on every route, production error checks.
+- [x] Playwright WebKit viewport/throttle and demo/participant/host demo journeys pass; axe passes on implemented public pages in dark and light modes.
+- [ ] Axe coverage for every authenticated route, physical authenticator/recovery verification, and production performance measurements.
+- [ ] Full Python suite is not fully green: 145 passed; one pre-existing assertion in `tests/test_data_layer.py::test_statistics_edge_cases` expects `"—"`, while the unchanged `spread_label(None, None)` implementation returns an empty string. The Mac scoring/history-focused subset passes (30 tests); this unrelated OSTTracker behavior was left unchanged.
 
 ## Phase 12 — Documentation and report
 - [ ] Beginner SETUP.md with Supabase project/domain/RP ID/deploy/cost/passkeys/trial steps and verification.
@@ -117,6 +119,6 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [ ] Final report includes open risks and manual steps.
 
 
-## Current work checkpoint (2026-10-13 19:20 CEST)
+## Current work checkpoint (2026-10-13 19:50 CEST)
 
-The platform branch now includes the full local participant/host authorization exercise across SQL, HTTP APIs, Storage, and rendered page payloads. Trial cleanup remains auditable. The remaining requested build step is the separate-branch Mac integration. Production worker orchestration and real authenticator verification remain untested; do not use real competition data yet.
+The Mac integration branch includes the website native-session bridge, SwiftUI Mac competition account, history imports, local media archive flow, and Python scoring parity tests. The deployment-only demo was built and browser-checked without local env files or Supabase/demo-origin variables. The full local API/Storage/page security probe passes. A full ten-account competition, physical passkey/recovery exercise, production worker orchestration, real-Mac archive playback, complete authenticated-route axe sweep, and performance measurements remain unverified; keep real participant data off the current local setup.

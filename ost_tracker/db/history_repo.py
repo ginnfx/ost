@@ -93,6 +93,44 @@ def count_history() -> int:
     return int(get_db().scalar("SELECT COUNT(*) FROM ost_history") or 0)
 
 
+def import_competition_history(source_id: str, name: str, entries: list[dict]) -> dict:
+    """Import a finished competition into the deduplicated local OST history."""
+    from ost_tracker.db.connection import get_db
+
+    label = (name or "").strip()
+    if not source_id or not label or len(label) > 120:
+        raise ValueError("Competition history needs an id and a name.")
+    db = get_db()
+    with db.transaction() as conn:
+        inserted = conn.execute(
+            "INSERT INTO imported_competitions(source_id,name) VALUES (?,?) ON CONFLICT(source_id) DO NOTHING",
+            (source_id, label),
+        ).rowcount
+        if not inserted:
+            return {"imported": False, "added": 0}
+        existing = list_history()
+        existing_index: dict = {}
+        for entry in existing:
+            existing_index.setdefault(_norm(entry.title), []).append(entry)
+        added = 0
+        for item in entries:
+            title = (item.get("title") or "").strip()
+            source = (item.get("source") or "").strip() or None
+            if not title:
+                continue
+            if any(entry_matches(match, title, source) for match in existing_index.get(_norm(title), ())):
+                continue
+            conn.execute(
+                "INSERT INTO ost_history(title,source,batch_label,sender) VALUES (?,?,?,?)",
+                (title, source, label, "OST Competition"),
+            )
+            added += 1
+            existing_index.setdefault(_norm(title), []).append(
+                HistoryEntry(id=-added, title=title, source=source, batch_label=label, sender="OST Competition", created_at="")
+            )
+        return {"imported": True, "added": added}
+
+
 def _norm(value: Optional[str]) -> str:
     return (value or "").strip().lower()
 
