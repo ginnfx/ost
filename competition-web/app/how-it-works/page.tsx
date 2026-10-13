@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "How this works · OST Competition",
+  title: "OST Competition demo",
   robots: { index: false, follow: false },
 };
 

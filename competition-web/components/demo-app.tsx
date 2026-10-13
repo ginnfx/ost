@@ -139,26 +139,55 @@ export function DemoApp() {
     [state?.entries, state?.batch],
   );
 
-  const startTone = () => {
+  const startTone = (entry?: Entry) => {
     const AudioContextCtor = window.AudioContext;
     const context = playerRef.current ?? new AudioContextCtor();
     playerRef.current = context;
     if (context.state === "suspended") void context.resume();
     const now = context.currentTime;
-    [440, 523.25, 659.25, 587.33].forEach((freq, i) => {
-      const oscillator = context.createOscillator(),
-        gain = context.createGain();
-      oscillator.type = "sine";
-      oscillator.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, now + i * 0.22);
-      gain.gain.exponentialRampToValueAtTime(0.075, now + i * 0.22 + 0.025);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.22 + 0.2);
+    const seedText = entry?.id ?? entry?.title ?? "first-light-demo";
+    const seed = [...seedText].reduce(
+      (sum, char) => sum + char.charCodeAt(0),
+      0,
+    );
+    const scales = [
+      [0, 2, 4, 7, 9],
+      [0, 2, 3, 7, 8],
+      [0, 3, 5, 7, 10],
+      [0, 2, 5, 7, 9, 12],
+      [0, 3, 5, 6, 7, 10],
+    ];
+    const scale = scales[seed % scales.length];
+    const root = 196 * Math.pow(2, (seed % 12) / 12);
+    const tempo = [0.16, 0.2, 0.24, 0.29, 0.34][seed % 5];
+    const waveforms: OscillatorType[] = [
+      "triangle",
+      "sine",
+      "sawtooth",
+      "triangle",
+      "sine",
+    ];
+    const waveform = waveforms[seed % waveforms.length];
+    const melody = Array.from({ length: 12 }, (_, i) => {
+      const scaleIndex = (seed + i * (i % 3 === 0 ? 2 : 3)) % scale.length;
+      const octave = i > 5 && (seed + i) % 3 === 0 ? 2 : 1;
+      return root * Math.pow(2, (scale[scaleIndex] + (octave - 1) * 12) / 12);
+    });
+    melody.forEach((frequency, i) => {
+      const at = now + i * tempo;
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = waveform;
+      oscillator.frequency.setValueAtTime(frequency, at);
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.045, at + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + tempo * 0.9);
       oscillator.connect(gain).connect(context.destination);
-      oscillator.start(now + i * 0.22);
-      oscillator.stop(now + i * 0.22 + 0.21);
+      oscillator.start(at);
+      oscillator.stop(at + tempo);
     });
     setPlaying(true);
-    window.setTimeout(() => setPlaying(false), 1100);
+    window.setTimeout(() => setPlaying(false), melody.length * tempo * 1000);
   };
 
   const reset = async () => {
@@ -237,7 +266,7 @@ export function DemoApp() {
         ),
         toast: "Your entry receives an automatic 10.",
       }));
-    startTone();
+    startTone(entry);
   };
   const rate = (entry: Entry, score: number) => {
     if (!state || state.finalized.includes(state.batch)) {
@@ -584,7 +613,7 @@ export function DemoApp() {
               onAdd={() => void record()}
               onConfirm={confirmOwn}
               onReplace={replaceOwn}
-              onPlay={startTone}
+              onPlay={() => startTone(ownEntries[0])}
               playing={playing}
               onFinish={() =>
                 patch((s) => ({
@@ -612,7 +641,7 @@ export function DemoApp() {
           {(state.phase === "reveals" || state.phase === "complete") && (
             <ParticipantResults
               state={state}
-              onPlay={startTone}
+              onPlay={() => startTone(state.entries[0])}
               playing={playing}
             />
           )}
@@ -754,7 +783,7 @@ export function DemoApp() {
           <a
             href={
               process.env.NEXT_PUBLIC_FEEDBACK_INSTAGRAM ||
-              "https://instagram.com/"
+              "https://instagram.com/YOUR_HANDLE"
             }
             target="_blank"
             rel="noreferrer"

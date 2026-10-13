@@ -11,3 +11,4 @@ test-results/
 .worker-test-*/
 .worker-temp/
 .worker-output/
+.vercel/
