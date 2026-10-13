@@ -36,7 +36,9 @@ export default function HowItWorksPage() {
           scoring. The average includes automatic self-ratings. Ties are
           resolved by more 10s, then the higher median, then the lower spread of
           ratings, then a seeded draw. The host reveals results from last place
-          upward.
+          upward. Ranking breaks every tie before groups are made. Groups use
+          fixed sizes, with any remainder placed in the last group; a group can
+          contain entries with tied scores.
         </p>
         <h2>Joining the round</h2>
         <p>
