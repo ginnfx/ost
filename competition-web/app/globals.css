@@ -132,6 +132,11 @@ h1 {
   background: var(--accent);
   color: #102018;
 }
+.button.secondary {
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--text);
+}
 .button:hover {
   box-shadow: 0 2px 8px #0002;
 }
@@ -549,6 +554,42 @@ h1 {
   margin: 5px 0 0;
   color: var(--muted);
   font-size: 13px;
+}
+.host-security-controls {
+  margin-top: 32px;
+}
+.host-security-controls section {
+  margin: 28px 0;
+  padding: 22px 0;
+  border-top: 1px solid var(--border);
+}
+.host-security-controls h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+}
+.host-security-controls section > p,
+.host-security-controls > p {
+  color: var(--muted);
+}
+.host-security-controls input {
+  display: block;
+  width: min(100%, 420px);
+  min-height: 48px;
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--raised);
+}
+.recovery-code-list {
+  columns: 2;
+  width: min(100%, 520px);
+  padding-left: 22px;
+}
+.recovery-code-list li {
+  padding: 7px 0;
+  break-inside: avoid;
 }
 .browser-prompt {
   margin-top: 22px;

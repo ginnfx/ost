@@ -7,11 +7,13 @@ import {
 } from "node:crypto";
 
 export type Ceremony = {
-  purpose: "invite-register" | "passkey-login" | "host-register";
+  purpose:
+    "invite-register" | "passkey-login" | "host-register" | "host-recovery";
   challenge: string;
   userId?: string;
   inviteId?: string;
   email?: string;
+  tokenDigest?: string;
   expiresAt: number;
 };
 
@@ -83,6 +85,35 @@ export function readCeremonyCookie(raw: string | undefined): Ceremony | null {
 
 export function createChallenge(): string {
   return randomBytes(32).toString("base64url");
+}
+export function makeRecentVerification(userId: string): string {
+  const issuedAt = Date.now().toString();
+  const value = `${userId}.${issuedAt}`;
+  const signature = createHmac("sha256", challengeSecret())
+    .update(`recent:${value}`)
+    .digest("base64url");
+  return `${value}.${signature}`;
+}
+export function isRecentlyVerified(
+  raw: string | undefined,
+  userId: string,
+): boolean {
+  if (!raw) return false;
+  const [savedUser, timestamp, signature, extra] = raw.split(".");
+  if (!savedUser || !timestamp || !signature || extra || savedUser !== userId)
+    return false;
+  const time = Number(timestamp);
+  if (
+    !Number.isSafeInteger(time) ||
+    time > Date.now() ||
+    Date.now() - time > 300_000
+  )
+    return false;
+  const expected = createHmac("sha256", challengeSecret())
+    .update(`recent:${savedUser}.${timestamp}`)
+    .digest();
+  const actual = Buffer.from(signature, "base64url");
+  return actual.length === expected.length && timingSafeEqual(actual, expected);
 }
 export function opaqueToken(): string {
   return randomBytes(32).toString("base64url");

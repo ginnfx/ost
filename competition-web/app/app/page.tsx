@@ -15,11 +15,14 @@ type Membership = {
 export default async function ParticipantHome() {
   const identity = await verifiedCurrentUser();
   if (!identity) redirect("/login");
-  const memberships = await withCurrentUser(async (db) => {
+  const { memberships, isHost } = await withCurrentUser(async (db) => {
     const { rows } = await db.query<Membership>(
       "select * from private.current_memberships()",
     );
-    return rows;
+    const host = await db.query<{ is_host: boolean }>(
+      "select private.is_platform_host() as is_host",
+    );
+    return { memberships: rows, isHost: host.rows[0]?.is_host === true };
   });
   return (
     <main className="page-shell">
@@ -27,7 +30,14 @@ export default async function ParticipantHome() {
         <Link className="wordmark" href="/">
           OST TRACKER <span>COMPETITION</span>
         </Link>
-        <SignOutButton />
+        <div className="signout-control">
+          {isHost && (
+            <Link className="text-link" href="/host/security">
+              Host security
+            </Link>
+          )}
+          <SignOutButton />
+        </div>
       </header>
       <section className="welcome participant-home">
         <p className="eyebrow">PRIVATE COMPETITION</p>
