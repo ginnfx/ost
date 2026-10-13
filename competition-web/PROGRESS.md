@@ -132,3 +132,14 @@ The Mac integration branch includes the website native-session bridge, SwiftUI M
 - [x] 3. Axe across authenticated pages in light and dark modes: host `/app`, `/host/security`, `/host/trials`, `/host/submissions`, `/host/competitions/[id]`; participant `/app`, `/competition/[id]/submit`, and `/competition/[id]/listen`. No WCAG 2.2 A/AA axe violations were reported in Chromium.
 - [x] 4. Mobile profile measurements on participant pages in Chromium at 375×812, 4× CPU slowdown, 150 ms RTT, 1.6 Mbps down / 750 Kbps up. Local dev results: `/app` LCP 328 ms, CLS 0; `/submit` LCP 336 ms, CLS 0, no Event Timing event reached the 16 ms observer threshold; active `/listen` LCP 340 ms, CLS 0.0077, INP 24 ms. These are synthetic local measurements, not production or real-iPhone results. No interaction was performed on `/app`, so its INP was not sampled.
 - [x] 5. Run the Python statistics edge-case test on the main branch: confirmed it fails there with the same expected "—" versus actual empty string mismatch. No OSTTracker code was changed.
+
+## Demo-only Vercel deployment (2026-10-13)
+- [x] Preconditions: `npx vercel whoami` succeeded for the active Vercel account.
+- [x] Add `DEMO_ONLY=true` first-request guard: root redirects to `/demo`; `/how-it-works` remains; all other app/API routes return a no-store “Not set up yet” page before route handlers; demo mode has no Supabase CSP origins.
+- [x] Generic demo page title/OG metadata, noindex headers, and `robots.txt` disallow all crawlers.
+- [x] Replace the single demo tone with entry-specific procedural Web Audio melodies; use the requested Instagram placeholder.
+- [x] Clean-environment formatting, typecheck, lint, 21 unit tests, demo-only Playwright, iPhone axe at 320/375 px in light/dark, production build, and runtime bundle scan; no Supabase URL or credential patterns found.
+- [x] Create/link `ost-comp-demo` in the Vercel Hobby scope, configure production `DEMO_ONLY=true`, disable Vercel Authentication protection, deploy through the logged-in CLI with no GitHub connection, and verify the public URL, noindex/security headers, robots, blocked routes, and live mobile axe.
+- [x] Commit demo-only deployment changes on this branch.
+
+Production demo URL: <https://ost-comp-demo.vercel.app>. `npm run deploy:demo` passed the full check/build/secret-scan/deploy/live-verification sequence, and the live iPhone WebKit + axe suite passed on this alias. The Vercel team scope was verified as Hobby; its only project environment variable is production `DEMO_ONLY=true`.

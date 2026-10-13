@@ -26,6 +26,8 @@
     "host:rotate-bootstrap": "node scripts/rotate-host-bootstrap.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,css}\"",
+    "test:e2e:demo-only": "playwright test --config playwright.demo-only.config.ts",
+    "deploy:demo": "node scripts/deploy-demo.mjs",
     "media:build": "docker build -f worker/Dockerfile -t ost-competition-media-worker:local worker",
     "media:process": "node scripts/media-worker.mjs",
     "media:serve": "python3 worker/server.py",

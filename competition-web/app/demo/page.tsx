@@ -5,12 +5,12 @@ import { redirect } from "next/navigation";
 import "./demo.css";
 
 export const metadata: Metadata = {
-  title: "OST Competition",
-  description: "Private soundtrack competition preview.",
+  title: "OST Competition demo",
+  description: "A browser-only preview of a soundtrack rating game.",
   robots: { index: false, follow: false, noarchive: true },
   openGraph: {
-    title: "OST Competition",
-    description: "Private soundtrack competition preview.",
+    title: "OST Competition demo",
+    description: "A browser-only preview of a soundtrack rating game.",
     type: "website",
   },
 };

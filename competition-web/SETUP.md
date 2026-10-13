@@ -1,5 +1,45 @@
 # Local setup and deployment notes
 
+## Deploy only the demo to Vercel
+
+This deploy path publishes the browser-only `/demo` experience. It does not
+configure or contact Supabase, Cloud Run, Cloud Tasks, or any paid service. The
+Vercel `ost` scope was verified as Hobby. The demo deployment has no connected
+GitHub repository and uses the free `*.vercel.app` address:
+<https://ost-comp-demo.vercel.app>.
+
+1. From `competition-web/`, confirm the Vercel CLI is signed in with
+   `npx vercel whoami`. If it is not, run `npx vercel login` once.
+2. Create the separate demo project if needed with
+   `npx vercel project create ost-comp-demo`, then link this directory using
+   `npx vercel link --yes --project ost-comp-demo`. Keep this project separate
+   from any future real competition site.
+3. Run `npm run deploy:demo`. It formats TypeScript/CSS, checks formatting,
+   types, lint, unit tests, the demo-only iPhone Playwright/axe suite, builds
+   production with only `DEMO_ONLY=true`, scans deployed runtime artifacts for
+   Supabase URLs/credentials, sets the Vercel production variable, and deploys.
+   It temporarily moves local `.env*` files aside during checks and restores
+   them afterward. It does not upload them.
+4. The live URL is printed by the deploy command. Open it and verify the demo
+   banner, `/how-it-works`, and the “Not set up yet” page at `/login`, `/app`,
+   and `/host`. `robots.txt` must say `Disallow: /` and responses must include
+   `X-Robots-Tag: noindex` and the security headers.
+5. To test the live demo with the same small-screen Playwright and axe checks,
+   run `DEMO_BASE_URL=https://ost-comp-demo.vercel.app npm run test:e2e:demo-only`.
+
+The project uses Vercel's Next.js framework preset and disables Vercel
+Authentication deployment protection so friends can open the production demo
+without an account. The deploy helper temporarily moves the parent repository's
+`.git` entry while invoking the CLI, then restores it; this avoids Git commit
+author deployment gating without connecting GitHub.
+
+The build guard is a first-request proxy branch. With `DEMO_ONLY=true`, `/`
+redirects to `/demo`; only `/demo`, `/how-it-works`, and required static assets
+are served. All other page and API requests receive a no-store “Not set up yet”
+response before their handlers can execute. The demo has no Supabase CSP origin.
+When updating the demo, `npm run deploy:demo` is the single command to rerun all
+checks and publish the change.
+
 ## Current readiness
 
 This checkout is an in-progress local build. It is not ready for real participant information, uploads, or a live competition. The media worker and Cloud Run deployment configuration are implemented and exercised locally, but have not been deployed to a Google Cloud account. Other verification and production-readiness gaps remain in PROGRESS.md.
@@ -60,6 +100,7 @@ The worker never receives the Supabase service-role key or database password. FF
    ```
 
    Set the three service-account environment variables to those email addresses. The deployment script grants the enqueuer `roles/iam.serviceAccountUser` on the invoker and grants the invoker `roles/run.invoker` on the worker. The runtime identity gets access only to the callback HMAC secret. Cloud Tasks' service agent must be able to mint the invoker's OIDC token; verify its service-agent role if dispatch reports an IAM error. Google documents this identity flow in [Cloud Tasks HTTP target authentication](https://cloud.google.com/tasks/docs/creating-http-target-tasks#auth).
+
 3. Generate a random 32-byte callback secret with `openssl rand -hex 32`. Create Secret Manager secret `ost-media-worker-callback` and add that value as its first version. Store the same value in the website deployment's server-only `MEDIA_WORKER_CALLBACK_SECRET` variable. Do not put it in source control, a `NEXT_PUBLIC_` variable, or a task body.
 4. Create the Cloud Tasks queue in the same region. A starting policy for this private group is 5 attempts, 10-second minimum backoff, 120-second maximum backoff, 1-hour retry duration, maximum 3 concurrent tasks, and 2 dispatches per second:
 
@@ -72,6 +113,7 @@ The worker never receives the Supabase service-role key or database password. FF
    ```
 
    Confirm with `gcloud tasks queues describe media-processing --project "$GCP_PROJECT_ID" --location "$GCP_REGION"`. Cloud Tasks supports authenticated HTTP targets and retry policies; see [queue retries and limits](https://cloud.google.com/tasks/docs/configuring-queues).
+
 5. Before first deploy, set these shell variables: `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_ARTIFACT_REPOSITORY`, `GCP_TASKS_CLIENT_EMAIL`, `GCP_TASKS_INVOKER_SERVICE_ACCOUNT`, and `MEDIA_WORKER_RUNTIME_SERVICE_ACCOUNT`. Set `MEDIA_ALLOWED_STORAGE_ORIGIN` to the exact origin of the competition Supabase project, such as `https://project-ref.supabase.co`; set `MEDIA_CALLBACK_ORIGIN` to the permanent website origin. Create the secret and grant the runtime service account access as in step 3. Then run `worker/deploy-cloud-run.sh` from `competition-web/`. It builds the worker image, deploys with minimum instances 0, maximum 3, concurrency 1, 2 CPUs, 2 GiB RAM and a 30-minute request timeout, disables unauthenticated invocation, and binds the Cloud Tasks invoker identity. Cloud Run scales instances to zero when idle when min instances is zero; cold starts are expected. See [Cloud Run minimum instances](https://cloud.google.com/run/docs/configuring/min-instances) and [request timeouts](https://cloud.google.com/run/docs/configuring/request-timeout).
 6. Create a key for the enqueuer service account in a secure, ignored location (`gcloud iam service-accounts keys create /secure/path/ost-task-enqueuer.json --iam-account "$GCP_TASKS_CLIENT_EMAIL"`). Copy its `private_key` value into the Vercel server-only `GCP_TASKS_CLIENT_PRIVATE_KEY` variable, then securely remove that local JSON file. Set the website's production variables: `MEDIA_TASK_MODE=cloud-tasks`, `MEDIA_WORKER_URL` to the deployed service URL, `GCP_PROJECT_ID`, `GCP_REGION`, `GCP_TASKS_QUEUE=media-processing`, `GCP_TASKS_CLIENT_EMAIL`, `GCP_TASKS_INVOKER_SERVICE_ACCOUNT`, `GCP_TASKS_CLIENT_PRIVATE_KEY`, `MEDIA_WORKER_CALLBACK_SECRET`, `MEDIA_ALLOWED_STORAGE_ORIGIN`, and `MEDIA_CALLBACK_ORIGIN`. The website enqueuer key must be stored as a server-only Vercel environment variable. This Vercel integration uses a Google service-account key to mint Cloud Tasks API OAuth tokens; restrict that account to task creation and `actAs` on the invoker, keep the key only in production, and rotate/revoke it if it is exposed. The worker itself does not receive this key.
 7. Verify the service URL with `curl -i "$MEDIA_WORKER_URL/healthz"`; unauthenticated requests to `/process` must be rejected by Cloud Run IAM. Then, using local test accounts in a separate Supabase project, run the TUS-to-AAC orchestration test above and inspect the worker's Cloud Run logs and the Cloud Tasks queue. Before real participants, upload one valid clip and one silent clip in a disposable production test round; confirm the valid audio previews, the silent clip produces a host-visible failure, and retry counts appear in the host console. Delete the test round afterward.
