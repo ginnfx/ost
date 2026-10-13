@@ -15,6 +15,17 @@ This checkout is an in-progress local build. It is not ready for real participan
 7. Install site dependencies with npm ci, then run npm run dev. Open http://localhost:3000 and use /demo; the demo uses browser session state and fake content.
 8. Run npm run typecheck, npm run lint, npm test, npm run test:e2e, npm run security:audit, and npm run build.
 
+## Deploy only the demo
+
+The demo can run as a separate Vercel deployment without a Supabase project or Supabase environment variables. It uses bundled fictional data, synthesized browser audio, and session-only state. The `/demo` route stays on that deployment when `NEXT_PUBLIC_DEMO_ORIGIN` is unset; if that variable is set, it redirects visitors to the configured demo origin.
+
+1. Create a Vercel project from this repository and set its Root Directory to `competition-web`.
+2. Leave all environment variables unset for the demo-only deployment, including `NEXT_PUBLIC_DEMO_ORIGIN`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, and `SUPABASE_DB_URL`.
+3. Use Vercel's default build command (`npm run build`) and deploy. Open `/demo` on the deployment and confirm the persistent demo notice appears and the demo can be reset.
+4. Keep the demo on its own hostname when a real competition site is deployed. Do not add a production Supabase key to this Vercel project. Confirm browser network tools show no calls to Supabase while using `/demo`.
+
+This documents and locally validates the standalone build path; it does not claim that a Vercel deployment has been created from this account.
+
 ## Before a real deployment
 
 1. Create a separate Supabase project for this competition. Never point it at OSTTracker's personal snapshot project.

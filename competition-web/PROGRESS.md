@@ -5,7 +5,7 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 ## User-directed resume sequence (2026-10-13)
 - [x] Scoring clarification: remove tie-boundary movement; fixed nonempty groups, with the last group absorbing remainders. Fixture ranking and score expectations were unchanged; group boundaries were updated to match the revised rule.
 - [x] Step 1: reset local Supabase with auth migration and verify schema/security baseline. `supabase db reset` applied both competition and auth migrations locally; `supabase migration list --local` agreed. `tests/security.sql`, typecheck, lint, and 19 unit tests passed before proceeding. Supabase reports that optional local services are stopped and `inbucket` config is deprecated; neither blocked the reset.
-- [ ] Step 2: prove `/demo` production build/runtime without Supabase variables; add standalone Vercel deployment instructions.
+- [x] Step 2: prove `/demo` production build/runtime without Supabase variables; add standalone Vercel deployment instructions. A clean copy without `.env*` built successfully with all Supabase variables and `NEXT_PUBLIC_DEMO_ORIGIN` unset; production server returned the demo notice in WebKit with zero page errors. Removed an unnecessary CSP upgrade directive that had broken local HTTP production-mode asset loading. Vercel itself was not deployed because no account access was provided.
 - [ ] Step 3: host bootstrap, recovery codes, credential and session management.
 - [ ] Step 4: submissions, resumable uploads, Storage-connected worker and full media validation.
 - [ ] Step 5: batches, rating sync, immutable scoring snapshot, real reveal publication.

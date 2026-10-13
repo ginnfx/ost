@@ -17,8 +17,6 @@ export const metadata: Metadata = {
 
 export default async function DemoPage() {
   const isolatedOrigin = process.env.NEXT_PUBLIC_DEMO_ORIGIN;
-  if (process.env.NODE_ENV === "production" && !isolatedOrigin)
-    throw new Error("An isolated demo origin is required.");
   if (isolatedOrigin) {
     const incoming = (await headers()).get("host");
     const target = new URL(isolatedOrigin);
