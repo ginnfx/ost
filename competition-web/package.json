@@ -27,7 +27,8 @@
     "media:build": "docker build -f worker/Dockerfile -t ost-competition-media-worker:local worker",
     "media:process": "node scripts/media-worker.mjs",
     "media:test": "node scripts/test-media-worker.mjs",
-    "storage:test": "node scripts/test-storage-tus.mjs"
+    "storage:test": "node scripts/test-storage-tus.mjs",
+    "workflow:test": "node scripts/test-listening-workflow.mjs"
   },
   "keywords": [],
   "author": "",

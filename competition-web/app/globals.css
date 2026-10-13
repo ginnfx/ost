@@ -721,3 +721,122 @@ h1 {
   color: var(--muted);
   font-size: 13px;
 }
+.listening-workspace,
+.host-round-control {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+.batch-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.batch-choice {
+  display: grid;
+  gap: 4px;
+  min-width: 120px;
+  min-height: 58px;
+  padding: 9px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+}
+.batch-choice span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.batch-choice.selected {
+  border-color: var(--accent);
+  box-shadow: inset 2px 0 var(--accent);
+}
+.batch-choice:disabled {
+  color: var(--muted);
+  background: var(--raised);
+  cursor: not-allowed;
+}
+.listening-workspace > p[role="status"],
+.host-round-control > p[role="status"] {
+  min-height: 22px;
+  margin: 0;
+  color: var(--muted);
+}
+.listening-entry {
+  display: grid;
+  gap: 14px;
+  padding: 20px 0;
+  border-top: 1px solid var(--border);
+}
+.listening-entry-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.listening-entry-heading h2 {
+  margin: 0;
+}
+.listening-entry-heading span,
+.own-entry {
+  color: var(--muted);
+  font-size: 13px;
+}
+.listening-entry audio {
+  width: 100%;
+}
+.published-results {
+  margin-top: 40px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+}
+.published-results ol {
+  padding-left: 24px;
+}
+.published-results li {
+  display: grid;
+  gap: 4px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border);
+}
+.published-results li span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.host-round-control h2 {
+  margin: 0;
+  text-transform: capitalize;
+}
+.host-round-control .round-list {
+  display: grid;
+  gap: 0;
+}
+.host-round-control .round-row {
+  border-bottom: 1px solid var(--border);
+}
+.reveal-confirm-control {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border);
+}
+.loading-state {
+  min-height: 100px;
+  padding: 28px;
+  border-radius: var(--radius-md);
+  color: var(--muted);
+  background: var(--surface);
+}
+@media (max-width: 520px) {
+  .batch-choice {
+    flex: 1 1 40%;
+    min-width: 0;
+  }
+  .listening-entry-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

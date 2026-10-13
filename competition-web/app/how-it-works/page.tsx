@@ -35,10 +35,10 @@ export default function HowItWorksPage() {
           At the deadline, people who did not finish every batch are left out of
           scoring. The average includes automatic self-ratings. Ties are
           resolved by more 10s, then the higher median, then the lower spread of
-          ratings, then a seeded draw. The host reveals results from last place
-          upward. Ranking breaks every tie before groups are made. Groups use
-          fixed sizes, with any remainder placed in the last group; a group can
-          contain entries with tied scores.
+          ratings, then a seeded draw. The full order is set before reveal
+          groups are made. Groups use fixed sizes; ties can cross a group
+          boundary, and the last group absorbs any remainder. The host reveals
+          results one soundtrack at a time from last place upward.
         </p>
         <h2>Joining the round</h2>
         <p>
