@@ -830,6 +830,53 @@ h1 {
   color: var(--muted);
   background: var(--surface);
 }
+.host-trial-management {
+  display: grid;
+  gap: 18px;
+  margin-top: 24px;
+}
+.host-trial-management > p[role="status"] {
+  min-height: 22px;
+  color: var(--muted);
+}
+.trial-management-row {
+  display: grid;
+  gap: 14px;
+  padding: 22px 0;
+  border-top: 1px solid var(--border);
+}
+.trial-management-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+.trial-management-heading h2 {
+  margin: 0;
+}
+.trial-management-heading p:not(.eyebrow),
+.trial-management-row > p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.invite-link-field {
+  display: grid;
+  gap: 8px;
+  max-width: 680px;
+  font-size: 13px;
+}
+.invite-link-field input {
+  min-height: 46px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text);
+  background: var(--raised);
+}
+.danger-button {
+  color: var(--danger-text, #b42318);
+}
 @media (max-width: 520px) {
   .batch-choice {
     flex: 1 1 40%;
@@ -837,6 +884,9 @@ h1 {
   }
   .listening-entry-heading {
     align-items: flex-start;
+    flex-direction: column;
+  }
+  .trial-management-heading {
     flex-direction: column;
   }
 }
