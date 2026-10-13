@@ -12,6 +12,9 @@ do $$ declare r record; begin
     if has_table_privilege('authenticated',format('private.%I',r.relname),'select') then raise exception 'authenticated can read %',r.relname; end if;
     if has_table_privilege('ost_web_app',format('private.%I',r.relname),'select') then raise exception 'web role can directly read %',r.relname; end if;
   end loop;
+  if has_function_privilege('anon','private.complete_host_bootstrap(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') then raise exception 'anon can bootstrap host credentials'; end if;
+  if has_function_privilege('authenticated','private.complete_host_recovery(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') then raise exception 'authenticated can invoke host recovery directly'; end if;
+  if has_function_privilege('ost_web_app','private.complete_host_bootstrap(bytea,text,bytea,bigint,text[],text,boolean,text)','execute') is not true then raise exception 'web role cannot complete a token-authorized bootstrap'; end if;
 end $$;
 
 -- A participant-controlled metadata claim must never mint host privileges.
@@ -20,6 +23,12 @@ select set_config('request.jwt.claims','{"sub":"11111111-1111-4111-8111-11111111
 set local role ost_web_app;
 do $$ begin
   if private.is_platform_host() then raise exception 'user metadata granted host status'; end if;
+  begin
+    perform private.list_host_credentials();
+    raise exception 'participant listed host credentials';
+  exception when sqlstate 'P0002' then
+    null;
+  end;
 end $$;
 reset role;
 

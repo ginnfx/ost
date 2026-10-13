@@ -6,6 +6,7 @@ import { establishSupabaseSession } from "@/lib/server/magic-session";
 import { privateJson, sameOriginRequest, unavailable } from "@/lib/server/http";
 import {
   clientAddress,
+  makeRecentVerification,
   readCeremonyCookie,
   sha256,
   webAuthnConfig,
@@ -71,6 +72,13 @@ export async function POST(request: Request) {
       sameSite: "strict",
       path: "/api/auth",
       maxAge: 0,
+    });
+    store.set("ost_host_recent", makeRecentVerification(result), {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      path: "/",
+      maxAge: 300,
     });
     return privateJson({ success: true, destination: "/app" });
   } catch (error) {

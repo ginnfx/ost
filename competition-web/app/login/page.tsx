@@ -29,6 +29,13 @@ export default function LoginPage() {
         <p className="muted-small">
           Need access? Ask the host for a new invite link.
         </p>
+        <p className="muted-small">
+          Host lost access?{" "}
+          <Link className="text-link" href="/host/recover">
+            Use a recovery code
+          </Link>
+          .
+        </p>
       </section>
     </main>
   );

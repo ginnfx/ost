@@ -20,6 +20,8 @@
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install webkit",
     "security:audit": "npm audit --audit-level=high",
+    "host:bootstrap": "node scripts/bootstrap-host.mjs",
+    "host:rotate-bootstrap": "node scripts/rotate-host-bootstrap.mjs",
     "format": "prettier --write \"**/*.{ts,tsx,css}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,css}\"",
     "media:build": "docker build -f worker/Dockerfile -t ost-competition-media-worker:local worker",

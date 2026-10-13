@@ -6,7 +6,7 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Scoring clarification: remove tie-boundary movement; fixed nonempty groups, with the last group absorbing remainders. Fixture ranking and score expectations were unchanged; group boundaries were updated to match the revised rule.
 - [x] Step 1: reset local Supabase with auth migration and verify schema/security baseline. `supabase db reset` applied both competition and auth migrations locally; `supabase migration list --local` agreed. `tests/security.sql`, typecheck, lint, and 19 unit tests passed before proceeding. Supabase reports that optional local services are stopped and `inbucket` config is deprecated; neither blocked the reset.
 - [x] Step 2: prove `/demo` production build/runtime without Supabase variables; add standalone Vercel deployment instructions. A clean copy without `.env*` built successfully with all Supabase variables and `NEXT_PUBLIC_DEMO_ORIGIN` unset; production server returned the demo notice in WebKit with zero page errors. Removed an unnecessary CSP upgrade directive that had broken local HTTP production-mode asset loading. Vercel itself was not deployed because no account access was provided.
-- [ ] Step 3: host bootstrap, recovery codes, credential and session management.
+- [x] Step 3: host bootstrap, recovery codes, credential and session management. Implemented the operator-only host bootstrap script and expiring one-use browser registration; ten hashed single-use recovery codes and recovery passkey replacement; host credential list/add/remove with backup-key guard; and database-backed global session revocation. The CLI created a local-only host and the bootstrap options API returned WebAuthn options for its one-time token. Local migration reset, SQL security checks, source-boundary tests, typecheck, lint, 21 unit tests, production build, and 8 demo E2E tests pass. A real authenticator recovery drill remains untested and is required before production.
 - [ ] Step 4: submissions, resumable uploads, Storage-connected worker and full media validation.
 - [ ] Step 5: batches, rating sync, immutable scoring snapshot, real reveal publication.
 - [ ] Step 6: trial round creation and cleanup.
@@ -49,14 +49,15 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 
 ## Phase 4 — Authentication
 - [x] Server-side WebAuthn participant registration, one-use expiring invite tokens in URL fragment, nickname-only enrollment; local Auth placeholder identifier exercised.
-- [ ] Host invite UI, initial host credential bootstrap, recovery-code/session/credential management.
+- [ ] Host invite UI (the invite API exists; the host-facing invite management UI is still pending).
+- [x] Initial host passkey bootstrap via trusted operator CLI and single-use short-lived token.
 - [x] Discoverable WebAuthn login and session sign-out endpoint.
-- [ ] Host recovery codes, credential management, session management and host bootstrap.
+- [x] Host recovery codes, credential management, session management and host bootstrap.
 - [x] Secure session cookies, same-origin mutation checks, rate limits, generic not-found responses.
 - [x] Instagram in-app-browser prompt, tested with a simulated Instagram user agent.
 - [ ] Full CSRF/security exercise.
 - [ ] Mac ASWebAuthenticationSession plan and Keychain token boundary.
-- [ ] Phase checks and commit.
+- [x] Phase checks passed and phase changes committed; hardware authenticator enrollment/recovery still needs a real-device check.
 
 ## Phase 5 — Submission and media pipeline
 - [ ] Submission limits, AniList lookup, duplicate/reuse host-only checks.
@@ -75,7 +76,7 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 
 ## Phase 7 — Scoring
 - [x] Integer-only TypeScript scoring engine and JSON fixture tests (not yet authoritative DB publication).
-- [x] Incomplete-rater exclusion, ties, withdrawals, seeded deterministic draw, reveal boundary grouping in the TypeScript scorer.
+- [x] Incomplete-rater exclusion, ties, withdrawals, seeded deterministic draw, and fixed nonempty reveal group partitioning in the TypeScript scorer.
 - [x] JSON fixture covers scorer rules; Python parity deferred to separate Mac integration branch.
 - [ ] Immutable scored snapshot and mutation-blocking trigger.
 - [ ] Phase checks and commit.
