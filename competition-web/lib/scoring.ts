@@ -114,38 +114,17 @@ export function scoreCompetition(input: ScoringInput): {
   const ordered = [...raw].sort(compareScore);
   const revealOrder = [...ordered].reverse();
   const revealGroups: Array<{ number: number; entryIds: string[] }> = [];
-  let start = 0;
-  for (
-    let group = 1;
-    group <= input.revealGroupCount && start < revealOrder.length;
-    group++
-  ) {
-    const targetEnd =
-      group === input.revealGroupCount
-        ? revealOrder.length
-        : Math.round((revealOrder.length * group) / input.revealGroupCount);
-    let end = targetEnd;
-    while (
-      end > start &&
-      end < revealOrder.length &&
-      compareMean(revealOrder[end - 1], revealOrder[end]) === 0n
-    )
-      end--;
-    if (end <= start) continue;
+  const groupCount = Math.min(input.revealGroupCount, revealOrder.length);
+  const standardGroupSize =
+    groupCount === 0 ? 0 : Math.floor(revealOrder.length / groupCount);
+  for (let group = 1; group <= groupCount; group++) {
+    const start = (group - 1) * standardGroupSize;
+    const end =
+      group === groupCount ? revealOrder.length : start + standardGroupSize;
     revealGroups.push({
       number: group,
       entryIds: revealOrder.slice(start, end).map((e) => e.id),
     });
-    start = end;
-  }
-  if (start < revealOrder.length) {
-    const last = revealGroups.at(-1);
-    if (last) last.entryIds.push(...revealOrder.slice(start).map((e) => e.id));
-    else
-      revealGroups.push({
-        number: input.revealGroupCount,
-        entryIds: revealOrder.slice(start).map((e) => e.id),
-      });
   }
   const groupByEntry = new Map(
     revealGroups.flatMap((group) =>
@@ -162,7 +141,7 @@ export function scoreCompetition(input: ScoringInput): {
     varianceNumerator: entry.varianceNumerator.toString(),
     varianceDenominator: entry.varianceDenominator.toString(),
     rank: index + 1,
-    revealGroup: groupByEntry.get(entry.id) ?? input.revealGroupCount,
+    revealGroup: groupByEntry.get(entry.id) ?? 0,
   }));
   return { ranked, revealGroups, excludedRaters };
 }

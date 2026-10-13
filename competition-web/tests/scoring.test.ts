@@ -16,7 +16,7 @@ const fixtures = (
       expected: {
         excludedRaters: string[];
         ranked: string[];
-        revealGroups: string[];
+        revealGroups: string[][];
       };
     }>;
   }
@@ -30,20 +30,18 @@ describe("authoritative scoring fixtures", () => {
       expect(result.ranked.map((entry) => entry.id)).toEqual(
         fixture.expected.ranked,
       );
-      expect(result.revealGroups.flatMap((group) => group.entryIds)).toEqual(
+      expect(result.revealGroups.map((group) => group.entryIds)).toEqual(
         fixture.expected.revealGroups,
       );
       expect(
         result.ranked.find((entry) => entry.id === "self-ten"),
       ).toMatchObject({ sum: 17, count: 2, mean: "8.50", tens: 1 });
-      expect(result.revealGroups[0]?.number).toBe(2);
-      expect(result.revealGroups[0]?.entryIds).toEqual([
-        "higher-spread",
-        "low-spread-b",
-        "low-spread-a",
-        "higher-median",
-        "self-ten",
+      expect(result.revealGroups.map((group) => group.number)).toEqual([
+        1, 2, 3,
       ]);
+      expect(
+        result.revealGroups.every((group) => group.entryIds.length > 0),
+      ).toBe(true);
       expect(scoreCompetition(fixture.input)).toEqual(result);
     });
   }
@@ -67,5 +65,16 @@ describe("authoritative scoring fixtures", () => {
         ],
       }),
     ).toThrow(/Only one rating/);
+  });
+
+  it("caps group count to entry count and puts the remainder in the last group", () => {
+    const base = fixtures[0].input;
+    const result = scoreCompetition({ ...base, revealGroupCount: 6 });
+    expect(result.revealGroups.map((group) => group.entryIds.length)).toEqual([
+      1, 1, 1, 1, 1, 2,
+    ]);
+    expect(
+      result.revealGroups.every((group) => group.entryIds.length > 0),
+    ).toBe(true);
   });
 });

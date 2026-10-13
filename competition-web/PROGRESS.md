@@ -2,6 +2,17 @@
 
 Build brief status: **in progress**. Checked boxes mean code exists and the stated local verification passed; a box is not checked merely because files were scaffolded.
 
+## User-directed resume sequence (2026-10-13)
+- [x] Scoring clarification: remove tie-boundary movement; fixed nonempty groups, with the last group absorbing remainders. Fixture ranking and score expectations were unchanged; group boundaries were updated to match the revised rule.
+- [ ] Step 1: reset local Supabase with auth migration and verify schema/security baseline.
+- [ ] Step 2: prove `/demo` production build/runtime without Supabase variables; add standalone Vercel deployment instructions.
+- [ ] Step 3: host bootstrap, recovery codes, credential and session management.
+- [ ] Step 4: submissions, resumable uploads, Storage-connected worker and full media validation.
+- [ ] Step 5: batches, rating sync, immutable scoring snapshot, real reveal publication.
+- [ ] Step 6: trial round creation and cleanup.
+- [ ] Step 7: full API, Storage and page payload security suite.
+- [ ] Step 8: Mac integration, last, on its own branch.
+
 ## Phase 1 — Design system
 - [x] Inspect OSTTracker SwiftUI theme, shapes, roster/detail/player views, project setup, asset catalog, and existing backend terminology.
 - [x] Separate branch and `competition-web/` project boundary.

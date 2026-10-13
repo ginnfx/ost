@@ -28,9 +28,13 @@ Record of implementation choices where the brief leaves room for judgment. Each 
 The selected path is an application-owned WebAuthn ceremony using pinned `@simplewebauthn` packages. It verifies registration and sign-in on the server, stores only public credential material, requires user verification, and exchanges a verified passkey for a Supabase Auth session. Supabase's experimental passkey feature is not used. The local flow still needs end-to-end authenticator testing before production, and recovery-code/session-revocation endpoints are not complete. Do not register production passkeys until the permanent HTTPS domain and RP ID are final.
 
 
+### Reveal group rule
+
+Form reveal groups only after the full tie-broken ranking. For a nonempty ranking, use `min(configured groups, entry count)` groups; each group except the last gets `floor(entries / groups)` entries and the last absorbs the remainder. Ties may cross a group boundary. This keeps groups nonempty and preserves the complete order.
+
 ### Scoring fixture expectation history
 
-The fixture's expected outputs are anchored to the written scoring specification, not the current implementation output. Two expected-value corrections made during fixture construction were: (1) `low-spread-a` and `low-spread-b` were initially ordered alphabetically, then corrected to the SHA-256 seed draw order (`low-spread-b` before `low-spread-a`) required for otherwise identical ties; (2) a tied mean band was initially split at a reveal-group cut, then corrected so the entire mean tie moves to the later group. The scorer separately follows the specified tie hierarchy (10s, median, lower variance, seeded draw), excludes any withdrawn or incomplete rater, and overwrites a participant's own rating with the automatic 10. These expected values remain test fixtures even if the implementation later changes.
+Expected ranking values follow the scoring specification, not observed code output. Two corrections were made during fixture construction: (1) `low-spread-b` precedes `low-spread-a` by the SHA-256 seeded draw for an otherwise exact ranking tie; (2) the fixture's reveal groups were changed to fixed sizes after the user clarified that tie-breakers complete the order and reveal groups must not move tied entries. The latter changes group boundaries only; the complete ranking and score expectations are unchanged. The scorer excludes any withdrawn or incomplete rater, and assigns each included owner's entry an automatic 10. Neither correction was made merely to match implementation output.
 
 
 ### Visual audit

@@ -1,7 +1,7 @@
 {
   "cases": [
     {
-      "name": "excludes unfinished and withdrawn raters, adds own tens, resolves all ranking ties, and moves a mean tie to the later reveal group",
+      "name": "excludes unfinished and withdrawn raters, adds own tens, resolves all ranking ties, and splits reveal groups at fixed sizes",
       "input": {
         "seed": "fixture-seed-2026",
         "batchCount": 2,
@@ -37,7 +37,7 @@
       "expected": {
         "excludedRaters": ["owner", "unfinished"],
         "ranked": ["more-tens", "fewer-tens", "self-ten", "higher-median", "low-spread-a", "low-spread-b", "higher-spread"],
-        "revealGroups": ["higher-spread", "low-spread-b", "low-spread-a", "higher-median", "self-ten", "fewer-tens", "more-tens"]
+        "revealGroups": [["higher-spread", "low-spread-b"], ["low-spread-a", "higher-median"], ["self-ten", "fewer-tens", "more-tens"]]
       }
     }
   ]
