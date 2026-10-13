@@ -13,7 +13,7 @@ This checkout is an in-progress local build. It is not ready for real participan
 5. Create a random database password and run scripts/bootstrap-local-db-role.sh. Configure the resulting least-privilege SUPABASE_DB_URL; do not connect the web server as postgres.
 6. Build the isolated worker with `npm run media:build`; verify the transcode and silent-file rejection with `npm run media:test`. After the local Supabase stack is up and `.env.local` is configured, run `npm run storage:test` to verify a disposable participant's signed TUS upload, private read, and cleanup. On macOS/Colima, set `MEDIA_WORKER_TEMP_DIR` in `.env.local` to a directory within this repository so Docker can mount it.
 7. Install site dependencies with npm ci, then run npm run dev. Open http://localhost:3000 and use /demo; the demo uses browser session state and fake content.
-8. Run npm run typecheck, npm run lint, npm test, npm run test:e2e, npm run security:audit, and npm run build.
+8. Run `npm run typecheck`, `npm run lint`, `npm test`, `npm run test:e2e`, `npm run security:audit`, and `npm run build`. `npm run workflow:test` runs a disposable local round through lock, batches, ratings, scoring and reveals; it deletes only its own test accounts and data.
 
 ## Deploy only the demo
 

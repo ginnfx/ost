@@ -8,7 +8,7 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Step 2: prove `/demo` production build/runtime without Supabase variables; add standalone Vercel deployment instructions. A clean copy without `.env*` built successfully with all Supabase variables and `NEXT_PUBLIC_DEMO_ORIGIN` unset; production server returned the demo notice in WebKit with zero page errors. Removed an unnecessary CSP upgrade directive that had broken local HTTP production-mode asset loading. Vercel itself was not deployed because no account access was provided.
 - [x] Step 3: host bootstrap, recovery codes, credential and session management. Implemented the operator-only host bootstrap script and expiring one-use browser registration; ten hashed single-use recovery codes and recovery passkey replacement; host credential list/add/remove with backup-key guard; and database-backed global session revocation. The CLI created a local-only host and the bootstrap options API returned WebAuthn options for its one-time token. Local migration reset, SQL security checks, source-boundary tests, typecheck, lint, 21 unit tests, production build, and 8 demo E2E tests pass. A real authenticator recovery drill remains untested and is required before production.
 - [x] Step 4: submissions, resumable uploads, Storage-connected worker and media validation. The submission form includes AniList lookup, per-round size/duration checks, TUS progress/resume while the tab remains open, processed-audio preview and confirmation/replacement. Host checks show same-round duplicates and prior-round reuse privately, while duration mismatches require audited review. A pending-row Storage RLS policy authorizes only each participant's assigned key. Local verification: fresh DB reset, SQL security assertions, disposable authenticated TUS upload/private read/delete, Docker transcode + silent-input rejection, typecheck, lint, 21 unit tests, and production build. Production scale-to-zero processing orchestration remains unimplemented; current processing requires a long-running Node host with Docker access.
-- [ ] Step 5: batches, rating sync, immutable scoring snapshot, real reveal publication.
+- [x] Step 5: listening batches, rating sync, immutable scoring snapshot, and real reveal publication. Host lock/start/release/reopen/close/score/group-publish/one-at-a-time reveal actions are server authorized and audited. Participants get anonymous, per-person shuffled batches, automatic own 10s, optimistic rating versions, a sessionStorage offline queue with truthful save state, 4-second rating/result refresh, finalize locks and published entries only. Local disposable two-person/four-entry round exercised the whole database state machine, checks own tens, complete nonempty batches, frozen scores, reveal counts, and final completion. Unit tests, SQL security assertions, lint, typecheck and production build pass. Passkey confirmation is a recent verified user-presence window (5 minutes); physical authenticator and live Safari checks remain outstanding.
 - [ ] Step 6: trial round creation and cleanup.
 - [ ] Step 7: full API, Storage and page payload security suite.
 - [ ] Step 8: Mac integration, last, on its own branch.
@@ -60,31 +60,32 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Phase checks passed and phase changes committed; hardware authenticator enrollment/recovery still needs a real-device check.
 
 ## Phase 5 — Submission and media pipeline
-- [ ] Submission limits, AniList lookup, duplicate/reuse host-only checks.
-- [ ] Resumable uploads, content sniffing, ffprobe checks, private original retention.
+- [x] Submission limits, AniList lookup, same-round duplicate/prior-round reuse host-only checks.
+- [x] Resumable uploads, content verification through ffprobe, duration checks, private original retention.
 - [x] Container worker uses network none, read-only root, least privilege, resource caps, file-only FFmpeg, AAC 256 kbps / 48 kHz / stereo.
-- [ ] Hosted worker orchestration, private storage download/upload, lifecycle integration.
-- [ ] Preview/confirm/replace, duration mismatch flags, deletion.
-- [x] Local Docker transcode and no-audio rejection smoke test passed; phase checks/commit pending.
+- [x] Local worker integration downloads/uploads private Storage through the server; isolated FFmpeg honors edit lists, checks duration delta and flags over 100 ms.
+- [x] Preview/confirm/replace, duration mismatch review flags and replacement deletion.
+- [x] Local Docker transcode/no-audio rejection and participant-scoped TUS Storage integration passed. A production scale-to-zero job launcher is still absent and is explicitly documented.
 
 ## Phase 6 — Listening
-- [ ] Server-created anonymous IDs/labels, secure seeded shuffle, balanced batches.
-- [ ] Signed short-lived audio URLs and direct storage playback.
-- [ ] Integer rating radio control, autosave/queued offline writes, truthful save states.
-- [ ] Batch finalization/locking/reopen audit, own-entry automatic ten.
-- [ ] Media Session, phase tests and commit.
+- [x] Server-created anonymous labels, cryptographic shuffle seed, submitter-balanced batches and per-participant display order.
+- [x] Short-lived signed audio URLs and direct storage playback.
+- [x] Integer 1–10 controls, autosave, sessionStorage offline queue, version conflicts and truthful save states.
+- [x] Batch finalization locks/reopen audit; own entry receives automatic 10.
+- [x] Native audio controls and Media Session title, local workflow tests pass.
 
 ## Phase 7 — Scoring
 - [x] Integer-only TypeScript scoring engine and JSON fixture tests (not yet authoritative DB publication).
 - [x] Incomplete-rater exclusion, ties, withdrawals, seeded deterministic draw, and fixed nonempty reveal group partitioning in the TypeScript scorer.
 - [x] JSON fixture covers scorer rules; Python parity deferred to separate Mac integration branch.
-- [ ] Immutable scored snapshot and mutation-blocking trigger.
-- [ ] Phase checks and commit.
+- [x] Immutable scored snapshot and mutation-blocking trigger.
+- [x] Host-triggered scoring snapshot records input seed, excluded raters and ranking; local complete-round exercise passes.
 
 ## Phase 8 — Reveals
-- [ ] Host preview and publish with recent verified user-presence credential + hold action.
-- [ ] Publish only one reveal entry at a time; participants see only aggregate data.
-- [ ] Statistics and no unpublished-data leakage across HTML/API/cache/realtime.
+- [x] Host sees reveal-group sizes/progress and publishes with a recent passkey verification window plus hold-to-confirm.
+- [x] Publish one reveal entry per host action; participant responses contain only published rows and aggregate scores.
+- [ ] Dedicated view-as-participant preview and post-reveal statistics.
+- [x] No unpublished results in participant DTOs/API; realtime is disabled and responses are private/no-store.
 - [ ] Phase checks and commit.
 
 ## Phase 9 — Trial round

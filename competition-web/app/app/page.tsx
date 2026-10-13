@@ -34,7 +34,7 @@ export default async function ParticipantHome() {
         <div className="signout-control">
           {isHost && (
             <Link className="text-link" href="/host/submissions">
-              Flagged clips
+              Submission checks
             </Link>
           )}
           {isHost && (
@@ -80,6 +80,32 @@ export default async function ParticipantHome() {
                       href={`/competition/${round.competition_id}/submit`}
                     >
                       Submit entries
+                    </Link>
+                  )}
+                  {round.round_status === "listening" && (
+                    <Link
+                      className="button secondary"
+                      href={`/competition/${round.competition_id}/listen`}
+                    >
+                      Listen and rate
+                    </Link>
+                  )}
+                  {round.round_status === "scored" ||
+                  round.round_status === "revealing" ||
+                  round.round_status === "complete" ? (
+                    <Link
+                      className="button secondary"
+                      href={`/competition/${round.competition_id}/listen`}
+                    >
+                      View results
+                    </Link>
+                  ) : null}
+                  {isHost && round.round_status !== "archived" && (
+                    <Link
+                      className="text-link"
+                      href={`/host/competitions/${round.competition_id}`}
+                    >
+                      Host controls
                     </Link>
                   )}
                 </div>

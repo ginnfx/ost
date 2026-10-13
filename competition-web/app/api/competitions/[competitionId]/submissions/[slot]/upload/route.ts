@@ -70,7 +70,7 @@ export async function POST(
         max_clip_seconds: string;
         normalize_loudness: boolean;
       }>(
-        "select * from private.start_submission_upload($1,$2,$3,$4,$5,$6,$7,$8)",
+        "select * from private.start_submission_upload($1,$2::smallint,$3,$4::bigint,$5,$6::bigint,$7::numeric,$8)",
         [
           competitionId,
           slot,
