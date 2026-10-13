@@ -1,0 +1,7 @@
+# Third-party and original assets
+
+- Phosphor Icons React (`@phosphor-icons/react` 2.1.10), MIT License: https://github.com/phosphor-icons/react/blob/main/LICENSE
+- Icons are rendered as inline SVG components; no external icon fonts or Apple SF Symbols files are included.
+- Home-screen icons `public/icons/icon-192.png` and `icon-512.png`: resized from the repository's OSTTracker app icon (`OSTTracker/Assets.xcassets/AppIcon.appiconset/icon_512x512.png`); OSTTracker project asset, no separate third-party license asserted.
+- Demo sound: generated live with Web Audio oscillators in `components/demo-app.tsx`; original synthesized placeholder, no bundled sound recording.
+- Web typography: operating-system system font stack; no font files bundled.

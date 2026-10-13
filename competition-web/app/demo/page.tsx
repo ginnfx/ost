@@ -1,12 +1,29 @@
-import type { Metadata } from 'next';
-import { DemoApp } from '@/components/demo-app';
-import './demo.css';
+import type { Metadata } from "next";
+import { DemoApp } from "@/components/demo-app";
+import { headers } from "next/headers";
+import { redirect } from "next/navigation";
+import "./demo.css";
 
 export const metadata: Metadata = {
-  title: 'OST Competition',
-  description: 'Private soundtrack competition preview.',
+  title: "OST Competition",
+  description: "Private soundtrack competition preview.",
   robots: { index: false, follow: false, noarchive: true },
-  openGraph: { title: 'OST Competition', description: 'Private soundtrack competition preview.', type: 'website' },
+  openGraph: {
+    title: "OST Competition",
+    description: "Private soundtrack competition preview.",
+    type: "website",
+  },
 };
 
-export default function DemoPage() { return <DemoApp/>; }
+export default async function DemoPage() {
+  const isolatedOrigin = process.env.NEXT_PUBLIC_DEMO_ORIGIN;
+  if (process.env.NODE_ENV === "production" && !isolatedOrigin)
+    throw new Error("An isolated demo origin is required.");
+  if (isolatedOrigin) {
+    const incoming = (await headers()).get("host");
+    const target = new URL(isolatedOrigin);
+    if (incoming && incoming !== target.host)
+      redirect(new URL("/demo", target).toString());
+  }
+  return <DemoApp />;
+}

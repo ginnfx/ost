@@ -20,11 +20,11 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Demo data: 10 fictional participants, 45 other entries plus 5 visitor submissions, original synthesized browser audio.
 - [x] Participant submission, simulated upload progress/processing/confirm/replace.
 - [x] Waiting/listening, ratings, offline queue, finalize/lock, own-entry automatic 10 after opening.
-- [x] Five reveal groups and published aggregate statistics; the host now publishes one anonymous soundtrack per passkey-confirmed action, from last place upward.
+- [x] Five reveal groups and published aggregate statistics; the host confirms one reveal group with a simulated passkey, then advances anonymous soundtracks one at a time.
 - [x] Host console for review, simulated flags, batches, progress, reopen, scoring, participant preview, passkey-gated publication, audit and credentials/recovery.
 - [x] Triggerable failures and time controls; reset; skippable tour; end screen.
 - [x] Isolation test (demo never imports real API), sessionStorage only, noindex, banner, generic OG.
-- [x] Phase checks: typecheck, lint, 3 unit tests, 5 WebKit E2E tests including axe, viewport/throttling, participant and host journeys; production build and zero npm audit findings.
+- [x] Phase checks: typecheck, lint, unit tests, 8 WebKit E2E tests including axe, Safari prompt, viewport/throttling, participant and host journeys; production build and zero npm audit findings.
 - [x] Phase checkpoint committed (see git history).
 
 ## Phase 3 — Schema and security foundation
@@ -33,22 +33,27 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [x] Nonced CSP/security headers, dynamic no-store responses, explicit participant DTO shapes, generic errors, origin validation helper.
 - [x] Security foundation checks for direct grants, metadata spoofing, GraphQL, private storage, host function execution, and immutable records.
 - [x] Start local Supabase and apply/reset migrations; tested using the local stack.
-- [x] Phase checks: migration/security SQL, Vitest, typecheck, lint, production build; WebKit suite running after per-entry reveal adjustment.
-- [x] Phase checkpoint committed after the WebKit run.
+- [x] Phase checks before authentication changes: migration/security SQL, Vitest, typecheck, lint, production build; WebKit suite passed again after group-reveal changes.
+- [x] Phase checkpoint committed before authentication changes (see git history).
 
 ## Phase 4 — Authentication
-- [ ] Invite-only participant auth, one-use expiring invite tokens in URL fragment.
-- [ ] Host passkeys/recovery codes/session and credential management.
-- [ ] Session-safe cookies, CSRF, rate limits, generic not-found, Instagram browser prompt.
+- [x] Server-side WebAuthn participant registration, one-use expiring invite tokens in URL fragment, nickname-only enrollment; local Auth placeholder identifier exercised.
+- [ ] Host invite UI, initial host credential bootstrap, recovery-code/session/credential management.
+- [x] Discoverable WebAuthn login and session sign-out endpoint.
+- [ ] Host recovery codes, credential management, session management and host bootstrap.
+- [x] Secure session cookies, same-origin mutation checks, rate limits, generic not-found responses.
+- [x] Instagram in-app-browser prompt, tested with a simulated Instagram user agent.
+- [ ] Full CSRF/security exercise.
 - [ ] Mac ASWebAuthenticationSession plan and Keychain token boundary.
 - [ ] Phase checks and commit.
 
 ## Phase 5 — Submission and media pipeline
 - [ ] Submission limits, AniList lookup, duplicate/reuse host-only checks.
 - [ ] Resumable uploads, content sniffing, ffprobe checks, private original retention.
-- [ ] Isolated Docker worker, FFmpeg sandbox/resource caps/protocol whitelist, normalized AAC.
+- [x] Container worker uses network none, read-only root, least privilege, resource caps, file-only FFmpeg, AAC 256 kbps / 48 kHz / stereo.
+- [ ] Hosted worker orchestration, private storage download/upload, lifecycle integration.
 - [ ] Preview/confirm/replace, duration mismatch flags, deletion.
-- [ ] Local worker tests and phase commit.
+- [x] Local Docker transcode and no-audio rejection smoke test passed; phase checks/commit pending.
 
 ## Phase 6 — Listening
 - [ ] Server-created anonymous IDs/labels, secure seeded shuffle, balanced batches.
@@ -58,9 +63,9 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [ ] Media Session, phase tests and commit.
 
 ## Phase 7 — Scoring
-- [ ] Single server scoring function with integer arithmetic.
-- [ ] Incomplete-rater exclusion, ties, withdrawals, deterministic draw, reveal boundary rules.
-- [ ] Shared JSON fixtures; Python scorer parity plan for Mac integration.
+- [x] Integer-only TypeScript scoring engine and JSON fixture tests (not yet authoritative DB publication).
+- [x] Incomplete-rater exclusion, ties, withdrawals, seeded deterministic draw, reveal boundary grouping in the TypeScript scorer.
+- [x] JSON fixture covers scorer rules; Python parity deferred to separate Mac integration branch.
 - [ ] Immutable scored snapshot and mutation-blocking trigger.
 - [ ] Phase checks and commit.
 
@@ -96,3 +101,8 @@ Build brief status: **in progress**. Checked boxes mean code exists and the stat
 - [ ] Privacy/how-it-works page, robots exclusion, real-iPhone checklist.
 - [ ] Lint/types/unit/fixtures/security/axe/e2e/build/performance results recorded accurately.
 - [ ] Final report includes open risks and manual steps.
+
+
+## Current work checkpoint (2026-10-13 17:08 CEST)
+
+The latest uncommitted changes add Auth endpoints, scoring foundations, a Docker media worker, and the requested icon/reveal/invite adjustments. Phases 4, 5, and 7 remain in progress; demo passkey prompts are simulated. TypeScript, lint, 18 unit tests, 8 WebKit E2E tests, production build, Prettier check, npm audit, local Supabase placeholder identity, and isolated Docker media smoke checks passed. Do not treat the current app as ready for real competition data.

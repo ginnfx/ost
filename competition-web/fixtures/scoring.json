@@ -1,0 +1,44 @@
+{
+  "cases": [
+    {
+      "name": "excludes unfinished and withdrawn raters, adds own tens, resolves all ranking ties, and moves a mean tie to the later reveal group",
+      "input": {
+        "seed": "fixture-seed-2026",
+        "batchCount": 2,
+        "revealGroupCount": 3,
+        "participants": [
+          { "id": "r1", "withdrawn": false, "finalizedBatches": [1, 2] },
+          { "id": "r2", "withdrawn": false, "finalizedBatches": [1, 2] },
+          { "id": "r3", "withdrawn": false, "finalizedBatches": [1, 2] },
+          { "id": "unfinished", "withdrawn": false, "finalizedBatches": [1] },
+          { "id": "owner", "withdrawn": true, "finalizedBatches": [] }
+        ],
+        "entries": [
+          { "id": "more-tens", "ownerId": "owner" },
+          { "id": "fewer-tens", "ownerId": "owner" },
+          { "id": "higher-median", "ownerId": "owner" },
+          { "id": "higher-spread", "ownerId": "owner" },
+          { "id": "low-spread-a", "ownerId": "owner" },
+          { "id": "low-spread-b", "ownerId": "owner" },
+          { "id": "self-ten", "ownerId": "r1" }
+        ],
+        "ratings": [
+          { "raterId": "r1", "entryId": "more-tens", "score": 10 }, { "raterId": "r2", "entryId": "more-tens", "score": 8 },
+          { "raterId": "r1", "entryId": "fewer-tens", "score": 9 }, { "raterId": "r2", "entryId": "fewer-tens", "score": 9 },
+          { "raterId": "r1", "entryId": "higher-median", "score": 6 }, { "raterId": "r2", "entryId": "higher-median", "score": 9 }, { "raterId": "r3", "entryId": "higher-median", "score": 9 },
+          { "raterId": "r1", "entryId": "higher-spread", "score": 7 }, { "raterId": "r2", "entryId": "higher-spread", "score": 8 }, { "raterId": "r3", "entryId": "higher-spread", "score": 9 },
+          { "raterId": "r1", "entryId": "low-spread-a", "score": 8 }, { "raterId": "r2", "entryId": "low-spread-a", "score": 8 }, { "raterId": "r3", "entryId": "low-spread-a", "score": 8 },
+          { "raterId": "r1", "entryId": "low-spread-b", "score": 8 }, { "raterId": "r2", "entryId": "low-spread-b", "score": 8 }, { "raterId": "r3", "entryId": "low-spread-b", "score": 8 },
+          { "raterId": "r1", "entryId": "self-ten", "score": 2 }, { "raterId": "r2", "entryId": "self-ten", "score": 7 },
+          { "raterId": "unfinished", "entryId": "more-tens", "score": 1 }, { "raterId": "unfinished", "entryId": "fewer-tens", "score": 1 },
+          { "raterId": "owner", "entryId": "higher-median", "score": 1 }
+        ]
+      },
+      "expected": {
+        "excludedRaters": ["owner", "unfinished"],
+        "ranked": ["more-tens", "fewer-tens", "self-ten", "higher-median", "low-spread-a", "low-spread-b", "higher-spread"],
+        "revealGroups": ["higher-spread", "low-spread-b", "low-spread-a", "higher-median", "self-ten", "fewer-tens", "more-tens"]
+      }
+    }
+  ]
+}

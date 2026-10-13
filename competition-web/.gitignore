@@ -7,3 +7,7 @@ coverage/
 playwright-report/
 test-results/
 *.tsbuildinfo
+
+.worker-test-*/
+.worker-temp/
+.worker-output/
