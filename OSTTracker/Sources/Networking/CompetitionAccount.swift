@@ -7,7 +7,7 @@ import Observation
 import Security
 import SwiftUI
 
-nonisolated struct CompetitionMembership: Decodable, Sendable, Identifiable {
+nonisolated struct CompetitionMembership: Codable, Sendable, Identifiable {
     let competitionId: String
     let name: String
     let status: String
@@ -17,7 +17,7 @@ nonisolated struct CompetitionMembership: Decodable, Sendable, Identifiable {
     var id: String { competitionId }
 }
 
-nonisolated struct CompetitionBatch: Decodable, Sendable, Identifiable {
+nonisolated struct CompetitionBatch: Codable, Sendable, Identifiable {
     let number: Int
     let status: String
     let releasedAt: String?
@@ -27,15 +27,15 @@ nonisolated struct CompetitionBatch: Decodable, Sendable, Identifiable {
     var id: Int { number }
 }
 
-nonisolated struct CompetitionBatchEntry: Decodable, Sendable, Identifiable {
+nonisolated struct CompetitionBatchEntry: Codable, Sendable, Identifiable {
     let listeningId: String
     let label: String
     let audioUrl: String
     let durationSeconds: Double
     let own: Bool
     let automaticScore: Int?
-    let rating: Int?
-    let version: Int
+    var rating: Int?
+    var version: Int
     var id: String { listeningId }
 }
 
@@ -59,12 +59,43 @@ nonisolated struct CompetitionArchiveEntry: Decodable, Encodable, Sendable, Iden
     var id: String { listeningId }
 }
 
-nonisolated struct CompetitionRatingWrite: Encodable, Sendable {
+nonisolated struct CompetitionRatingWrite: Codable, Sendable {
     let competitionId: String
     let batch: Int
     let listeningId: String
     let score: Int
     let expectedVersion: Int
+}
+
+private struct CachedCompetitionEntry: Codable, Sendable {
+    let listeningId: String
+    let label: String
+    let durationSeconds: Double
+    let own: Bool
+    let automaticScore: Int?
+    let rating: Int?
+    let version: Int
+}
+
+private struct CachedCompetitionState: Codable, Sendable {
+    let userId: String
+    let memberships: [CompetitionMembership]
+    let batches: [CompetitionBatch]
+    let isHost: Bool
+    let selectedCompetitionId: String?
+    let selectedBatch: Int?
+    let entries: [CachedCompetitionEntry]
+}
+
+private struct CachedPendingQueue: Codable, Sendable {
+    let userId: String
+    let items: [PendingCompetitionRating]
+}
+
+private struct PendingCompetitionRating: Codable, Sendable, Identifiable {
+    var write: CompetitionRatingWrite
+    var needsResolution = false
+    var id: String { "\(write.competitionId):\(write.batch):\(write.listeningId)" }
 }
 
 private struct NativeSession: Codable, Sendable {
@@ -116,6 +147,8 @@ private final class CompetitionPresentationAnchor: NSObject, ASWebAuthentication
 @Observable
 final class CompetitionAccount {
     static let shared = CompetitionAccount()
+    private static let cacheKey = "ost.competition.offline-state"
+    private static let pendingRatingsKey = "ost.competition.pending-ratings"
 
     var serverURL = UserDefaults.standard.string(forKey: "ost.competition.server") ?? "" {
         didSet { UserDefaults.standard.set(serverURL, forKey: "ost.competition.server") }
@@ -127,13 +160,17 @@ final class CompetitionAccount {
     private(set) var selectedBatch: Int?
     private(set) var isHost = false
     private(set) var isBusy = false
+    private(set) var isOffline = false
+    private(set) var pendingRatingCount = 0
     private(set) var message: String?
     @ObservationIgnored private var nativeSession = CompetitionKeychain.load()
+    @ObservationIgnored private var cachingAudioIds: Set<String> = []
     @ObservationIgnored private var webSession: ASWebAuthenticationSession?
     @ObservationIgnored private var competitionPlayer: AVPlayer?
+    @ObservationIgnored private var pendingRatings: [PendingCompetitionRating] = []
     @ObservationIgnored private let presentationAnchor = CompetitionPresentationAnchor()
 
-    private init() {}
+    private init() { restoreLocalState() }
 
     var isSignedIn: Bool { nativeSession != nil }
 
@@ -176,6 +213,12 @@ final class CompetitionAccount {
         selectedCompetitionId = nil
         selectedBatch = nil
         isHost = false
+        isOffline = false
+        pendingRatingCount = 0
+        pendingRatings = []
+        UserDefaults.standard.removeObject(forKey: Self.cacheKey)
+        UserDefaults.standard.removeObject(forKey: Self.pendingRatingsKey)
+        try? FileManager.default.removeItem(at: audioCacheDirectory())
         message = "Signed out of competition. OSTTracker cloud sync is unchanged."
     }
 
@@ -191,8 +234,20 @@ final class CompetitionAccount {
                 isHost = response
                 try await loadBatches(competitionId: selectedCompetitionId)
             }
-            message = memberships.isEmpty ? "No competition rounds are available for this account." : "Competition data is up to date."
-        } catch { message = error.localizedDescription }
+            isOffline = false
+            await flushPendingRatings()
+            persistLocalState()
+            if pendingRatingCount > 0 {
+                message = "\(pendingRatingCount) rating(s) are not saved yet. Review conflicts or try again."
+            } else {
+                message = memberships.isEmpty ? "No competition rounds are available for this account." : "Competition data is up to date."
+            }
+        } catch {
+            isOffline = isNetworkError(error)
+            message = isOffline
+                ? "Offline. Showing the latest cached competition data. Ratings will be marked not saved until the server confirms them."
+                : error.localizedDescription
+        }
     }
 
     func selectCompetition(_ id: String) async {
@@ -210,30 +265,259 @@ final class CompetitionAccount {
         do {
             let response: CompetitionEntryListResponse = try await get("/api/competitions/\(competitionId)/batches/\(number)")
             entries = response.entries
+            for pending in pendingRatings where pending.write.competitionId == competitionId && pending.write.batch == number {
+                if let index = entries.firstIndex(where: { $0.id == pending.write.listeningId }) {
+                    entries[index].rating = pending.write.score
+                }
+            }
+            isOffline = false
+            persistLocalState()
             message = "Batch \(number) loaded. Ratings are 1 to 10."
-        } catch { entries = []; message = error.localizedDescription }
+        } catch {
+            isOffline = isNetworkError(error)
+            if !isOffline { entries = [] }
+            message = isOffline
+                ? "Offline. Showing the latest saved batch."
+                : error.localizedDescription
+        }
     }
 
     func rate(_ entry: CompetitionBatchEntry, score: Int) async {
         guard let competitionId = selectedCompetitionId, let selectedBatch else { return }
+        let write = CompetitionRatingWrite(competitionId: competitionId, batch: selectedBatch,
+                                           listeningId: entry.listeningId, score: score,
+                                           expectedVersion: entry.version)
         do {
-            let write = CompetitionRatingWrite(competitionId: competitionId, batch: selectedBatch,
-                                               listeningId: entry.listeningId, score: score,
-                                               expectedVersion: entry.version)
             let body = try JSONEncoder().encode(write)
             let _: RatingWriteResponse = try await send("PUT", "/api/ratings", body: body)
+            isOffline = false
             await openBatch(selectedBatch)
         } catch CompetitionAccountError.staleRating {
-            message = CompetitionAccountError.staleRating.localizedDescription
             await openBatch(selectedBatch)
-        } catch { message = error.localizedDescription }
+            queue(write, needsResolution: true)
+            if let index = entries.firstIndex(where: { $0.id == entry.id }) { entries[index].rating = score }
+            message = "This rating changed on another device. Use the server's rating or explicitly save your value over it."
+        } catch {
+            guard isNetworkError(error) else { message = error.localizedDescription; return }
+            queue(write)
+            if let index = entries.firstIndex(where: { $0.id == entry.id }) { entries[index].rating = score }
+            isOffline = true
+            message = "Not saved yet. Tap Refresh competitions when you're back online to retry."
+        }
+    }
+
+    func hasPendingRating(_ entry: CompetitionBatchEntry) -> Bool {
+        pendingRatings.contains(where: { $0.write.listeningId == entry.id })
+    }
+
+    func needsRatingResolution(_ entry: CompetitionBatchEntry) -> Bool {
+        pendingRatings.contains(where: { $0.write.listeningId == entry.id && $0.needsResolution })
+    }
+
+    func useServerRating(for entry: CompetitionBatchEntry) async {
+        guard !isOffline else {
+            message = "Reconnect and refresh before resolving this rating conflict."
+            return
+        }
+        pendingRatings.removeAll(where: { $0.write.listeningId == entry.id })
+        persistPendingQueue()
+        pendingRatingCount = pendingRatings.count
+        if let selectedBatch { await openBatch(selectedBatch) }
+        message = "Using the server's saved rating."
+    }
+
+    func saveMyPendingRating(for entry: CompetitionBatchEntry) async {
+        guard let index = pendingRatings.firstIndex(where: { $0.write.listeningId == entry.id }),
+              let competitionId = selectedCompetitionId else { return }
+        let queued = pendingRatings[index]
+        let write = CompetitionRatingWrite(competitionId: competitionId, batch: queued.write.batch,
+                                           listeningId: entry.id, score: queued.write.score,
+                                           expectedVersion: entry.version)
+        do {
+            let body = try JSONEncoder().encode(write)
+            let _: RatingWriteResponse = try await send("PUT", "/api/ratings", body: body)
+            pendingRatings.removeAll(where: { $0.id == queued.id })
+            persistPendingQueue()
+            pendingRatingCount = pendingRatings.count
+            if let selectedBatch { await openBatch(selectedBatch) }
+            message = "Your rating was saved."
+        } catch {
+            isOffline = isNetworkError(error)
+            if let accountError = error as? CompetitionAccountError, case .staleRating = accountError {
+                if let selectedBatch { await openBatch(selectedBatch) }
+                if let fresh = entries.first(where: { $0.id == entry.id }) {
+                    pendingRatings[index].write = CompetitionRatingWrite(
+                        competitionId: competitionId, batch: queued.write.batch,
+                        listeningId: entry.id, score: queued.write.score,
+                        expectedVersion: fresh.version
+                    )
+                    pendingRatings[index].needsResolution = true
+                    persistPendingQueue()
+                }
+                message = "This rating changed elsewhere. Review the server value before retrying yours."
+            } else {
+                message = isOffline ? "Not saved yet. Try again when the server is reachable." : error.localizedDescription
+            }
+        }
+    }
+
+    private func queue(_ write: CompetitionRatingWrite, needsResolution: Bool = false) {
+        let item = PendingCompetitionRating(write: write, needsResolution: needsResolution)
+        if let index = pendingRatings.firstIndex(where: { $0.id == item.id }) {
+            pendingRatings[index] = item
+        } else {
+            pendingRatings.append(item)
+        }
+        pendingRatingCount = pendingRatings.count
+        persistPendingQueue()
+        persistLocalState()
+    }
+
+    private func flushPendingRatings() async {
+        guard let competitionId = selectedCompetitionId else { return }
+        for item in pendingRatings where item.write.competitionId == competitionId && !item.needsResolution {
+            do {
+                let body = try JSONEncoder().encode(item.write)
+                let response: RatingWriteResponse = try await send("PUT", "/api/ratings", body: body)
+                pendingRatings.removeAll(where: { $0.id == item.id })
+                if let index = entries.firstIndex(where: { $0.id == item.write.listeningId }) {
+                    entries[index].rating = item.write.score
+                    entries[index].version = response.version
+                }
+                persistPendingQueue()
+            } catch CompetitionAccountError.staleRating {
+                if let index = pendingRatings.firstIndex(where: { $0.id == item.id }) {
+                    pendingRatings[index].needsResolution = true
+                }
+                if let selectedBatch { await openBatch(selectedBatch) }
+                persistPendingQueue()
+            } catch {
+                isOffline = isNetworkError(error)
+                if isOffline { break }
+            }
+        }
+        pendingRatingCount = pendingRatings.count
+        persistLocalState()
+    }
+
+    private func restoreLocalState() {
+        guard let userId = nativeSession?.userId else { return }
+        let defaults = UserDefaults.standard
+        if let data = defaults.data(forKey: Self.cacheKey),
+           let cached = try? JSONDecoder().decode(CachedCompetitionState.self, from: data),
+           cached.userId == userId {
+            memberships = cached.memberships
+            batches = cached.batches
+            isHost = cached.isHost
+            selectedCompetitionId = cached.selectedCompetitionId
+            selectedBatch = cached.selectedBatch
+            entries = cached.entries.map {
+                let local = audioCacheURL($0.listeningId)
+                return CompetitionBatchEntry(
+                    listeningId: $0.listeningId, label: $0.label,
+                    audioUrl: FileManager.default.fileExists(atPath: local.path) ? local.absoluteString : "",
+                    durationSeconds: $0.durationSeconds, own: $0.own,
+                    automaticScore: $0.automaticScore, rating: $0.rating, version: $0.version
+                )
+            }
+            isOffline = true
+            message = "Offline. Showing cached competition data from the last successful sync."
+        }
+        if let data = defaults.data(forKey: Self.pendingRatingsKey),
+           let queue = try? JSONDecoder().decode(CachedPendingQueue.self, from: data),
+           queue.userId == userId {
+            pendingRatings = queue.items
+            pendingRatingCount = pendingRatings.count
+            for pending in pendingRatings {
+                if let index = entries.firstIndex(where: { $0.id == pending.write.listeningId }) {
+                    entries[index].rating = pending.write.score
+                }
+            }
+        }
+    }
+
+    private func persistLocalState() {
+        guard let userId = nativeSession?.userId else { return }
+        let cached = CachedCompetitionState(
+            userId: userId, memberships: memberships, batches: batches, isHost: isHost,
+            selectedCompetitionId: selectedCompetitionId, selectedBatch: selectedBatch,
+            entries: entries.map {
+                CachedCompetitionEntry(
+                    listeningId: $0.listeningId, label: $0.label,
+                    durationSeconds: $0.durationSeconds, own: $0.own,
+                    automaticScore: $0.automaticScore, rating: $0.rating, version: $0.version
+                )
+            }
+        )
+        if let data = try? JSONEncoder().encode(cached) {
+            UserDefaults.standard.set(data, forKey: Self.cacheKey)
+        }
+    }
+
+    private func persistPendingQueue() {
+        guard let userId = nativeSession?.userId else { return }
+        let queue = CachedPendingQueue(userId: userId, items: pendingRatings)
+        if let data = try? JSONEncoder().encode(queue) {
+            UserDefaults.standard.set(data, forKey: Self.pendingRatingsKey)
+        }
+    }
+
+    private func isNetworkError(_ error: Error) -> Bool {
+        (error as? URLError) != nil || (error as NSError).domain == NSURLErrorDomain
+    }
+
+    private func audioCacheDirectory() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appending(path: "OSTTracker/CompetitionOfflineAudio", directoryHint: .isDirectory)
+    }
+
+    private func audioCacheURL(_ listeningId: String) -> URL {
+        audioCacheDirectory().appending(path: "\(listeningId).m4a")
     }
 
     func play(_ entry: CompetitionBatchEntry) {
-        guard let url = URL(string: entry.audioUrl) else { return }
-        competitionPlayer?.pause()
-        competitionPlayer = AVPlayer(url: url)
-        competitionPlayer?.play()
+        let cachedURL = audioCacheURL(entry.listeningId)
+        if FileManager.default.fileExists(atPath: cachedURL.path) {
+            competitionPlayer?.pause()
+            competitionPlayer = AVPlayer(url: cachedURL)
+            competitionPlayer?.play()
+            message = "Playing the audio cached on this Mac."
+            return
+        }
+        guard !entry.audioUrl.isEmpty, let url = URL(string: entry.audioUrl), url.scheme == "https" else {
+            message = "This clip is not cached yet. Connect once and play it to make the audio available offline."
+            return
+        }
+        if cachingAudioIds.insert(entry.listeningId).inserted {
+            message = "Loading and saving this clip on the Mac."
+            Task { await cacheAudioAndPlay(entry, from: url) }
+        }
+    }
+
+    private func cacheAudioAndPlay(_ entry: CompetitionBatchEntry, from url: URL) async {
+        defer { cachingAudioIds.remove(entry.listeningId) }
+        do {
+            let (temporary, response) = try await URLSession.shared.download(from: url)
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                message = "The audio link expired. Refresh the batch and try again."
+                return
+            }
+            let directory = audioCacheDirectory()
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            let destination = audioCacheURL(entry.listeningId)
+            try? FileManager.default.removeItem(at: destination)
+            try FileManager.default.moveItem(at: temporary, to: destination)
+            competitionPlayer?.pause()
+            competitionPlayer = AVPlayer(url: destination)
+            competitionPlayer?.play()
+            message = "Playing the clip saved on this Mac for offline listening."
+            persistLocalState()
+        } catch {
+            isOffline = isNetworkError(error)
+            message = isOffline
+                ? "Offline. This clip has not been saved on this Mac yet."
+                : "The clip could not be downloaded. Refresh the batch and try again."
+        }
     }
 
     func archiveCompleted(_ membership: CompetitionMembership) async {
@@ -485,6 +769,16 @@ struct CompetitionAccountSection: View {
                 }
             }
             if let message = account.message { Text(message).font(.caption).foregroundStyle(.secondary) }
+            if account.isOffline {
+                Label("Offline · cached competition data", systemImage: "wifi.slash")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if account.pendingRatingCount > 0 {
+                Label("\(account.pendingRatingCount) rating(s) not saved yet", systemImage: "arrow.clockwise")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(Theme.accent)
+            }
             if account.isHost {
                 Button("Import past OSTTracker rankings") { Task { await account.importLegacyRounds() } }
                     .disabled(account.isBusy)
@@ -511,7 +805,20 @@ struct CompetitionAccountSection: View {
                                     Button("Play") { account.play(entry) }
                                     if entry.own { Text("Your entry · automatic 10").font(.caption).foregroundStyle(.secondary) }
                                     Spacer()
-                                    if let rating = entry.rating { Text("Saved \(rating)/10").font(.caption).foregroundStyle(.secondary) }
+                                    if account.hasPendingRating(entry) {
+                                        Text("Not saved yet · \(entry.rating ?? 0)/10").font(.caption).foregroundStyle(Theme.accent)
+                                    } else if let rating = entry.rating {
+                                        Text("Saved \(rating)/10").font(.caption).foregroundStyle(.secondary)
+                                    }
+                                }
+                                if account.needsRatingResolution(entry) {
+                                    HStack {
+                                        Text("The server has a newer rating.").font(.caption).foregroundStyle(.secondary)
+                                        Button("Use server") { Task { await account.useServerRating(for: entry) } }
+                                            .disabled(account.isOffline)
+                                        Button("Save mine") { Task { await account.saveMyPendingRating(for: entry) } }
+                                            .disabled(account.isOffline)
+                                    }
                                 }
                                 if !entry.own {
                                     HStack(spacing: 4) {
