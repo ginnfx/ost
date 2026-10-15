@@ -1,7 +1,7 @@
 // Shared sidecar handshake parsing. Used by the macOS subprocess host and the
 // iOS in-process host alike — the ready line is the same shape, only the
 // transport differs (stdout pipe on macOS, a handshake file in the app
-// container on iOS; see shared/CONTRACT.md).
+// container on iOS).
 
 import Foundation
 

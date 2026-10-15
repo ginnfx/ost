@@ -50,7 +50,9 @@ packaging/01_fetch_runtime.sh
 
 # Only reinstall backend deps when missing (network + slow) unless --deps.
 deps_ok=0
-if [[ $FORCE_DEPS -eq 0 ]] && "$PYTHON_BIN" -c "import fastapi, uvicorn, yt_dlp, httpx, PIL, python_multipart" 2>/dev/null; then
+if [[ $FORCE_DEPS -eq 0 ]] \
+    && "$PYTHON_BIN" -c "import fastapi, uvicorn, yt_dlp, httpx, PIL, python_multipart" 2>/dev/null \
+    && "$PYTHON_BIN" "$REPO_ROOT/packaging/check_sidecar.py" "$REPO_ROOT/backend/api.py" >/dev/null 2>&1; then
     deps_ok=1
     echo "bundled deps already present; skipping install (use --deps to refresh)"
 fi
@@ -69,6 +71,7 @@ xcodebuild \
     -derivedDataPath build \
     MARKETING_VERSION="$VERSION" \
     CURRENT_PROJECT_VERSION="$BUILD_NUM" \
+    OST_SKIP_INSTALL=1 \
     build
 popd >/dev/null
 

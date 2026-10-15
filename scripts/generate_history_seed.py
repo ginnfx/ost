@@ -1,5 +1,7 @@
-"""One-off generator: parse list.md's past-ranking tables into a static
-seed data file for ost_tracker.db.migrations.
+"""One-off generator: parse a local list.md into static history seed data.
+
+The app uses the checked-in history_seed_data.py; this source list is optional
+and not tracked in Git.
 
 Run once by hand whenever list.md's *past* batches change:
 
@@ -75,7 +77,7 @@ def parse_entries() -> list[dict]:
 
 def render(entries: list[dict]) -> str:
     lines = [
-        '"""Static seed data for `ost_history`, generated from list.md by',
+        '"""Static seed data for `ost_history`, generated from a local ranking list by',
         '`scripts/generate_history_seed.py`. Covers past rankings (batches 1-4);',
         "the current ranking is backfilled directly from the live `osts` table",
         "instead (see ost_tracker/db/migrations.py).",

@@ -33,7 +33,7 @@ import threading
 import time
 import httpx
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -90,7 +90,7 @@ _bound_port: Optional[int] = None  # set by __main__ before uvicorn runs
 logger = logging.getLogger("ost_tracker.playback")
 
 
-# --- wire models (mirror /shared/CONTRACT.md exactly) ------------------------
+# --- wire models shared with the desktop clients -----------------------------
 
 
 class PersonOut(BaseModel):
@@ -323,7 +323,8 @@ def _iso(value) -> str:
     """SQLite TIMESTAMP columns decode to datetime under PARSE_DECLTYPES;
     the wire format is always an ISO-8601 UTC string."""
     if isinstance(value, datetime):
-        return value.replace(microsecond=0).isoformat() + "Z"
+        utc = value.replace(tzinfo=timezone.utc) if value.tzinfo is None else value.astimezone(timezone.utc)
+        return utc.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     return str(value)
 
 

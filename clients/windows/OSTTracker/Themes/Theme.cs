@@ -2,7 +2,7 @@ using Windows.UI;
 
 namespace OstTracker.Themes;
 
-/// <summary>Theme tokens mirroring the macOS app (see clients/THEME.md).</summary>
+/// <summary>Theme tokens mirroring the macOS app.</summary>
 public static class Theme
 {
     public static readonly string AccentDefault = "#20D760";

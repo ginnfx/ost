@@ -70,6 +70,8 @@ targets:
         NSLocalNetworkUsageDescription: "Connect to OSTTracker on your Mac to share your competition data."
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        UIBackgroundModes:
+          - audio
     sources:
       - path: Sources
         excludes:

@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace OstTracker.Networking;
 
-// DTOs mirroring shared/CONTRACT.md. Wire keys are snake_case; the shared
+// DTOs for the Python sidecar. Wire keys are snake_case; the shared
 // serializer (see OstClient.Json) handles the naming — these are plain types.
 
 public sealed record Person(int Id, string Name);

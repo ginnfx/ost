@@ -1,4 +1,4 @@
-"""Static seed data for `ost_history`, generated from list.md by
+"""Static seed data for `ost_history`, generated from a local ranking list by
 `scripts/generate_history_seed.py`. Covers past rankings (batches 1-4);
 the current ranking is backfilled directly from the live `osts` table
 instead (see ost_tracker/db/migrations.py).

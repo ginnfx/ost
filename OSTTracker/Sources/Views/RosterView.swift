@@ -2,6 +2,9 @@
 // navigation, and an OST detail panel.
 
 import SwiftUI
+#if os(iOS)
+import CryptoKit
+#endif
 
 struct RosterView: View {
     let store: AppStore
@@ -38,7 +41,7 @@ struct RosterView: View {
         #if os(macOS)
         12
         #else
-        90
+        12
         #endif
     }
 
@@ -221,10 +224,13 @@ struct RosterView: View {
                 toolbar
                 if store.leaderboard.isEmpty {
                     if store.phase == .launching {
-                        ScrollView {
-                            LoadingSkeleton(rows: 4, style: .cards)
-                                .padding(20)
+                        VStack(spacing: 10) {
+                            ProgressView().tint(Theme.accent)
+                            Text("Loading saved roster…")
+                                .font(.ostBody(12))
+                                .foregroundStyle(Theme.textDim)
                         }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                     } else {
                         emptyRoster
                     }
@@ -697,8 +703,15 @@ struct RosterCard: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            DiamondBadge(rank: entry.rank)
-                .offset(x: 10, y: 10)
+            if let rank = entry.rank {
+                Text("#\(rank)")
+                    .font(.ostMono(11, weight: .bold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Theme.bg.opacity(0.82), in: Capsule())
+                    .offset(x: 9, y: 9)
+            }
         }
         .overlay(alignment: .topTrailing) {
             if let delta = rankDelta {
@@ -876,6 +889,8 @@ struct CoverImage: View {
         Group {
             if let remoteImage {
                 Image(uiImage: remoteImage).resizable()
+            } else if let path, let image = Self.cachedCover(path: path, epoch: epoch) {
+                Image(uiImage: image).resizable()
             } else {
                 placeholder
             }
@@ -886,10 +901,10 @@ struct CoverImage: View {
 
     private var placeholder: some View {
             ZStack {
-                Theme.bgRaised
-                Image(systemName: "music.note")
-                    .font(.system(size: 28))
-                    .foregroundStyle(Theme.textDim)
+                Theme.cardSurface
+                Image(systemName: "waveform")
+                    .font(.system(size: 20, weight: .light))
+                    .foregroundStyle(Theme.textDim.opacity(0.55))
             }
     }
 
@@ -897,6 +912,10 @@ struct CoverImage: View {
     private func loadRemoteCover() async {
         remoteImage = nil
         guard let path else { return }
+        if let local = Self.cachedCover(path: path, epoch: epoch) {
+            remoteImage = local
+            return
+        }
         let name = URL(fileURLWithPath: path).deletingPathExtension().lastPathComponent
         guard name.hasPrefix("cover_"),
               let ostID = Int(name.dropFirst(6)),
@@ -907,10 +926,19 @@ struct CoverImage: View {
             remoteImage = cached
             return
         }
+        let diskURL = Self.remoteCacheURL(for: key as String)
+        if let image = UIImage(contentsOfFile: diskURL.path) {
+            Self.cache.setObject(image, forKey: key)
+            remoteImage = image
+            return
+        }
         guard let data = try? await client.cover(ostID: ostID),
               let image = UIImage(data: data), !Task.isCancelled else { return }
         Self.cache.setObject(image, forKey: key)
         remoteImage = image
+        try? FileManager.default.createDirectory(at: diskURL.deletingLastPathComponent(),
+                                                 withIntermediateDirectories: true)
+        try? data.write(to: diskURL, options: .atomic)
     }
     #endif
 }
@@ -972,6 +1000,13 @@ extension CoverImage {
         cache.countLimit = 150
         return cache
     }()
+
+    private static func remoteCacheURL(for key: String) -> URL {
+        let digest = SHA256.hash(data: Data(key.utf8)).map { String(format: "%02x", $0) }.joined()
+        return FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appending(path: "OSTTrackerCovers", directoryHint: .isDirectory)
+            .appending(path: "\(digest).jpg")
+    }
 
     static func cachedCover(path: String, epoch: Int) -> UIImage? {
         let key = "\(path)#\(epoch)" as NSString

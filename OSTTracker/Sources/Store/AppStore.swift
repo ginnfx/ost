@@ -63,11 +63,14 @@ final class AppStore {
     #if os(iOS)
     private var macPlaybackClient: BackendClient?
     private var playbackUsesMacService = false
+    private var audioPrewarmTask: Task<Void, Never>?
+    private var playbackRecoveryInProgress = false
     #endif
     private var eventPump: Task<Void, Never>?
     private var cloudSyncTask: Task<Void, Never>?
     private var cloudSyncDebounceTask: Task<Void, Never>?
     private var coverSyncTask: Task<Void, Never>?
+    private var coverAutoTask: Task<Void, Never>?
     private var cloudSyncInFlight = false
     // Ordering token for leaderboard fetches: without it, two in-flight GETs can
     // land out of issue order and a stale response clobbers a fresher one.
@@ -108,6 +111,22 @@ final class AppStore {
         player.onEnded = { [weak self] in
             Task { await self?.stop() }
         }
+        #if os(iOS)
+        player.onFailed = { [weak self] in
+            Task { await self?.recoverFailedPlayback() }
+        }
+        player.onRemotePlay = { [weak self] in
+            guard let self, let id = self.playback?.ostId else { return }
+            Task { await self.play(ostID: id) }
+        }
+        player.onRemotePause = { [weak self] in
+            Task { await self?.pause() }
+        }
+        player.onRemoteSeek = { [weak self] position in
+            Task { await self?.seek(to: position) }
+        }
+        player.installRemoteCommands()
+        #endif
         // Packaged builds refresh the writable yt-dlp layer in the background
         // on every launch; yt-dlp ages poorly and lives outside the
         // signed bundle. Dev builds use the repo venv untouched.
@@ -129,19 +148,48 @@ final class AppStore {
             #endif
             self.client = client
             try await client.waitUntilHealthy(timeout: .seconds(10))
-            await synchronizeCloud(using: client)
             #if os(iOS)
-            await bootstrapPhoneFromMacIfFresh()
+            // Show the durable phone snapshot immediately. Cloud and Mac sync
+            // can take much longer and must not hold the roster behind a spinner.
+            try await refreshAll(client)
+            phase = .running(port: port)
+            audioPrewarmTask?.cancel()
+            audioPrewarmTask = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2))
+                guard let self, !Task.isCancelled else { return }
+                for entry in self.leaderboard.prefix(2) {
+                    guard !Task.isCancelled else { return }
+                    Task { _ = await LyricsService.shared.lyrics(for: entry.ost, duration: nil) }
+                    try? await client.startResolve(ostID: entry.ost.id)
+                }
+            }
+            scheduleAutoCovers(using: client)
+            Task { [weak self] in
+                guard let self else { return }
+                await self.bootstrapPhoneFromMacIfFresh()
+                await self.synchronizeCloud(using: client)
+                try? await self.refreshAll(client)
+            }
+            #else
+            // Render the local Mac database as soon as the sidecar is healthy.
+            // Cloud sync may be offline or slow; it must not hold the roster in
+            // its launch spinner when the local backend is already available.
+            try await refreshAll(client)
+            phase = .running(port: port)
+            scheduleAutoCovers(using: client)
+            Task { [weak self] in
+                guard let self else { return }
+                await self.synchronizeCloud(using: client)
+                try? await self.refreshAll(client)
+            }
             #endif
             print("GATE health ok")
-            try await refreshAll(client)
             print("GATE osts count=\(leaderboard.count)")
             #if os(macOS)
             startEventPump(client)
             #endif
             startCloudSyncLoop(client)
             startCoverSyncLoop(client)
-            phase = .running(port: port)
         } catch {
             phase = .failed(String(describing: error))
             print("GATE failed error=\(error)")
@@ -153,6 +201,10 @@ final class AppStore {
         cloudSyncTask?.cancel()
         cloudSyncDebounceTask?.cancel()
         coverSyncTask?.cancel()
+        #if os(iOS)
+        audioPrewarmTask?.cancel()
+        #endif
+        coverAutoTask?.cancel()
         #if os(macOS)
         sidecar.terminate()
         #endif
@@ -429,6 +481,7 @@ final class AppStore {
                 let state = try await client.play(ostID: ostID)
                 playbackUsesMacService = false
                 playback = state
+                updatePhoneNowPlaying(for: state)
                 player.apply(state)
                 return
             } catch let phoneError {
@@ -437,14 +490,17 @@ final class AppStore {
                         let state = try await macPlaybackClient.play(ostID: ostID)
                         playbackUsesMacService = true
                         playback = state
+                        updatePhoneNowPlaying(for: state)
                         player.apply(state)
                         return
                     } catch {
-                        reportError("iPhone lookup failed (\(phoneError.localizedDescription)); Mac fallback failed (\(error.localizedDescription)).")
+                        print("GATE iPhone lookup failed: \(phoneError); Mac fallback failed: \(error)")
+                        reportError("Couldn't play this OST. Search failed and the Mac is unavailable.")
                         return
                     }
                 } else {
-                    reportError("Couldn't find or play this OST on the iPhone (\(phoneError.localizedDescription)).")
+                    print("GATE iPhone lookup failed: \(phoneError)")
+                    reportError("Couldn't play this OST. Try again when connected.")
                     return
                 }
             }
@@ -460,6 +516,28 @@ final class AppStore {
         }
         #endif
     }
+
+    #if os(iOS)
+    private func updatePhoneNowPlaying(for state: PlaybackState) {
+        guard let id = state.ostId,
+              let ost = leaderboard.first(where: { $0.ost.id == id })?.ost else { return }
+        player.setNowPlaying(title: ost.title, source: ost.source)
+    }
+
+    private func recoverFailedPlayback() async {
+        guard let id = playback?.ostId else { return }
+        guard !playbackRecoveryInProgress else {
+            await stop()
+            reportError("Playback failed. Tap Play to retry.")
+            return
+        }
+        playbackRecoveryInProgress = true
+        await IOSLocalBackend.shared.invalidatePlaybackCache(ostID: id)
+        await play(ostID: id)
+        try? await Task.sleep(for: .seconds(8))
+        playbackRecoveryInProgress = false
+    }
+    #endif
 
     func pause() async {
         #if os(iOS)
@@ -504,8 +582,9 @@ final class AppStore {
     @discardableResult
     func addOst(title: String, source: String?, submitterID: Int?, link: String?) async -> Bool {
         guard let client else { return false }
+        let added: Ost
         do {
-            _ = try await client.addOst(NewOst(
+            added = try await client.addOst(NewOst(
                 title: title, source: source, submitterId: submitterID, externalLink: link
             ))
         } catch {
@@ -517,7 +596,42 @@ final class AppStore {
         async let histDone: Void = refreshHistory()
         await syncDone
         await histDone
+        Task { await autoCoverIfMissing(ostID: added.id, using: client) }
         return true
+    }
+
+    private func scheduleAutoCovers(using client: any OSTBackend) {
+        coverAutoTask?.cancel()
+        coverAutoTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(2))
+            guard let self, !Task.isCancelled else { return }
+            for entry in self.leaderboard.prefix(12) where entry.ost.coverImagePath == nil {
+                guard !Task.isCancelled else { return }
+                await self.autoCoverIfMissing(ostID: entry.ost.id, using: client)
+            }
+        }
+    }
+
+    private func autoCoverIfMissing(ostID: Int, using client: any OSTBackend) async {
+        guard let ost = leaderboard.first(where: { $0.ost.id == ostID })?.ost,
+              ost.coverImagePath == nil,
+              let candidates = try? await client.coverCandidates(ostID: ostID) else { return }
+        let titleMatch = candidates.first {
+            !$0.label.isEmpty && $0.label.localizedCaseInsensitiveContains(ost.title)
+        }
+        let sourceMatch = ost.source.flatMap { source in
+            candidates.first {
+                !$0.label.isEmpty
+                    && ($0.label.localizedCaseInsensitiveContains(source)
+                        || source.localizedCaseInsensitiveContains($0.label))
+            }
+        }
+        guard let best = candidates.first(where: { $0.sourceName == "Your link" })
+                ?? titleMatch ?? sourceMatch else { return }
+        guard (try? await client.setCover(ostID: ostID, imageURL: best.imageUrl)) != nil else { return }
+        await resync()
+        bumpCoverEpoch(ostID)
+        Task { await synchronizeCoverAssets(using: client) }
     }
 
     /// Distinct franchise/source values across all loaded OSTs, for the Add-OST
@@ -623,8 +737,39 @@ final class AppStore {
     }
 
     func searchCatalog(_ query: String) async throws -> [CatalogTrack] {
-        guard let client else { return [] }
-        return try await client.searchCatalog(query)
+        let local = localCatalogMatches(query)
+        guard let client else { return local }
+        return local + (try await client.searchCatalog(query))
+    }
+
+    func suggestCatalog(_ query: String) async -> [CatalogTrack] {
+        let local = localCatalogMatches(query)
+        #if os(iOS)
+        let remote = await PhoneCatalogSearch.search(query, includeMusicBrainz: false)
+        #else
+        let remote = (try? await client?.searchCatalog(query)) ?? []
+        #endif
+        return Array((local + remote).prefix(6))
+    }
+
+    private func localCatalogMatches(_ query: String) -> [CatalogTrack] {
+        let term = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard term.count >= 2 else { return [] }
+        let osts = leaderboard.compactMap { entry -> CatalogTrack? in
+            guard entry.ost.title.localizedCaseInsensitiveContains(term)
+                    || (entry.ost.source?.localizedCaseInsensitiveContains(term) ?? false) else { return nil }
+            return CatalogTrack(id: "ost:\(entry.ost.id)", title: entry.ost.title,
+                                artist: "", collection: entry.ost.source ?? "",
+                                storeUrl: nil, artworkURL: nil, provider: "Your OSTs")
+        }
+        let saved = notes.compactMap { note -> CatalogTrack? in
+            guard note.title.localizedCaseInsensitiveContains(term)
+                    || (note.source?.localizedCaseInsensitiveContains(term) ?? false) else { return nil }
+            return CatalogTrack(id: "note:\(note.id)", title: note.title,
+                                artist: note.artist ?? "", collection: note.source ?? "",
+                                storeUrl: note.externalLink, artworkURL: nil, provider: "Saved notes")
+        }
+        return Array((osts + saved).prefix(12))
     }
 
     @discardableResult
@@ -970,6 +1115,9 @@ final class AppStore {
         switch event {
         case .playbackState(let state):
             playback = state
+            #if os(iOS)
+            updatePhoneNowPlaying(for: state)
+            #endif
             player.apply(state)
             if let id = state.ostId, state.status == .playing {
                 resolutionPhase[id] = nil

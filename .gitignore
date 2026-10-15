@@ -51,3 +51,8 @@ competition-web/supabase/.temp/
 Lume-main/
 LiquidGlassReference-main/
 font/
+
+# Keep only the short top-level guides in Git; other Markdown notes stay local.
+*.md
+!/README.md
+!/CONTRIBUTING.md

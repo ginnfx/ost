@@ -1,4 +1,4 @@
-"""DTOs mirroring shared/CONTRACT.md (snake_case wire keys)."""
+"""DTOs for the Python sidecar (snake_case wire keys)."""
 from __future__ import annotations
 
 from dataclasses import dataclass, field

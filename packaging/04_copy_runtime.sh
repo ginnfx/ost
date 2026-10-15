@@ -1,8 +1,9 @@
 #!/bin/bash
 # Xcode Run Script build phase: copy the staged Python runtime plus the
 # unchanged Python backend into the built app's Contents/Resources.
-# Skips (successfully) when the runtime is not staged so plain dev builds
-# that run against the repo venv keep working.
+# Debug builds skip embedding and run against the repo venv. Release builds
+# fail if the runtime cannot start the copied backend.
+set -euo pipefail
 source "$(dirname "$0")/config.sh"
 
 APP_RES="${BUILT_PRODUCTS_DIR:?}/${UNLOCALIZED_RESOURCES_FOLDER_PATH:?}"
@@ -18,8 +19,8 @@ if [[ "${CONFIGURATION:-}" == "Debug" ]]; then
 fi
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
-    echo "packaging runtime not staged; skipping embed (dev build)"
-    exit 0
+    echo "ERROR: Release build needs the staged Python runtime; run packaging/01_fetch_runtime.sh and packaging/02_install_deps.sh" >&2
+    exit 1
 fi
 
 echo "embedding python runtime + backend into $APP_RES"
@@ -28,3 +29,4 @@ rsync -a --delete "$PYTHON_DIR/" "$APP_RES/python-runtime/"
 rsync -a "$RUNTIME_DIR/uv" "$APP_RES/bin/uv"
 rsync -a --delete --exclude "__pycache__" "$REPO_ROOT/backend/" "$APP_RES/backend/"
 rsync -a --delete --exclude "__pycache__" "$REPO_ROOT/ost_tracker/" "$APP_RES/ost_tracker/"
+"$APP_RES/python-runtime/bin/python3.11" "$REPO_ROOT/packaging/check_sidecar.py" "$APP_RES/backend/api.py"

@@ -1,9 +1,0 @@
-# Design concept: The mystery listening room
-
-The demo opens like a small record shop after closing: a dark, warm shelf of invented sleeves, each one a clue without a name. Visitors can flick through the stack, hear a short original melody, and enter the round when they are ready. The first screen explains the one thing to do next, keeps the demo notice in view, and offers a plain path into the game. It uses OSTTracker’s system typography, green action color, poster proportions, and compact player language.
-
-The game itself stays quick and familiar. Listening cards, ratings, forms, results, and host tools remain ordinary 2D interface elements, with the existing two-column phone grid and desktop navigation patterns. Picking a score gives the selected number a brief lift; finishing a batch gets a small, quiet confirmation. Mystery artwork is generated from each entry’s stable ID, so the sleeve and record label feel tied to the sound without using borrowed characters, logos, or album art.
-
-Three moments get a single, lazy-loaded 3D canvas: the intro shelf, the fullscreen player’s rotating record and sound-reactive groove, and the reveal sleeve opening into a ranked gem. The reveal keeps its title, franchise, place, and controls in accessible HTML; the scene only adds motion and color. Reduced-motion, low-power, and unsupported-device paths use drawn sleeves, a CSS flip, and a flat rank badge. Motion pauses when it cannot be seen or when playback and reveal animation are idle.
-
-Sound is opt-in. A visible toggle enables small original Web Audio accents, and a play action is always required before a melody can start on iPhone. The visualizer reads the same audio graph as the player. I chose not to add postprocessing: clear shapes, restrained lighting, and a small number of particles should carry the moments without spending the mobile frame budget on glow effects.

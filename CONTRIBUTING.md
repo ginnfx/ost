@@ -1,25 +1,31 @@
 # Contributing
 
-Thanks for helping out. Its a small personal project so keep it simple.
+This is a small personal project. Keep changes focused and check the app you touched.
 
-## Ground rules
+## Code map
 
-- All the logic lives in Python (`ost_tracker/`). The frontends (Swift, C#, GTK) just read state and send requests. They dont compute ratings, ranks, batches or stats.
-- `shared/CONTRACT.md` is the spec for the wire format. If you change an endpoint or a payload, update it, the Pydantic models in `backend/api.py`, and the matching DTOs in all three clients (`OSTTracker/Sources/Networking/`, `clients/windows/OSTTracker/Networking/`, `clients/linux/ost_tracker_gtk/`).
-- Wire keys are snake_case everywhere.
+- `ost_tracker/` has the desktop data and competition rules. `backend/api.py` serves them to the Mac, Windows, and Linux apps.
+- `OSTTracker/Sources/` has the SwiftUI apps. The Mac calls the Python sidecar; the iPhone uses `IOSLocalBackend` so its main features work offline. If you change a shared rule, check both implementations.
+- The desktop apps share an HTTP and WebSocket API in `backend/api.py`. Update affected client models when you change its payloads. JSON keys use `snake_case`.
+- `competition-web/` is a separate Next.js app with its own checks in `package.json`.
 
-## Running the tests
+## Checks
+
+For the Python tests, use Python 3.11 and install `requirements.txt` plus `pytest`:
 
 ```bash
-python -m pytest tests              # domain/API suite (needs Python 3.11)
-cd OSTTracker && xcodegen generate  # Swift project (macOS app)
+python3 -m pip install -r requirements.txt pytest
+python3 -m pytest tests -q
 ```
 
-The CI matrix runs pytest on macOS, Windows and Linux (x64 + arm64). If your change breaks one of them, fix it.
+For the Swift apps, install XcodeGen and run the commands that cover your change:
 
-## Adding a feature
+```bash
+cd OSTTracker
+xcodegen generate
+xcodebuild -project OSTTracker.xcodeproj -scheme OSTTracker -destination 'platform=macOS' build
+xcodebuild -project OSTTracker.xcodeproj -scheme OSTTracker -destination 'platform=macOS' test
+xcodebuild -project OSTTracker.xcodeproj -scheme OSTTrackerIOS -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
+```
 
-1. Implement it in `ost_tracker/` and add an endpoint in `backend/api.py` with tests.
-2. Update `shared/CONTRACT.md`.
-3. Mirror the endpoint in the three client layers.
-4. Keep platform specific polish (visualizer, `#if os(...)` bits) in the right folder. Dont break a platform that already works.
+The Python tests run in CI on Mac, Windows, and Linux. The Windows and Linux build scripts are in their `packaging/` folders. Web checks are in `competition-web/package.json`.

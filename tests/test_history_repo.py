@@ -1,6 +1,6 @@
 """Tests for the ost_history exclusion list: CRUD, match lookup, and the
-guarded migrations that seed it from list.md and backfill it from the live
-roster."""
+guarded migrations that seed it from the checked-in data and backfill it from
+the live roster."""
 
 from __future__ import annotations
 

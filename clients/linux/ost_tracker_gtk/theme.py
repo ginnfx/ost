@@ -1,4 +1,4 @@
-"""Theme tokens + GTK CSS, mirroring the macOS app (see clients/THEME.md)."""
+"""Theme tokens + GTK CSS, mirroring the macOS app."""
 
 from __future__ import annotations
 

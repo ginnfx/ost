@@ -13,7 +13,7 @@ struct NowPlayingBar: View {
     @State private var scrubbing = false
     @State private var scrubValue = 0.0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @AppStorage(Theme.visualizerKey) private var visualizerEnabled = true
+    @AppStorage(Theme.visualizerKey) private var visualizerEnabled = false
     @AppStorage(Theme.motionKey) private var motionSelection = MotionMode.subtle.rawValue
 
     private var status: PlaybackStatus { store.playback?.status ?? .idle }
@@ -36,10 +36,87 @@ struct NowPlayingBar: View {
             #if os(macOS)
             if desktop { desktopBody } else { compactBody }
             #else
-            compactBody
+            phoneBody
             #endif
         }
     }
+
+    #if os(iOS)
+    private var phoneBody: some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 10) {
+                Button(action: onExpand) {
+                    HStack(spacing: 10) {
+                        CoverImage(path: store.nowPlayingEntry?.ost.coverImagePath,
+                                   epoch: store.coverEpoch(for: store.nowPlayingEntry?.ost.id))
+                            .scaledToFill()
+                            .frame(width: 42, height: 42)
+                            .clipShape(RoundedRectangle(cornerRadius: 6))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(store.nowPlayingEntry?.ost.title ?? "")
+                                .font(.ostBody(14, weight: .semibold))
+                                .foregroundStyle(Theme.textPrimary)
+                                .lineLimit(1)
+                            Text(store.nowPlayingEntry?.ost.source ?? timeReadout)
+                                .font(.ostBody(11))
+                                .foregroundStyle(Theme.textDim)
+                                .lineLimit(1)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Open player for \(store.nowPlayingEntry?.ost.title ?? "track")")
+
+                playPauseButton
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 58)
+
+            phoneProgress
+                .padding(.horizontal, 10)
+                .padding(.bottom, 3)
+        }
+        .glassEffect(.regular, in: RoundedRectangle(cornerRadius: 18))
+    }
+
+    private var phoneProgress: some View {
+        GeometryReader { geometry in
+            let width = max(geometry.size.width, 1)
+            let duration = store.player.duration
+            let position = scrubbing ? scrubValue : store.player.position
+            let fraction = duration > 0 ? min(max(position / duration, 0), 1) : 0
+            ZStack(alignment: .leading) {
+                Capsule().fill(Theme.textDim.opacity(0.25))
+                Capsule().fill(Theme.accent).frame(width: width * fraction)
+            }
+            .frame(height: 2)
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle())
+            .gesture(DragGesture(minimumDistance: 0)
+                .onChanged { value in
+                    guard duration > 0 else { return }
+                    scrubbing = true
+                    scrubValue = min(max(value.location.x / width, 0), 1) * duration
+                }
+                .onEnded { _ in
+                    guard duration > 0 else { return }
+                    let target = scrubValue
+                    scrubbing = false
+                    Task { await store.seek(to: target) }
+                })
+            .accessibilityElement()
+            .accessibilityLabel("Playback position")
+            .accessibilityValue(timeReadout)
+            .accessibilityAdjustableAction { direction in
+                let step = direction == .increment ? 5.0 : -5.0
+                Task { await store.seek(to: max(0, min(duration, store.player.position + step))) }
+            }
+        }
+        .frame(height: 10)
+    }
+    #endif
 
     private var compactBody: some View {
         VStack(spacing: 6) {
