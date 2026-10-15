@@ -1,53 +1,26 @@
-// Synced lyrics from LRCLIB (lrclib.net — free, no auth, returns LRC-format
-// timed lines). This is the one piece of networking the Swift app does itself:
-// lyrics are pure UI garnish, not competition state, so they stay out of the
-// Python contract. Results are cached per OST for the app's lifetime; misses
-// are remembered so we never re-query a track that has no lyrics.
-
+import CryptoKit
 import Foundation
 
-nonisolated struct LyricLine: Sendable, Equatable, Identifiable {
-    let time: Double     // seconds from track start
+nonisolated struct LyricLine: Sendable, Codable, Equatable, Identifiable {
+    let time: Double
     let text: String
     var id: Double { time }
 }
 
+nonisolated struct LyricsResult: Sendable, Codable {
+    let synced: [LyricLine]?
+    let plain: String?
+}
+
+/// Timed and plain lyrics from LRCLIB, with lyrics.ovh as a plain-text backup.
+/// Hits survive launches. An offline lookup is never saved as a missing lyric.
 final class LyricsService {
     static let shared = LyricsService()
 
-    private var cache: [Int: [LyricLine]] = [:]
-    private var misses: Set<Int> = []
-    private var inFlight: [Int: Task<[LyricLine]?, Never>] = [:]
-
-    /// Best-effort synced lyrics for an OST. Returns nil when nothing usable
-    /// exists — callers fall back to the plain visualizer layout.
-    func lyrics(for ost: Ost, duration: Double?) async -> [LyricLine]? {
-        if let hit = cache[ost.id] { return hit }
-        if misses.contains(ost.id) { return nil }
-        if let running = inFlight[ost.id] { return await running.value }
-
-        let task = Task { [weak self] () -> [LyricLine]? in
-            let lines = await Self.fetch(ost: ost, duration: duration)
-            // Only cache when we KNEW the duration: a nil-duration pick is an
-            // unverified guess (the player was still resolving), and caching
-            // it would pin possibly-wrong lyrics to this OST for the whole
-            // session. Left uncached, the caller re-fetches and re-validates
-            // once the real duration lands.
-            if duration != nil {
-                if let lines {
-                    self?.cache[ost.id] = lines
-                } else {
-                    self?.misses.insert(ost.id)
-                }
-            }
-            self?.inFlight[ost.id] = nil
-            return lines
-        }
-        inFlight[ost.id] = task
-        return await task.value
+    private struct Cached: Codable {
+        let result: LyricsResult?
+        let checkedAt: Date
     }
-
-    // MARK: - LRCLIB
 
     private struct LrclibTrack: Decodable {
         let trackName: String?
@@ -55,81 +28,193 @@ final class LyricsService {
         let albumName: String?
         let duration: Double?
         let syncedLyrics: String?
+        let plainLyrics: String?
     }
 
-    private static func fetch(ost: Ost, duration: Double?) async -> [LyricLine]? {
-        // Title first; game OSTs rarely match on "artist". A second pass with
-        // the source appended helps generic titles find the right track.
-        let queries = [ost.title, ost.source.map { "\(ost.title) \($0)" }]
-            .compactMap(\.self)
-        for query in queries {
-            guard let results = await search(query) else { continue }
-            let synced = results.filter { !($0.syncedLyrics ?? "").isEmpty }
-            guard !synced.isEmpty else { continue }
-            let best = pick(from: synced, title: ost.title, source: ost.source, duration: duration)
-            if best == nil {
-                let metadata = synced.map { "\($0.trackName ?? "?") / \($0.artistName ?? "?") / \($0.albumName ?? "?")" }
-                print("LYRICS no metadata match for \"\(query)\" target=\(Int(duration ?? -1))s candidates: \(metadata.joined(separator: "; "))")
+    private let directory: URL
+    private var memory: [String: Cached] = [:]
+    private var inFlight: [String: Task<LyricsResult?, Never>] = [:]
+
+    private init() {
+        directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+            .appending(path: "OSTTrackerLyrics", directoryHint: .isDirectory)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    }
+
+    func lyrics(for ost: Ost, duration: Double?) async -> LyricsResult? {
+        let key = Self.cacheKey(for: ost)
+        if let cached = memory[key] ?? read(key),
+           let result = cached.result, Self.isUsable(result) {
+            memory[key] = cached
+            return result
+        }
+        if let running = inFlight[key] { return await running.value }
+        let task = Task { [weak self] () -> LyricsResult? in
+            let result = await Self.fetch(ost: ost, duration: duration)
+            if !Task.isCancelled, let self {
+                if result != nil {
+                    let cached = Cached(result: result, checkedAt: Date())
+                    self.memory[key] = cached
+                    self.write(cached, key: key)
+                }
+                self.inFlight[key] = nil
             }
-            if let raw = best?.syncedLyrics {
+            return result
+        }
+        inFlight[key] = task
+        return await task.value
+    }
+
+    private static func cacheKey(for ost: Ost) -> String {
+        let identity = "\(ost.id)|\(ost.title.lowercased())|\(ost.source?.lowercased() ?? "")"
+        return SHA256.hash(data: Data(identity.utf8))
+            .map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func read(_ key: String) -> Cached? {
+        guard let data = try? Data(contentsOf: directory.appending(path: "\(key).json")) else { return nil }
+        return try? JSONDecoder().decode(Cached.self, from: data)
+    }
+
+    private func write(_ value: Cached, key: String) {
+        guard let data = try? JSONEncoder().encode(value) else { return }
+        try? data.write(to: directory.appending(path: "\(key).json"), options: .atomic)
+    }
+
+    private static func fetch(ost: Ost, duration: Double?) async -> LyricsResult? {
+        async let titleSearch = searchLRCLIB(ost.title)
+        async let sourceSearch = searchLRCLIB([ost.title, ost.source].compactMap { $0 }.joined(separator: " "))
+        let candidates = (await titleSearch ?? []) + (await sourceSearch ?? [])
+        let matches = candidates.filter { titleMatches($0.trackName, ost.title) }
+            .filter { item in
+                if let duration, let candidate = item.duration {
+                    return abs(candidate - duration) <= 25
+                }
+                if duration == nil, let source = ost.source, !source.isEmpty {
+                    guard let album = item.albumName else { return false }
+                    let a = normalize(album), b = normalize(source)
+                    return a.contains(b) || b.contains(a)
+                }
+                return true
+            }
+            .sorted { matchScore($0, source: ost.source, duration: duration)
+                > matchScore($1, source: ost.source, duration: duration) }
+        for item in matches {
+            if let raw = item.syncedLyrics {
                 let lines = parseLRC(raw)
-                if lines.count >= 4 {
-                    print("LYRICS matched \"\(best?.trackName ?? "?")\" by \(best?.artistName ?? "unknown") on \(best?.albumName ?? "unknown album") for \"\(query)\"")
-                    return lines
+                if lines.count >= 4,
+                   !looksLikeCredits(lines.map(\.text).joined(separator: "\n")) {
+                    return LyricsResult(synced: lines, plain: nil)
                 }
             }
+        }
+        if let plain = matches.compactMap({ cleanPlain($0.plainLyrics) }).first {
+            return LyricsResult(synced: nil, plain: plain)
+        }
+        var artist = matches.compactMap { $0.artistName }.first { !$0.isEmpty }
+        if artist == nil { artist = await appleArtist(for: ost, duration: duration) }
+        if let artist, let plain = await lyricsOVH(artist: artist, title: ost.title) {
+            return LyricsResult(synced: nil, plain: plain)
         }
         return nil
     }
 
-    private static func pick(
-        from candidates: [LrclibTrack], title: String, source: String?, duration: Double?
-    ) -> LrclibTrack? {
-        let credible = candidates.filter {
-            titleMatches($0.trackName, title) && sourceMatches($0.albumName, source)
+    private static func matchScore(_ item: LrclibTrack, source: String?, duration: Double?) -> Double {
+        var score = 0.0
+        if let source, let album = item.albumName, !source.isEmpty {
+            let a = normalize(album), b = normalize(source)
+            if a.contains(b) || b.contains(a) { score += 10 }
         }
-        guard let target = duration else { return credible.first }
-        return credible
-            .compactMap { track -> (LrclibTrack, Double)? in
-                guard let trackDuration = track.duration else { return nil }
-                let delta = abs(trackDuration - target)
-                return delta <= 30 ? (track, delta) : nil
-            }
-            .min { $0.1 < $1.1 }?.0
+        if let duration, let candidate = item.duration { score += max(0, 8 - abs(candidate - duration) / 3) }
+        if !(item.syncedLyrics ?? "").isEmpty { score += 2 }
+        return score
     }
 
-    private static func titleMatches(_ candidate: String?, _ ours: String) -> Bool {
+    private static func titleMatches(_ candidate: String?, _ title: String) -> Bool {
         guard let candidate else { return false }
-        let a = normalize(candidate), b = normalize(ours)
-        guard !a.isEmpty, !b.isEmpty else { return false }
-        return a == b
+        let a = normalize(candidate), b = normalize(title)
+        return !a.isEmpty && a == b
     }
 
-    private static func sourceMatches(_ album: String?, _ source: String?) -> Bool {
-        guard let source, !source.isEmpty else { return true }
-        guard let album, !album.isEmpty else { return false }
-        let a = normalize(album), s = normalize(source)
-        return a.contains(s) || s.contains(a)
+    private static func normalize(_ text: String) -> String {
+        String(text.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains))
     }
 
-    private static func normalize(_ s: String) -> String {
-        String(s.lowercased().unicodeScalars.filter(CharacterSet.alphanumerics.contains))
+    private static func cleanPlain(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let text = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.count >= 40 && !looksLikeCredits(text) ? text : nil
     }
 
-    private static func search(_ query: String) async -> [LrclibTrack]? {
+    private static func isUsable(_ result: LyricsResult) -> Bool {
+        if let lines = result.synced, !lines.isEmpty {
+            return !looksLikeCredits(lines.map(\.text).joined(separator: "\n"))
+        }
+        return cleanPlain(result.plain) != nil
+    }
+
+    /// Some lyric providers return album personnel as plain lyrics for an
+    /// instrumental. Reject those records, including ones already on disk.
+    private static func looksLikeCredits(_ text: String) -> Bool {
+        let lines = text.split(separator: "\n")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty && $0 != "♪" }
+        guard lines.count >= 3 else { return false }
+        let creditMarkers = ["saxophone", "recording", "engineer", "mixing", "mastering",
+                             "produced by", "guitar", "studio", "vocals", "arranged by",
+                             "作曲", "编曲", "录音", "混音", "母带", "制作", "出品"]
+        let creditLines = lines.filter { line in
+            let lower = line.lowercased()
+            return lower.contains(":") || lower.contains("：")
+                || creditMarkers.contains(where: lower.contains)
+        }.count
+        return creditLines >= 3 && creditLines * 2 >= lines.count
+    }
+
+    private static func searchLRCLIB(_ query: String) async -> [LrclibTrack]? {
         var components = URLComponents(string: "https://lrclib.net/api/search")!
         components.queryItems = [URLQueryItem(name: "q", value: query)]
         guard let url = components.url else { return nil }
-        var request = URLRequest(url: url, timeoutInterval: 8)
-        request.setValue("OSTTracker/1.0 (personal desktop app)", forHTTPHeaderField: "User-Agent")
+        var request = URLRequest(url: url, timeoutInterval: 6)
+        request.setValue("OSTTracker/1.0", forHTTPHeaderField: "User-Agent")
         guard let (data, response) = try? await URLSession.shared.data(for: request),
-              (response as? HTTPURLResponse)?.statusCode == 200
-        else { return nil }
+              (response as? HTTPURLResponse)?.statusCode == 200 else { return nil }
         return try? JSONDecoder().decode([LrclibTrack].self, from: data)
     }
 
-    /// LRC: `[mm:ss.xx]line`, possibly several timestamps per line. Empty timed
-    /// lines are instrumental gaps — shown as ♪, the lyric-UI convention.
+    private static func appleArtist(for ost: Ost, duration: Double?) async -> String? {
+        var components = URLComponents(string: "https://itunes.apple.com/search")!
+        components.queryItems = [URLQueryItem(name: "term", value: ost.title),
+                                 URLQueryItem(name: "media", value: "music"),
+                                 URLQueryItem(name: "entity", value: "song"),
+                                 URLQueryItem(name: "limit", value: "15")]
+        guard let url = components.url,
+              let (data, response) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 6)),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let rows = object["results"] as? [[String: Any]] else { return nil }
+        let matches = rows.filter { row in
+            guard titleMatches(row["trackName"] as? String, ost.title) else { return false }
+            guard let duration, let millis = row["trackTimeMillis"] as? Double else { return true }
+            return abs(millis / 1_000 - duration) <= 25
+        }
+        let source = normalize(ost.source ?? "")
+        let selected = matches.first { !source.isEmpty
+            && normalize($0["collectionName"] as? String ?? "").contains(source) } ?? matches.first
+        return selected?["artistName"] as? String
+    }
+
+    private static func lyricsOVH(artist: String, title: String) async -> String? {
+        let pathSegment = CharacterSet.urlPathAllowed.subtracting(CharacterSet(charactersIn: "/"))
+        let artistPath = artist.addingPercentEncoding(withAllowedCharacters: pathSegment) ?? artist
+        let titlePath = title.addingPercentEncoding(withAllowedCharacters: pathSegment) ?? title
+        guard let url = URL(string: "https://api.lyrics.ovh/v1/\(artistPath)/\(titlePath)"),
+              let (data, response) = try? await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 8)),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return cleanPlain(object["lyrics"] as? String)
+    }
+
     nonisolated private static func parseLRC(_ raw: String) -> [LyricLine] {
         var out: [LyricLine] = []
         for rawLine in raw.split(separator: "\n", omittingEmptySubsequences: true) {
@@ -143,11 +228,9 @@ final class LyricsService {
                 }
                 rest = rest[rest.index(after: close)...]
             }
-            guard !times.isEmpty else { continue }   // metadata tags like [ar:…]
+            guard !times.isEmpty else { continue }
             let text = rest.trimmingCharacters(in: .whitespaces)
-            for time in times {
-                out.append(LyricLine(time: time, text: text.isEmpty ? "♪" : text))
-            }
+            for time in times { out.append(LyricLine(time: time, text: text.isEmpty ? "♪" : text)) }
         }
         return out.sorted { $0.time < $1.time }
     }

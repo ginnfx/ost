@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import UIKit
 
 /// Small, durable on-device implementation of the app's data API. The JSON
 /// snapshot format is shared with the Mac database and Supabase, which keeps
@@ -34,11 +35,33 @@ final class IOSLocalBackend: OSTBackend {
             document = Self.emptyDocument
             isFreshInstall = true
         }
+        rebaseCachedCoverPaths()
     }
 
     private static let tableNames = ["people", "osts", "ratings", "notes", "ost_history", "app_settings", "retired_rounds"]
     private static var emptyDocument: [String: Any] {
         ["version": 1, "tables": Dictionary(uniqueKeysWithValues: tableNames.map { ($0, [[String: Any]]()) })]
+    }
+
+    /// An app update can move its data container. The filenames are stable,
+    /// while absolute paths saved by an older build are not.
+    private func rebaseCachedCoverPaths() {
+        var tables = document["tables"] as? [String: [[String: Any]]] ?? [:]
+        var osts = tables["osts"] ?? []
+        var changed = false
+        for index in osts.indices {
+            let id = Self.int(osts[index]["id"])
+            let current = coversDirectory.appending(path: "cover_\(id).jpg")
+            guard FileManager.default.fileExists(atPath: current.path) else { continue }
+            if osts[index]["cover_image_path"] as? String != current.path {
+                osts[index]["cover_image_path"] = current.path
+                changed = true
+            }
+        }
+        guard changed else { return }
+        tables["osts"] = osts
+        document["tables"] = tables
+        try? persist()
     }
 
     func waitUntilHealthy(timeout: Duration = .seconds(10)) async throws {}
@@ -225,8 +248,30 @@ final class IOSLocalBackend: OSTBackend {
         try saveRows(rows("osts").filter { Self.int($0["id"]) != id }, for: "osts")
         try saveRows(rows("ratings").filter { Self.int($0["ost_id"]) != id }, for: "ratings")
     }
-    func coverCandidates(ostID: Int) async throws -> [CoverCandidate] { [] }
-    func setCover(ostID: Int, imageURL: String) async throws -> Ost { throw Self.error("Cover search requires an internet connection.") }
+    func coverCandidates(ostID: Int) async throws -> [CoverCandidate] {
+        guard let row = rows("osts").first(where: { Self.int($0["id"]) == ostID }) else {
+            throw Self.error("OST not found.")
+        }
+        return await PhoneCatalogSearch.covers(title: row["title"] as? String ?? "",
+                                                source: row["source"] as? String)
+    }
+    func setCover(ostID: Int, imageURL: String) async throws -> Ost {
+        guard let url = URL(string: imageURL), url.scheme?.lowercased() == "https" else {
+            throw Self.error("Use an HTTPS image URL.")
+        }
+        let (data, response) = try await URLSession.shared.data(for: URLRequest(url: url, timeoutInterval: 12))
+        guard (response as? HTTPURLResponse)?.statusCode == 200,
+              data.count <= 8 * 1_024 * 1_024,
+              let image = UIImage(data: data),
+              let jpeg = image.jpegData(compressionQuality: 0.88) else {
+            throw Self.error("The cover image could not be downloaded.")
+        }
+        try cacheCover(ostID: ostID, data: jpeg)
+        guard let row = rows("osts").first(where: { Self.int($0["id"]) == ostID }) else {
+            throw Self.error("OST not found.")
+        }
+        return try decode(ostOutput(row), as: Ost.self)
+    }
     func cover(ostID: Int) async throws -> Data {
         guard let path = rows("osts").first(where: { Self.int($0["id"]) == ostID })?["cover_image_path"] as? String,
               let data = try? Data(contentsOf: URL(fileURLWithPath: path)) else { throw Self.error("Cover art is not cached on this iPhone.") }
@@ -376,7 +421,9 @@ final class IOSLocalBackend: OSTBackend {
         return Batches(generatedAt: generatedAt, batches: groups.enumerated().map { BatchGroup(index: $0.offset + 1, day: $0.offset + 1, slots: $0.element) })
     }
     func notes() async throws -> [Note] { try decode(rows("notes").sorted { ($0["created_at"] as? String ?? "") > ($1["created_at"] as? String ?? "") }, as: [Note].self) }
-    func searchCatalog(_ query: String) async throws -> [CatalogTrack] { [] }
+    func searchCatalog(_ query: String) async throws -> [CatalogTrack] {
+        await PhoneCatalogSearch.search(query, includeMusicBrainz: true)
+    }
     func addNote(_ new: NewNote) async throws -> Note {
         let row: [String: Any] = ["id": nextID("notes"), "title": new.title.trimmingCharacters(in: .whitespacesAndNewlines), "note": new.note, "source": new.source ?? NSNull() as Any, "artist": new.artist ?? NSNull() as Any, "external_link": new.externalLink ?? NSNull() as Any, "created_at": now()]
         var values = rows("notes"); values.append(row); try saveRows(values, for: "notes")
@@ -625,20 +672,33 @@ final class IOSLocalBackend: OSTBackend {
         guard let row = rows("osts").first(where: { Self.int($0["id"]) == ostID }) else {
             throw Self.error("OST not found.")
         }
+        let key = IOSAudioCache.key(for: row)
+        if await IOSAudioCache.shared.cachedURL(for: key) != nil { return }
         let result = try await resolve(row)
         try rememberPlaybackWatchURL(result.watchURL, for: ostID)
+        Task { await IOSAudioCache.shared.store(result.streamURL, for: key) }
     }
     func play(ostID: Int) async throws -> PlaybackState {
         guard let row = rows("osts").first(where: { Self.int($0["id"]) == ostID }) else {
             throw Self.error("OST not found.")
         }
+        let key = IOSAudioCache.key(for: row)
+        if let cached = await IOSAudioCache.shared.cachedURL(for: key) {
+            playbackState = PlaybackState(status: .playing, ostId: ostID,
+                                          streamUrl: cached.absoluteString,
+                                          watchUrl: row["playback_watch_url"] as? String,
+                                          position: 0)
+            return playbackState
+        }
         let external = row["external_link"] as? String
         if let external, let url = URL(string: external), Self.isDirectAudioURL(url) {
             playbackState = PlaybackState(status: .playing, ostId: ostID, streamUrl: external, watchUrl: external, position: 0)
+            Task { await IOSAudioCache.shared.store(url, for: key) }
             return playbackState
         }
         let resolved = try await resolve(row)
         try rememberPlaybackWatchURL(resolved.watchURL, for: ostID)
+        Task { await IOSAudioCache.shared.store(resolved.streamURL, for: key) }
         playbackState = PlaybackState(
             status: .playing,
             ostId: ostID,
@@ -663,6 +723,15 @@ final class IOSLocalBackend: OSTBackend {
         guard let index = osts.firstIndex(where: { Self.int($0["id"]) == ostID }) else { return }
         osts[index]["playback_watch_url"] = url.absoluteString
         try saveRows(osts, for: "osts")
+    }
+
+    func invalidatePlaybackCache(ostID: Int) async {
+        guard let row = rows("osts").first(where: { Self.int($0["id"]) == ostID }) else { return }
+        await IOSAudioCache.shared.remove(for: IOSAudioCache.key(for: row))
+        if let value = playbackState.watchUrl ?? row["playback_watch_url"] as? String,
+           let url = URL(string: value), IOSYouTubeResolver.isYouTubeURL(url) {
+            IOSYouTubeResolver.invalidateStream(for: url)
+        }
     }
 
     private static func isDirectAudioURL(_ url: URL) -> Bool {

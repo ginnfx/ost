@@ -3,6 +3,9 @@
 // appears here was computed server-side.
 
 import SwiftUI
+#if os(iOS)
+import UIKit
+#endif
 
 struct DetailView: View {
     let store: AppStore
@@ -11,6 +14,10 @@ struct DetailView: View {
 
     @State private var showCoverPicker = false
     @State private var confirmingDelete = false
+    @State private var playInFlight = false
+    #if os(iOS)
+    @State private var keyboardVisible = false
+    #endif
     /// Per-person burst counters: bumping one fires that row's ParticleBurst.
     @State private var celebrations: [Int: Int] = [:]
     /// Last successfully resolved entry. The live lookup can go nil mid-close
@@ -26,10 +33,15 @@ struct DetailView: View {
         store.playback?.ostId == ostID && store.playback?.status == .playing
     }
 
+    private var isThisTrackActive: Bool {
+        store.playback?.ostId == ostID
+            && (store.playback?.status == .playing || store.playback?.status == .paused)
+    }
+
     var body: some View {
         if let entry = entry ?? lastEntry {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: 16) {
                     #if os(macOS)
                     HStack {
                         Button { confirmingDelete = true } label: {
@@ -63,6 +75,21 @@ struct DetailView: View {
             .safeAreaInset(edge: .top, spacing: 0) {
                 detailActions
             }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if (playInFlight || isThisTrackActive) && !keyboardVisible {
+                    detailProgress
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 12)
+                        .background(Theme.bgRaised)
+                        .overlay(alignment: .top) { Theme.separator.frame(height: 1) }
+                }
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidShowNotification)) { _ in
+                setKeyboardVisible(true)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardDidHideNotification)) { _ in
+                setKeyboardVisible(false)
+            }
             #endif
             .sheet(isPresented: $showCoverPicker) {
                 CoverPickerView(store: store, ostID: ostID, accent: accent(entry))
@@ -93,13 +120,17 @@ struct DetailView: View {
     #if os(iOS)
     private var detailActions: some View {
         HStack {
-            Button { confirmingDelete = true } label: {
-                Label("Delete OST", systemImage: "trash")
-                    .font(.ostBody(13, weight: .semibold))
-                    .foregroundStyle(Theme.rust)
-                    .frame(minHeight: 44)
+            Menu {
+                Button("Delete OST", systemImage: "trash", role: .destructive) {
+                    confirmingDelete = true
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(Theme.textDim)
+                    .frame(width: 44, height: 44)
             }
-            .buttonStyle(.plain)
+            .accessibilityLabel("OST actions")
             Spacer()
             Button(action: onClose) {
                 Image(systemName: "xmark")
@@ -120,12 +151,12 @@ struct DetailView: View {
 
     @ViewBuilder private func hero(_ entry: RankEntry) -> some View {
         #if os(iOS)
-        VStack(alignment: .leading, spacing: 14) {
+        HStack(alignment: .top, spacing: 16) {
             heroCover(entry)
                 .aspectRatio(1, contentMode: .fit)
-                .frame(maxWidth: 280)
-                .frame(maxWidth: .infinity)
+                .frame(width: 112, height: 112)
             heroMeta(entry)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
         #else
         HStack(alignment: .top, spacing: 20) {
@@ -156,13 +187,18 @@ struct DetailView: View {
 
     private func heroMeta(_ entry: RankEntry) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                DiamondBadge(rank: entry.rank, size: 44)
-                Text(entry.ost.title)
-                    .font(.ostDisplay(22, weight: .semibold))
+            if let rank = entry.rank {
+                Text("#\(rank)")
+                    .font(.ostMono(11, weight: .bold))
                     .foregroundStyle(Theme.textPrimary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 5)
+                    .background(Theme.cardSurface, in: Capsule())
             }
+            Text(entry.ost.title)
+                .font(.ostDisplay(19, weight: .semibold))
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
             if let source = entry.ost.source {
                 Text(source).font(.ostBody(14)).foregroundStyle(Theme.textDim)
             }
@@ -177,14 +213,25 @@ struct DetailView: View {
     private func playButton(_ entry: RankEntry) -> some View {
         HStack(spacing: 10) {
             Button {
-                SoundKit.shared.play(.playStart)
-                Task { await store.play(ostID: entry.ost.id) }
+                if isThisPlaying {
+                    SoundKit.shared.play(.pause)
+                    Task { await store.pause() }
+                } else {
+                    SoundKit.shared.play(.playStart)
+                    playInFlight = true
+                    Task {
+                        await store.play(ostID: entry.ost.id)
+                        playInFlight = false
+                    }
+                }
             } label: {
-                Label("Play", systemImage: "play.fill")
+                Label(playInFlight ? "Loading…" : (isThisPlaying ? "Pause" : (isThisTrackActive ? "Resume" : "Play")),
+                      systemImage: playInFlight ? "ellipsis" : (isThisPlaying ? "pause.fill" : "play.fill"))
                     .font(.ostDisplay(13, weight: .semibold))
                     .padding(.horizontal, 10).padding(.vertical, 3)
             }
             .buttonStyle(.borderedProminent)
+            .disabled(playInFlight)
 
             if let phase = store.resolutionPhase[entry.ost.id] {
                 Text(phase.rawValue)
@@ -195,38 +242,86 @@ struct DetailView: View {
         }
     }
 
+    #if os(iOS)
+    private var detailProgress: some View {
+        let duration = isThisTrackActive ? store.player.duration : 0
+        let position = isThisTrackActive ? store.player.position : 0
+        let fraction = duration > 0 ? min(max(position / duration, 0), 1) : 0
+        return VStack(spacing: 6) {
+            HStack {
+                Text(playInFlight ? "Finding audio…" : (isThisPlaying ? "Now playing" : "Paused"))
+                Spacer()
+                Text("\(formatTime(position)) / \(formatTime(duration))")
+                    .monospacedDigit()
+                if isThisTrackActive {
+                    Button {
+                        Task {
+                            if isThisPlaying { await store.pause() }
+                            else { await store.play(ostID: ostID) }
+                        }
+                    } label: {
+                        Image(systemName: isThisPlaying ? "pause.fill" : "play.fill")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                            .frame(width: 34, height: 30)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(isThisPlaying ? "Pause" : "Resume")
+                }
+            }
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.textDim.opacity(0.25))
+                    Capsule().fill(Theme.accent)
+                        .frame(width: geometry.size.width * fraction)
+                }
+            }
+            .frame(height: 3)
+            .font(.ostMono(10))
+            .foregroundStyle(Theme.textDim)
+        }
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        guard seconds.isFinite, seconds > 0 else { return "0:00" }
+        let total = Int(seconds)
+        return "\(total / 60):" + String(format: "%02d", total % 60)
+    }
+
+    private func setKeyboardVisible(_ visible: Bool) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { keyboardVisible = visible }
+    }
+    #endif
+
     // Stat tiles share the same glass treatment as the rating boxes below so
     // every raised surface on the detail panel reads as one material.
     private func stats(_ entry: RankEntry) -> some View {
-        #if os(iOS)
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-            stat("AVG", entry.average.map { String(format: "%.2f", $0) } ?? "n/a", accent(entry))
-            stat("MIN", entry.minimum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
-            stat("MAX", entry.maximum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
-            stat("σ", entry.stddev.map { String(format: "%.2f", $0) } ?? "n/a", Theme.textDim)
-            stat("VOTES", "\(entry.ratingCount)", Theme.textDim)
+        HStack(spacing: 4) {
+            compactStat("AVG", entry.average.map { String(format: "%.2f", $0) } ?? "—", Theme.accent)
+            compactStat("MIN", entry.minimum.map(\.scoreLabel) ?? "—", Theme.textPrimary)
+            compactStat("MAX", entry.maximum.map(\.scoreLabel) ?? "—", Theme.textPrimary)
+            compactStat("σ", entry.stddev.map { String(format: "%.2f", $0) } ?? "—", Theme.textPrimary)
+            compactStat("VOTES", "\(entry.ratingCount)", Theme.textPrimary)
         }
-        #else
-        HStack(spacing: 14) {
-            stat("AVG", entry.average.map { String(format: "%.2f", $0) } ?? "n/a", accent(entry))
-            stat("MIN", entry.minimum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
-            stat("MAX", entry.maximum.map(\.scoreLabel) ?? "n/a", Theme.textDim)
-            stat("σ", entry.stddev.map { String(format: "%.2f", $0) } ?? "n/a", Theme.textDim)
-            stat("VOTES", "\(entry.ratingCount)", Theme.textDim)
-        }
-        #endif
+        .padding(.vertical, 12)
+        .overlay(alignment: .top) { Theme.separator.frame(height: 1) }
+        .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
     }
 
-    private func stat(_ label: String, _ value: String, _ color: Color) -> some View {
+    private func compactStat(_ label: String, _ value: String, _ color: Color) -> some View {
         VStack(spacing: 4) {
-            Text(value).font(.ostMono(20, weight: .bold)).foregroundStyle(color)
-            Text(label).font(.ostDisplay(10)).foregroundStyle(Theme.textDim)
+            Text(value)
+                .font(.ostMono(15, weight: .bold))
+                .foregroundStyle(color)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+            Text(label)
+                .font(.ostMono(9))
+                .foregroundStyle(Theme.textDim)
         }
-        .frame(minWidth: 72)
-        .padding(.vertical, 10)
-        // Faint dark tint guarantees tile boundaries stay visible even where the
-        // panel's glass stack bottoms out on the near-black backdrop.
-        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 6))
+        .frame(maxWidth: .infinity)
     }
 
     private func ratingGrid(_ entry: RankEntry) -> some View {
@@ -294,9 +389,9 @@ struct RatingRow: View {
                 // Always bright: accent when a score is set, primary otherwise —
                 // never dependent on a tinted background rendering underneath.
                 .foregroundStyle(score == nil || isFocused ? Theme.textPrimary : accent)
-                .frame(width: 76, height: 44)
-                .background(ChamferedRect(cut: 8).fill(Color.white.opacity(isFocused ? 0.10 : 0.05)))
-                .overlay(ChamferedRect(cut: 8).strokeBorder(
+                .frame(width: 70, height: 38)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(isFocused ? 0.10 : 0.05)))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(
                     isFocused ? accent : (score == nil ? Color.white.opacity(0.14) : accent.opacity(0.55)),
                     lineWidth: 1))
                 .focused($isFocused)

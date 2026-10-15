@@ -16,7 +16,7 @@ import AVFoundation
 /// puts a main-thread assertion inside consume()/prepared() — which the tap
 /// invokes from the realtime audio thread → instant SIGTRAP on first buffer.
 nonisolated final class SpectrumEngine: @unchecked Sendable {
-    static let bandCount = 24
+    static let bandCount = 48
 
     private let lock = NSLock()
     private var bands = [Float](repeating: 0, count: SpectrumEngine.bandCount)
@@ -24,7 +24,7 @@ nonisolated final class SpectrumEngine: @unchecked Sendable {
 
     // MARK: FFT scratch (touched only from the single tap process thread)
 
-    private let fftSize = 1024
+    private let fftSize = 2048
     private let log2n: vDSP_Length
     // Reused across tap callbacks: consume() runs on the realtime audio thread,
     // so nothing in it may allocate.
@@ -144,9 +144,10 @@ nonisolated final class SpectrumEngine: @unchecked Sendable {
     func snapshot(at now: CFAbsoluteTime = CFAbsoluteTimeGetCurrent()) -> [Float] {
         lock.lock()
         let copy = bands
-        let age = now - lastUpdate
+        let update = lastUpdate
         lock.unlock()
-        guard lastUpdate > 0 else { return [Float](repeating: 0, count: Self.bandCount) }
+        guard update > 0 else { return [Float](repeating: 0, count: Self.bandCount) }
+        let age = now - update
         let decay = Float(exp(-4 * max(0, age - 0.12)))
         guard decay < 0.999 else { return copy }
         var scaled = copy

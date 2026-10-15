@@ -13,12 +13,33 @@ from __future__ import annotations
 import sqlite3
 import threading
 from contextlib import contextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Iterable, Iterator, Optional, Sequence
 
 from ost_tracker.config import database_path
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
+
+
+def _convert_timestamp(value: bytes) -> datetime | str:
+    """Read both SQLite's naive timestamps and UTC ISO values from sync.
+
+    Python's built-in sqlite TIMESTAMP converter rejects a trailing ``Z``.
+    Cloud snapshots use ISO-8601 UTC strings, so a single synced OST timestamp
+    could otherwise make every roster query fail on Mac startup.
+    """
+    raw = value.decode("utf-8")
+    normalized = raw[:-1] + "+00:00" if raw.endswith(("Z", "z")) else raw
+    try:
+        return datetime.fromisoformat(normalized)
+    except ValueError:
+        # Keep malformed legacy values readable so the API can still return
+        # the rest of the user's library.
+        return raw
+
+
+sqlite3.register_converter("TIMESTAMP", _convert_timestamp)
 
 
 class Database:

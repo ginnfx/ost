@@ -11,7 +11,7 @@ struct SettingsView: View {
     @AppStorage(Theme.customAccentKey) private var customAccentHex = ""
     @AppStorage(Theme.fxDefaultsKey) private var fxEnabled = true
     @AppStorage(Theme.fxIntensityKey) private var fxIntensity = 1.0
-    @AppStorage(Theme.visualizerKey) private var visualizerEnabled = true
+    @AppStorage(Theme.visualizerKey) private var visualizerEnabled = false
     @AppStorage(Theme.motionKey) private var motionMode = MotionMode.subtle.rawValue
     @AppStorage(SoundKit.mutedDefaultsKey) private var uiSoundsMuted = false
     @AppStorage(AttractModeController.enabledKey) private var attractEnabled = true
@@ -349,7 +349,10 @@ struct SettingsView: View {
 
     private var effects: some View {
         settingsGroup("Visual effects") {
-            Toggle("Show player visualizer", isOn: $visualizerEnabled)
+            Toggle("Audio visualizer", isOn: $visualizerEnabled)
+            Text("Show the spectrum beneath artwork when lyrics aren't available.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Toggle("Music-reactive effects", isOn: $fxEnabled)
             Picker("Spectrum intensity", selection: $fxIntensity) {
                 Text("Subtle").tag(0.5)

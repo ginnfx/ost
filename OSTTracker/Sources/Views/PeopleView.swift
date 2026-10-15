@@ -2,76 +2,138 @@
 
 import SwiftUI
 
+private extension ToolbarItemPlacement {
+    static var ostLeading: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarLeading
+        #else
+        .automatic
+        #endif
+    }
+
+    static var ostTrailing: ToolbarItemPlacement {
+        #if os(iOS)
+        .topBarTrailing
+        #else
+        .automatic
+        #endif
+    }
+}
+
+private struct CatalogArtwork: View {
+    let url: String?
+    var size: CGFloat = 46
+
+    var body: some View {
+        Group {
+            if let url, let imageURL = URL(string: url) {
+                AsyncImage(url: imageURL) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        placeholder
+                    }
+                }
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityHidden(true)
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            Theme.bg
+            Image(systemName: "music.note")
+                .font(.system(size: 16, weight: .medium))
+                .foregroundStyle(Theme.accent)
+        }
+    }
+}
+
 struct PeopleView: View {
     let store: AppStore
     @State private var newName = ""
-    @State private var pendingDelete: Person?
+    @State private var showingAdd = false
+    @State private var selectedPerson: Person?
 
     var body: some View {
         ScrollView {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("People")
-                .font(.ostDisplay(22, weight: .semibold))
-                .foregroundStyle(Theme.textPrimary)
-            HStack {
-                TextField("Add person…", text: $newName)
-                    .textFieldStyle(.plain)
-                    .font(.ostBody(14))
-                    .padding(10)
-                    .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
-                    .frame(maxWidth: 260)
-                    .onSubmit(submit)
-                Button("Add", action: submit)
-                    .buttonStyle(.borderedProminent)
-                    .font(.ostDisplay(12, weight: .semibold))
-            }
-            VStack(spacing: 0) {
-                    if store.people.isEmpty && store.phase == .launching {
-                        LoadingSkeleton(rows: 3, style: .list)
-                    } else if store.people.isEmpty {
-                        Text("No people yet")
-                            .font(.ostBody(13))
+            VStack(alignment: .leading, spacing: 18) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("People")
+                            .font(.ostDisplay(22, weight: .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                        Text("\(store.people.count) in this ranking")
+                            .font(.ostBody(12))
                             .foregroundStyle(Theme.textDim)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
                     }
-                    ForEach(store.people) { person in
-                        HStack(spacing: 10) {
-                            Text(person.name).font(.ostBody(14)).foregroundStyle(Theme.textPrimary)
-                            Spacer()
-                            let count = store.leaderboard.filter { $0.ost.submitterId == person.id }.count
-                            Text("\(count) submitted")
-                                .font(.ostBody(12))
-                                .foregroundStyle(count == 5 ? Theme.accent : Theme.textDim)
-                            Button { pendingDelete = person } label: {
-                                Image(systemName: "trash").font(.system(size: 12)).foregroundStyle(Theme.rust)
+                    Spacer()
+                    Button { withAnimation { showingAdd.toggle() } } label: {
+                        Label("Add", systemImage: "plus")
+                    }
+                    .buttonStyle(.bordered)
+                }
+                if showingAdd {
+                    HStack {
+                        TextField("Name", text: $newName)
+                            .textFieldStyle(.plain)
+                            .font(.ostBody(14))
+                            .padding(12)
+                            .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 8))
+                            .onSubmit(submit)
+                        Button("Add person", action: submit)
+                            .buttonStyle(.borderedProminent)
+                            .disabled(newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                    }
+                }
+                if store.people.isEmpty && store.phase == .launching {
+                    LoadingSkeleton(rows: 3, style: .list)
+                } else if store.people.isEmpty {
+                    ContentUnavailableView("No people yet", systemImage: "person.2",
+                                           description: Text("Add a person to collect their OSTs and ratings."))
+                } else {
+                    LazyVStack(spacing: 0) {
+                        ForEach(store.people) { person in
+                            Button { selectedPerson = person } label: {
+                                HStack(spacing: 12) {
+                                    Circle().fill(Theme.personAccent(person.id))
+                                        .frame(width: 10, height: 10)
+                                    Text(person.name)
+                                        .font(.ostBody(15, weight: .semibold))
+                                        .foregroundStyle(Theme.textPrimary)
+                                    Spacer()
+                                    let count = store.leaderboard.filter { $0.ost.submitterId == person.id }.count
+                                    Text("\(count) OSTs")
+                                        .font(.ostBody(12))
+                                        .foregroundStyle(Theme.textDim)
+                                    Image(systemName: "chevron.right")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(Theme.textDim)
+                                }
+                                .padding(16)
+                                .contentShape(Rectangle())
                             }
                             .buttonStyle(.plain)
-                            .help("Delete \(person.name)")
-                            .accessibilityLabel("Delete \(person.name)")
+                            if person.id != store.people.last?.id { Theme.separator.frame(height: 1) }
                         }
-                        .padding(12)
-                        .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
                     }
+                    .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 10))
+                }
             }
-            .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
-        }
-        .padding(16)
-        .frame(maxWidth: 560, alignment: .leading)
-        .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .frame(maxWidth: 560, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollDismissesKeyboard(.interactively)
-        .confirmationDialog(
-            pendingDelete.map { "Delete \($0.name)?" } ?? "",
-            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-            presenting: pendingDelete
-        ) { person in
-            Button("Delete \(person.name)", role: .destructive) {
-                Task { await store.deletePerson(id: person.id) }
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: { person in
-            Text("Submitted OSTs stay but become unassigned. This person's ratings are deleted. This can't be undone.")
+        .sheet(item: $selectedPerson) { person in
+            PersonProfileView(store: store, person: person)
+                #if os(iOS)
+                .presentationDetents([.large])
+                #endif
         }
     }
 
@@ -79,7 +141,116 @@ struct PeopleView: View {
         let name = newName.trimmingCharacters(in: .whitespaces)
         guard !name.isEmpty else { return }
         newName = ""
+        showingAdd = false
         Task { await store.addPerson(name: name) }
+    }
+}
+
+private struct PersonProfileView: View {
+    let store: AppStore
+    let person: Person
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDelete = false
+
+    private var submissions: [RankEntry] {
+        store.leaderboard.filter { $0.ost.submitterId == person.id }
+    }
+    private var givenScores: [Double] {
+        store.scores.values.compactMap { $0[person.id] }
+    }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack(spacing: 14) {
+                        Circle().fill(Theme.personAccent(person.id))
+                            .frame(width: 44, height: 44)
+                            .overlay(Text(String(person.name.prefix(1)).uppercased())
+                                .font(.ostDisplay(19, weight: .bold)).foregroundStyle(Theme.bg))
+                        Text(person.name)
+                            .font(.ostDisplay(24, weight: .semibold))
+                            .foregroundStyle(Theme.textPrimary)
+                    }
+                    HStack(spacing: 12) {
+                        profileStat("OSTs", "\(submissions.count)")
+                        profileStat("Ratings", "\(givenScores.count)")
+                        let average = givenScores.isEmpty ? "—" : String(format: "%.1f", givenScores.reduce(0, +) / Double(givenScores.count))
+                        profileStat("Avg given", average)
+                    }
+                    Text("Submitted OSTs")
+                        .font(.ostDisplay(16, weight: .semibold))
+                        .foregroundStyle(Theme.textPrimary)
+                    if submissions.isEmpty {
+                        Text("No OSTs submitted yet.")
+                            .font(.ostBody(13))
+                            .foregroundStyle(Theme.textDim)
+                    } else {
+                        LazyVStack(spacing: 0) {
+                            ForEach(submissions) { entry in
+                                HStack(spacing: 12) {
+                                    CoverImage(path: entry.ost.coverImagePath,
+                                               epoch: store.coverEpoch(for: entry.ost.id))
+                                        .scaledToFill()
+                                        .frame(width: 46, height: 46)
+                                        .clipShape(RoundedRectangle(cornerRadius: 6))
+                                    VStack(alignment: .leading, spacing: 3) {
+                                        Text(entry.ost.title)
+                                            .font(.ostBody(14, weight: .semibold))
+                                            .foregroundStyle(Theme.textPrimary)
+                                        Text(entry.ost.source ?? "")
+                                            .font(.ostBody(11))
+                                            .foregroundStyle(Theme.textDim)
+                                    }
+                                    Spacer()
+                                    Text(entry.average.map { String(format: "%.2f", $0) } ?? "—")
+                                        .font(.ostMono(13, weight: .bold))
+                                        .foregroundStyle(Theme.accent)
+                                }
+                                .padding(12)
+                                if entry.id != submissions.last?.id { Theme.separator.frame(height: 1) }
+                            }
+                        }
+                        .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 10))
+                    }
+                }
+                .padding(20)
+            }
+            .navigationTitle("Profile")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .ostLeading) {
+                    Menu {
+                        Button("Delete person", systemImage: "trash", role: .destructive) {
+                            confirmingDelete = true
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis")
+                    }
+                    .accessibilityLabel("More actions for \(person.name)")
+                }
+                ToolbarItem(placement: .ostTrailing) { Button("Done") { dismiss() } }
+            }
+            .confirmationDialog("Delete \(person.name)?", isPresented: $confirmingDelete) {
+                Button("Delete person", role: .destructive) {
+                    Task { await store.deletePerson(id: person.id); dismiss() }
+                }
+            } message: {
+                Text("Their OSTs stay, but their ratings are removed.")
+            }
+        }
+    }
+
+    private func profileStat(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(value).font(.ostMono(17, weight: .bold)).foregroundStyle(Theme.textPrimary)
+            Text(title).font(.ostBody(10)).foregroundStyle(Theme.textDim)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -92,8 +263,11 @@ struct NotesView: View {
     @State private var externalLink = ""
     @State private var catalogQuery = ""
     @State private var catalogResults: [CatalogTrack] = []
+    @State private var suggestions: [CatalogTrack] = []
     @State private var searchMessage = ""
     @State private var isSearching = false
+    @State private var showSearchResults = false
+    @State private var showComposer = false
     @State private var isSaving = false
     @State private var editingID: Int?
     @State private var pendingDelete: Note?
@@ -101,10 +275,23 @@ struct NotesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+            VStack(alignment: .leading, spacing: 20) {
                 header
                 searchPanel
-                composer
+                Button {
+                    withAnimation { showComposer.toggle() }
+                } label: {
+                    HStack {
+                        Label("Add an idea manually", systemImage: "square.and.pencil")
+                        Spacer()
+                        Image(systemName: showComposer ? "chevron.up" : "chevron.down")
+                    }
+                    .font(.ostBody(14, weight: .semibold))
+                    .padding(16)
+                    .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 10))
+                }
+                .buttonStyle(.plain)
+                if showComposer { composer }
                 HStack {
                     Text("Saved notes")
                         .font(.ostDisplay(15, weight: .semibold))
@@ -123,14 +310,24 @@ struct NotesView: View {
             .frame(maxWidth: .infinity)
         }
         .scrollDismissesKeyboard(.interactively)
+        .task(id: catalogQuery) {
+            let query = catalogQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard query.count >= 2 else { suggestions = []; return }
+            try? await Task.sleep(for: .milliseconds(350))
+            guard !Task.isCancelled else { return }
+            let found = await store.suggestCatalog(query)
+            guard !Task.isCancelled,
+                  catalogQuery.trimmingCharacters(in: .whitespacesAndNewlines) == query else { return }
+            suggestions = Array(found.prefix(4))
+        }
+        .sheet(isPresented: $showSearchResults) { catalogResultsSheet }
         .sheet(item: $promoteNote) { note in
             AddOstView(store: store, initialTitle: note.title,
                        initialSource: note.source ?? "", initialLink: note.externalLink ?? "")
         }
-        .confirmationDialog(
+        .alert(
             "Delete this note?",
-            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
-            titleVisibility: .visible
+            isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } })
         ) {
             Button("Delete", role: .destructive) {
                 if let id = pendingDelete?.id { Task { await store.deleteNote(id: id) } }
@@ -158,6 +355,9 @@ struct NotesView: View {
             Text("Search music catalog")
                 .font(.ostDisplay(15, weight: .semibold))
                 .foregroundStyle(Theme.textPrimary)
+            Text("Find a track, then save it as an idea.")
+                .font(.ostBody(12))
+                .foregroundStyle(Theme.textDim)
             HStack(spacing: 10) {
                 TextField("Search a track, game, anime, or artist…", text: $catalogQuery)
                     .textFieldStyle(.plain)
@@ -172,68 +372,89 @@ struct NotesView: View {
             }
             .padding(10)
             .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
-
-            if !searchMessage.isEmpty {
-                Text(searchMessage)
-                    .font(.ostBody(12))
-                    .foregroundStyle(Theme.textDim)
-            }
-            if !catalogResults.isEmpty {
+            if !suggestions.isEmpty {
                 VStack(spacing: 0) {
-                    ForEach(catalogResults) { track in
-                        Button { select(track) } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: "music.note")
-                                    .foregroundStyle(Theme.textDim)
-                                    .frame(width: 30, height: 30)
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(track.title)
-                                        .font(.ostDisplay(12, weight: .semibold))
-                                        .foregroundStyle(Theme.textPrimary)
-                                        .lineLimit(1)
-                                    Text([track.artist, track.collection].filter { !$0.isEmpty }.joined(separator: " · "))
-                                        .font(.ostBody(11))
-                                        .foregroundStyle(Theme.textDim)
-                                        .lineLimit(1)
-                                }
-                                Spacer()
-                                Text(track.provider)
-                                    .font(.ostBody(10))
-                                    .foregroundStyle(Theme.textDim)
-                                Image(systemName: "arrow.down.left")
-                                    .foregroundStyle(Theme.textDim)
-                            }
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 7)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        if track.id != catalogResults.last?.id { Divider().opacity(0.3) }
+                    ForEach(suggestions) { track in
+                        Button { select(track) } label: { catalogRow(track) }
+                            .buttonStyle(.plain)
+                        if track.id != suggestions.last?.id { Divider().opacity(0.3) }
                     }
                 }
                 .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 7))
             }
-            Text("Apple Music, Deezer, and MusicBrainz")
-                .font(.ostMono(10))
-                .foregroundStyle(Theme.textDim)
         }
-        .padding(.bottom, 16)
-        .overlay(alignment: .bottom) { Theme.separator.frame(height: 1) }
+        .padding(16)
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    private func catalogRow(_ track: CatalogTrack) -> some View {
+        HStack(spacing: 10) {
+            CatalogArtwork(url: track.artworkURL, size: 44)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(track.title)
+                    .font(.ostBody(13, weight: .semibold))
+                    .foregroundStyle(Theme.textPrimary)
+                    .lineLimit(1)
+                Text([track.artist, track.collection].filter { !$0.isEmpty }.joined(separator: " · "))
+                    .font(.ostBody(11))
+                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+            Text(track.provider)
+                .font(.ostMono(9))
+                .foregroundStyle(Theme.textDim)
+                .lineLimit(1)
+        }
+        .padding(12)
+        .contentShape(Rectangle())
+    }
+
+    private var catalogResultsSheet: some View {
+        NavigationStack {
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    if isSearching {
+                        ProgressView("Searching catalogs…")
+                            .frame(maxWidth: .infinity, minHeight: 160)
+                    } else if catalogResults.isEmpty {
+                        ContentUnavailableView("No matches", systemImage: "magnifyingglass",
+                                               description: Text(searchMessage.isEmpty ? "Try a different title or add the idea manually." : searchMessage))
+                    } else {
+                        ForEach(catalogResults) { track in
+                            Button {
+                                select(track)
+                                showSearchResults = false
+                            } label: { catalogRow(track) }
+                                .buttonStyle(.plain)
+                                .background(Theme.bgRaised, in: RoundedRectangle(cornerRadius: 9))
+                        }
+                    }
+                }
+                .padding(16)
+            }
+            .navigationTitle("Search results")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .ostTrailing) {
+                    Button("Done") { showSearchResults = false }
+                }
+            }
+        }
+        #if os(iOS)
+        .presentationDetents([.large])
+        #endif
     }
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("Add an idea")
-                    .font(.ostDisplay(15, weight: .semibold))
-                    .foregroundStyle(Theme.textPrimary)
-                Spacer()
-                if !artist.isEmpty {
-                    Text("Artist: \(artist)")
-                        .font(.ostBody(12))
-                        .foregroundStyle(Theme.textDim)
-                        .lineLimit(1)
-                }
+            if !artist.isEmpty {
+                Text("Artist: \(artist)")
+                    .font(.ostBody(12))
+                    .foregroundStyle(Theme.textDim)
+                    .lineLimit(1)
             }
             TextField("OST title", text: $title)
                 .textFieldStyle(.plain).font(.ostBody(15, weight: .semibold))
@@ -263,6 +484,8 @@ struct NotesView: View {
             }
             #endif
         }
+        .padding(16)
+        .background(Theme.cardSurface, in: RoundedRectangle(cornerRadius: 10))
     }
 
     private var saveButton: some View {
@@ -311,6 +534,7 @@ struct NotesView: View {
     private func searchCatalog() {
         let query = catalogQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         guard query.count >= 3 else { return }
+        showSearchResults = true
         isSearching = true
         searchMessage = ""
         catalogResults = []
@@ -335,7 +559,9 @@ struct NotesView: View {
         artist = track.artist
         externalLink = track.storeUrl ?? ""
         catalogResults = []
+        suggestions = []
         searchMessage = ""
+        showComposer = true
     }
 
     private func saveNote() {

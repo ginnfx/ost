@@ -7,13 +7,12 @@
 #     Swift is compiled; there is no native hot-reload, so a recompile (a few
 #     seconds, automatic) is unavoidable — this just removes every manual step.
 #
-# The app is always quit BEFORE building so the auto-install phase can replace
-# /Applications/OSTTracker.app (it refuses to overwrite a running copy).
+# Run the Debug build directly; /Applications is reserved for packaged builds.
 # Ctrl-C to stop.
 set -euo pipefail
 
 REPO="$(cd "$(dirname "$0")" && pwd)"
-APP="/Applications/OSTTracker.app"
+APP="$REPO/OSTTracker/build/Build/Products/Debug/OSTTracker.app"
 STAMP="$(mktemp)"
 
 quit_app() { osascript -e 'tell application "OSTTracker" to quit' >/dev/null 2>&1 || true; sleep 0.4; }
@@ -21,8 +20,7 @@ launch()   { open "$APP"; }
 
 build() {
     ( cd "$REPO/OSTTracker" && xcodebuild -project OSTTracker.xcodeproj -scheme OSTTracker \
-        -configuration Debug -derivedDataPath build build -quiet ) 2>&1 \
-        | grep -E "installed|error:|BUILD (SUCCEEDED|FAILED)" || true
+        -configuration Debug -derivedDataPath build build -quiet )
 }
 
 cycle_swift() { quit_app; build; launch; }

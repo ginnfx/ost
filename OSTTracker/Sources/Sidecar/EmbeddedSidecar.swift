@@ -3,7 +3,7 @@
 // backend/api.py (uvicorn) on a Python thread inside the app. The wire
 // contract is unchanged; only the readiness signal differs — instead of the
 // stdout OSTTRACKER_READY line, the bootstrap writes the same line to a
-// handshake file in the app container, which we poll. See shared/CONTRACT.md.
+// handshake file in the app container, which we poll.
 
 #if os(iOS)
 

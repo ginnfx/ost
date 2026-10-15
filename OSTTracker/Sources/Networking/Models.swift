@@ -1,4 +1,4 @@
-// Codable mirror of /shared/CONTRACT.md. Wire keys are snake_case; every
+// Codable models for the Python sidecar. Wire keys are snake_case; every
 // decoder/encoder in BackendClient uses .convertFromSnakeCase /
 // .convertToSnakeCase, so property names here are the camelCase twins.
 // No computed business values live here — averages, ranks and the
@@ -52,6 +52,7 @@ nonisolated struct CatalogTrack: Codable, Sendable, Identifiable, Hashable {
     let artist: String
     let collection: String
     let storeUrl: String?
+    let artworkURL: String?
     let provider: String
 }
 

@@ -1,8 +1,6 @@
 #!/usr/bin/env bash
-# Auto-install the freshly-built app into /Applications so the app you launch
-# from Spotlight/Launchpad/Dock is ALWAYS the one you just built. Without this,
-# the build product lives in DerivedData while a stale copy lingers in
-# /Applications — the "my changes vanished / the tab is gone" trap.
+# Auto-install a validated Release build into /Applications. Debug builds run
+# from Xcode's build folder because they depend on this checkout's Python venv.
 #
 # Runs as a post-build phase after the runtime embed (see project.yml), so the
 # installed app is self-contained (embedded Python runtime + current backend).
@@ -12,6 +10,13 @@ set -euo pipefail
 
 if [[ "${OST_SKIP_INSTALL:-0}" == "1" ]]; then
     echo "OST_SKIP_INSTALL=1 — leaving /Applications untouched"
+    exit 0
+fi
+
+# Debug runs against this checkout's .venv and source files. Keep that build
+# out of /Applications, where it would look like a self-contained release.
+if [[ "${CONFIGURATION:-}" != "Release" ]]; then
+    echo "Debug build: leaving /Applications untouched"
     exit 0
 fi
 

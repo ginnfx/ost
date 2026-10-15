@@ -105,9 +105,9 @@ def _has_duplicate(existing_index: dict, title: str, source) -> bool:
 
 
 def seed_history_from_batches() -> int:
-    """Insert every past-ranking OST recorded in ``list.md`` (batches 1-4,
-    see ``scripts/generate_history_seed.py``) into ``ost_history`` in one
-    bulk insert. Skips any (title, source) already present as a safety net;
+    """Insert every past-ranking OST in the checked-in seed data into
+    ``ost_history`` in one bulk insert. Skips any (title, source) already
+    present as a safety net;
     the ``run_pending`` guard flag normally makes this run exactly once.
     Returns how many rows were added."""
     existing = history_repo.list_history()
