@@ -21,9 +21,19 @@ $RuntimeDir = Join-Path $Root "runtime"                 # staging (gitignored)
 $Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME -replace '^v', '' } else { "0.2.0" }
 
 # 1) Publish the self-contained WinUI 3 app (Windows App SDK bundled).
-dotnet publish $Proj -c Release -r win-$Arch --self-contained true `
-    -p:PublishReadyToRun=false -o $Out
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for win-$Arch (exit $LASTEXITCODE)" }
+# Use Visual Studio's MSBuild so the WinUI packaging tasks resolve from the
+# installed Windows SDK/VS toolchain rather than the standalone dotnet SDK.
+$VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+if (-not (Test-Path $VsWhere)) { throw "vswhere.exe not found; Visual Studio Build Tools are required." }
+$VsInstall = & $VsWhere -latest -products '*' -requires Microsoft.Component.MSBuild -property installationPath
+if ($LASTEXITCODE -ne 0 -or -not $VsInstall) { throw "Visual Studio MSBuild was not found." }
+$MSBuild = Join-Path $VsInstall "MSBuild\Current\Bin\MSBuild.exe"
+if (-not (Test-Path $MSBuild)) { throw "MSBuild.exe not found at $MSBuild" }
+& $MSBuild $Proj /restore /target:Publish `
+    "/property:Configuration=Release" "/property:RuntimeIdentifier=win-$Arch" `
+    "/property:SelfContained=true" "/property:PublishReadyToRun=false" `
+    "/property:PublishDir=$Out\"
+if ($LASTEXITCODE -ne 0) { throw "MSBuild publish failed for win-$Arch (exit $LASTEXITCODE)" }
 if (-not (Test-Path (Join-Path $Out "OSTTracker.exe"))) {
     throw "dotnet publish did not produce OSTTracker.exe in $Out"
 }
