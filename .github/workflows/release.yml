@@ -126,7 +126,10 @@ jobs:
       - name: Checksums
         run: |
           cd _artifacts
-          sha256sum * > SHA256SUMS
+          # artifacts may carry nested directories; flatten and checksum files
+          find . -mindepth 2 -type f -exec mv -n {} . \;
+          find . -mindepth 1 -type d -empty -delete
+          find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\n' | sort | xargs sha256sum > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           draft: true
