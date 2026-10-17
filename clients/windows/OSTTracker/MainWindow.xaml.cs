@@ -7,13 +7,13 @@ namespace OstTracker;
 public sealed partial class MainWindow : Window
 {
     public static MainWindow? Instance { get; private set; }
-    public static Frame? ContentFrame { get; private set; }
+    public static Frame? NavigationFrame { get; private set; }
 
     public MainWindow()
     {
         Instance = this;
         InitializeComponent();
-        ContentFrame = this.FindName("ContentFrame") as Frame;
+        NavigationFrame = ContentFrame;
 
         // Bottom now-playing bar in the second grid row.
         var bar = new Views.NowPlayingBar();
@@ -25,7 +25,7 @@ public sealed partial class MainWindow : Window
         Grid.SetRow(attract, 0);
         Grid.SetRowSpan(attract, 2);
         ((Grid)Content).Children.Add(attract);
-        attract.Start(ContentFrame);
+        attract.Start(NavigationFrame);
 
         Closed += OnClosed;
     }
@@ -41,18 +41,18 @@ public sealed partial class MainWindow : Window
         {
             switch (tag)
             {
-                case "roster": ContentFrame.Navigate(typeof(Views.RosterPage)); break;
-                case "people": ContentFrame.Navigate(typeof(Views.PeoplePage)); break;
-                case "entry": ContentFrame.Navigate(typeof(Views.EntryPage)); break;
-                case "addost": ContentFrame.Navigate(typeof(Views.AddOstPage)); break;
-                case "stats": ContentFrame.Navigate(typeof(Views.StatsPage)); break;
-                case "batches": ContentFrame.Navigate(typeof(Views.BatchesPage)); break;
-                case "slices": ContentFrame.Navigate(typeof(Views.SlicesPage)); break;
-                case "reveal": ContentFrame.Navigate(typeof(Views.RevealPage)); break;
-                case "history": ContentFrame.Navigate(typeof(Views.HistoryPage)); break;
-                case "cover": ContentFrame.Navigate(typeof(Views.CoverPickerPage)); break;
-                case "notes": ContentFrame.Navigate(typeof(Views.NotesPage)); break;
-                case "settings": ContentFrame.Navigate(typeof(Views.SettingsPage)); break;
+                case "roster": NavigationFrame!.Navigate(typeof(Views.RosterPage)); break;
+                case "people": NavigationFrame!.Navigate(typeof(Views.PeoplePage)); break;
+                case "entry": NavigationFrame!.Navigate(typeof(Views.EntryPage)); break;
+                case "addost": NavigationFrame!.Navigate(typeof(Views.AddOstPage)); break;
+                case "stats": NavigationFrame!.Navigate(typeof(Views.StatsPage)); break;
+                case "batches": NavigationFrame!.Navigate(typeof(Views.BatchesPage)); break;
+                case "slices": NavigationFrame!.Navigate(typeof(Views.SlicesPage)); break;
+                case "reveal": NavigationFrame!.Navigate(typeof(Views.RevealPage)); break;
+                case "history": NavigationFrame!.Navigate(typeof(Views.HistoryPage)); break;
+                case "cover": NavigationFrame!.Navigate(typeof(Views.CoverPickerPage)); break;
+                case "notes": NavigationFrame!.Navigate(typeof(Views.NotesPage)); break;
+                case "settings": NavigationFrame!.Navigate(typeof(Views.SettingsPage)); break;
             }
         }
     }

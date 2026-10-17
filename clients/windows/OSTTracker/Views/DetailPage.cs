@@ -208,7 +208,7 @@ public sealed class DetailPage : Page
 
     private void Back()
     {
-        if (MainWindow.ContentFrame is Frame frame && frame.CanGoBack) frame.GoBack();
+        if (MainWindow.NavigationFrame is Frame frame && frame.CanGoBack) frame.GoBack();
         else MainWindow.Instance?.Close();
     }
 }
