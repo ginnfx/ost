@@ -296,7 +296,9 @@ def test_statistics_edge_cases():
     assert statistics.population_stddev([]) is None
     assert statistics.population_stddev([5]) == 0.0
     assert statistics.mean([2, 4, 6]) == 4
-    assert statistics.spread_label(None, None) == "—"
+    # The domain layer returns "" for missing data; clients render the "—"
+    # placeholder themselves (see RosterPage/pages.py score labels).
+    assert statistics.spread_label(None, None) == ""
     assert statistics.spread_label(3, 10) == "3–10"
 
 

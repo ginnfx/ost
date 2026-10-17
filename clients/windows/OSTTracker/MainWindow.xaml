@@ -20,6 +20,7 @@
                 <NavigationViewItem Content="Roster" Tag="roster" Icon="List"/>
                 <NavigationViewItem Content="People" Tag="people" Icon="Contact"/>
                 <NavigationViewItem Content="Entry" Tag="entry" Icon="Edit"/>
+                <NavigationViewItem Content="Add OST" Tag="addost" Icon="Add"/>
                 <NavigationViewItem Content="Stats" Tag="stats" Icon="ViewAll"/>
                 <NavigationViewItem Content="Batches" Tag="batches" Icon="Calendar"/>
                 <NavigationViewItem Content="Slices" Tag="slices" Icon="Cut"/>

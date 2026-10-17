@@ -9,20 +9,43 @@ using OstTracker.Themes;
 namespace OstTracker.Views;
 
 /// <summary>Detail view for one OST: big cover, info, per-rater scores,
-/// playback controls, edit/delete — mirrors the macOS DetailView.</summary>
+/// playback controls, synced-lyrics takeover, delete — mirrors the macOS
+/// DetailView + player takeover. Lyrics are a client-side LRCLIB lookup;
+/// highlight follows the local MediaPlayer position, tap a line to seek.</summary>
 public sealed class DetailPage : Page
 {
+    /// <summary>ListView row: Time for seek-on-tap, Text for display.</summary>
+    private sealed record LyricRow(double Time, string Text)
+    {
+        public override string ToString() => Text;
+    }
+
     private readonly int _ostId;
     private readonly Image _cover = new() { Width = 220, Height = 220, Stretch = Stretch.UniformToFill };
     private readonly TextBlock _title = new() { FontSize = 24, FontWeight = Microsoft.UI.Text.FontWeights.Bold, TextWrapping = TextWrapping.Wrap };
     private readonly TextBlock _info = new() { Foreground = Ui.DimBrush, TextWrapping = TextWrapping.Wrap };
     private readonly ListView _scores = Ui.StringList("No ratings yet.");
     private readonly TextBlock _status = new();
+    private readonly Button _lyricsToggle = Ui.Button("Lyrics");
+
+    private readonly ListView _lyricsList = new()
+    {
+        SelectionMode = ListViewSelectionMode.None,
+        IsItemClickEnabled = true,
+    };
+    private readonly TextBlock _lyricsStatus = new() { Foreground = Ui.DimBrush };
+    private readonly Grid _lyricsPanel = new() { Visibility = Visibility.Collapsed };
+
+    private IReadOnlyList<LyricLine>? _synced;
+    private int _lyricsIndex = -1;
+    private bool _lyricsLoaded;
+    private readonly DispatcherTimer _lyricsTimer = new() { Interval = TimeSpan.FromMilliseconds(200) };
 
     public DetailPage()
     {
         _ostId = (int)(FrameParameter ?? 0);
         Loaded += OnLoaded;
+        Unloaded += (_, _) => _lyricsTimer.Stop();
         var play = Ui.Button("Play");
         play.Click += async (_, _) => await PlayAsync();
         var stop = Ui.Button("Stop");
@@ -35,12 +58,17 @@ public sealed class DetailPage : Page
         link.Click += async (_, _) => await OpenLinkAsync();
         var delete = Ui.Button("Delete");
         delete.Click += async (_, _) => { await AppServices.Client!.DeleteOst(_ostId); Back(); };
+        _lyricsToggle.Click += (_, _) => _ = ToggleLyricsAsync();
+
+        _lyricsPanel.Children.Add(_lyricsList);
+        _lyricsList.ItemClick += OnLyricClicked;
+        _lyricsTimer.Tick += (_, _) => OnLyricsTick();
 
         Content = Ui.Stack("", Ui.HStack(_cover, new StackPanel
         {
             Spacing = 6,
-            Children = { _title, _info, Ui.HStack(play, stop, link, delete) },
-        }), _scores, _status);
+            Children = { _title, _info, Ui.HStack(play, stop, _lyricsToggle, link, delete) },
+        }), _scores, _lyricsStatus, _status);
     }
 
     private static object? FrameParameter;
@@ -77,6 +105,80 @@ public sealed class DetailPage : Page
         {
             _status.Text = ex.Message;
         }
+    }
+
+    // --- lyrics takeover ----------------------------------------------------------------
+
+    private async Task ToggleLyricsAsync()
+    {
+        if (!_lyricsLoaded)
+        {
+            _lyricsLoaded = true;
+            _lyricsToggle.IsEnabled = false;
+            try
+            {
+                var osts = await AppServices.Client!.GetOsts();
+                var ost = osts.FirstOrDefault(o => o.Id == _ostId);
+                if (ost == null) { _lyricsStatus.Text = "OST not found"; return; }
+                var result = await LyricsService.FetchAsync(ost, null);
+                if (result == null) { _lyricsStatus.Text = "No lyrics found."; }
+                else if (result.Synced is { Count: > 0 } lines)
+                {
+                    _synced = lines;
+                    _lyricsList.ItemsSource = lines.Select(l => (object)new LyricRow(l.Time, l.Text)).ToList();
+                    _lyricsTimer.Start();
+                }
+                else if (result.Plain is { Length: > 0 } plain)
+                {
+                    _lyricsList.ItemsSource = plain.Split('\n').Select(l => (object)new LyricRow(0, l)).ToList();
+                }
+            }
+            catch (Exception ex)
+            {
+                _lyricsStatus.Text = ex.Message;
+            }
+            finally
+            {
+                _lyricsToggle.IsEnabled = true;
+            }
+        }
+        bool showing = _lyricsPanel.Visibility == Visibility.Visible;
+        _lyricsPanel.Visibility = showing ? Visibility.Collapsed : Visibility.Visible;
+        _scores.Visibility = showing ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnLyricClicked(object sender, ItemClickEventArgs e)
+    {
+        if (e.ClickedItem is LyricRow { Time: > 0 } row)
+        {
+            try { _ = AppServices.Client!.Seek(row.Time); } catch (Exception) { /* advisory */ }
+            PlaybackService.Instance.Seek(row.Time);
+        }
+    }
+
+    /// <summary>5Hz tick like the Swift TimelineView: find the last line whose
+    /// timestamp passed and scroll-center it, dimming sung lines.</summary>
+    private void OnLyricsTick()
+    {
+        if (_synced == null || _lyricsPanel.Visibility != Visibility.Visible) return;
+        if (!PlaybackService.Instance.Playing) return;
+
+        double position = PlaybackService.Instance.Position;
+        int current = -1;
+        for (int i = 0; i < _synced.Count; i++)
+        {
+            if (_synced[i].Time <= position + 0.2) current = i;
+            else break;
+        }
+        if (current == _lyricsIndex) return;
+        _lyricsIndex = current;
+
+        if (current >= 0 && _lyricsList.ContainerFromIndex(current) is ListViewItem row)
+        {
+            row.Opacity = 1.0;
+            _lyricsList.ScrollIntoView(_lyricsList.Items[current]);
+        }
+        _lyricsStatus.Text = current >= 0 ? "" : "Instrumental section…";
     }
 
     private async Task PlayAsync()

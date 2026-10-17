@@ -1,9 +1,9 @@
-"""One-off generator: parse a local list.md into static history seed data.
+"""One-off generator: parse local/notes/list.md into static history seed data.
 
 The app uses the checked-in history_seed_data.py; this source list is optional
 and not tracked in Git.
 
-Run once by hand whenever list.md's *past* batches change:
+Run once by hand whenever the local list's *past* batches change:
 
     python scripts/generate_history_seed.py
 
@@ -18,7 +18,7 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LIST_MD = REPO_ROOT / "list.md"
+LIST_MD = REPO_ROOT / "local" / "notes" / "list.md"
 OUTPUT = REPO_ROOT / "ost_tracker" / "db" / "history_seed_data.py"
 
 BATCH_HEADER_RE = re.compile(r"^### (Batch \d+: .+)$")

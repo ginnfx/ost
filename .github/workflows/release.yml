@@ -86,13 +86,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Bundle
-        run: ./clients/linux/packaging/build.sh ${{ matrix.arch }}
+        run: ./clients/linux/packaging/build.sh ${{ matrix.arch }} --appimage
       - name: Tar bundle
         run: tar -czf OSTTracker-linux-${{ matrix.arch }}.tar.gz -C clients/linux/out/app-${{ matrix.arch }} .
       - uses: actions/upload-artifact@v4
         with:
           name: linux-${{ matrix.arch }}
-          path: OSTTracker-linux-${{ matrix.arch }}.tar.gz
+          path: |
+            OSTTracker-linux-${{ matrix.arch }}.tar.gz
+            clients/linux/out/OSTTracker-linux-${{ matrix.arch }}.AppImage
 
   ios:
     name: iOS (TestFlight ipa)

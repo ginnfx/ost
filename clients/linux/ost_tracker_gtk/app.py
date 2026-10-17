@@ -6,8 +6,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import GLib, Gtk  # noqa: E402
 
-from . import covers, pages, theme
+from . import covers, pages, theme, visualizer
+from .attract import AttractOverlay
 from .client import Client, WsPump
+from .particle import ParticleBurst
 from .playback import Playback
 from .sidecar import Sidecar
 
@@ -19,7 +21,9 @@ class OstApp(Gtk.Application):
         self._pump: WsPump | None = None
         self.playback = Playback()
         self.port = 0
-        self._current_ost: int | None = None
+        self.playing = False
+        self.current_ost: int | None = None
+        self._current_ost: int | None = None  # deprecated alias for hooks/tests
         self._pages: list[pages.Page] = []
         self.connect("activate", self._on_activate)
 
@@ -45,7 +49,8 @@ class OstApp(Gtk.Application):
         stack.set_vexpand(True)
 
         roster = pages.RosterPage(self)
-        self._pages = [roster, pages.PeoplePage(self), pages.EntryPage(self), pages.StatsPage(self),
+        self._pages = [roster, pages.PeoplePage(self), pages.EntryPage(self), pages.AddOstPage(self),
+                       pages.StatsPage(self),
                        pages.BatchesPage(self), pages.SlicesPage(self), pages.RevealPage(self),
                        pages.HistoryPage(self), pages.NotesPage(self), pages.SettingsPage(self),
                        pages.CoverPage(self)]
@@ -60,13 +65,18 @@ class OstApp(Gtk.Application):
         win.set_titlebar(header)
 
         root = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
-        root.append(stack)
+        self._attract = AttractOverlay(self, stack)
+        self._attract.set_vexpand(True)
+        self._burst = ParticleBurst(self)
+        self._attract.add_overlay(self._burst)
+        root.append(self._attract)
         root.append(self._build_bar())
         win.set_child(root)
         win.present()
 
         self._sidecar = sidecar
         self._win = win
+        self._wire_wake(win)
         win.connect("close-request", self._on_close)
         roster.refresh()
 
@@ -75,6 +85,22 @@ class OstApp(Gtk.Application):
             GLib.idle_add(self._refresh_page, pages.RosterPage)
         elif event_type == "playbackState":
             GLib.idle_add(self._apply_playback_state, payload)
+
+    def _wire_wake(self, win: Gtk.Window) -> None:
+        """Idle-attract wake: any motion / key / click on the window dismisses."""
+        motion = Gtk.EventControllerMotion()
+        motion.connect("motion", lambda *_: self._attract.wake())
+        win.add_controller(motion)
+        key = Gtk.EventControllerKey()
+        key.connect("key-pressed", lambda *_: (self._attract.wake(), False)[1])
+        win.add_controller(key)
+        click = Gtk.GestureClick()
+        click.connect("pressed", lambda *_: self._attract.wake())
+        win.add_controller(click)
+
+    def fire_particles(self) -> None:
+        """Perfect-score celebration (called from the entry page)."""
+        self._burst.fire()
 
     def _refresh_page(self, page_type) -> None:
         for page in self._pages:
@@ -85,7 +111,8 @@ class OstApp(Gtk.Application):
 
     def _apply_playback_state(self, payload) -> None:
         status = payload.get("status", "idle")
-        self._bar_play.set_label("Pause" if status == "playing" else "Play")
+        self.playing = status == "playing"
+        self._bar_play.set_label("Pause" if self.playing else "Play")
         self._bar_status.set_text(status)
         if status == "idle":
             self._bar_title.set_text("Nothing playing")
@@ -105,6 +132,9 @@ class OstApp(Gtk.Application):
 
         self._bar_title = Gtk.Label(label="Nothing playing", xalign=0.0, hexpand=True)
         self._bar.append(self._bar_title)
+
+        self._bar_viz = visualizer.VisualizerWidget(self)
+        self._bar.append(self._bar_viz)
 
         self._bar_status = Gtk.Label(label="idle")
         self._bar_status.add_css_class("dim-label")
@@ -131,6 +161,7 @@ class OstApp(Gtk.Application):
 
     def _bar_stop(self) -> None:
         self.playback.stop()
+        self.current_ost = None
         try:
             self.client.stop()
         except Exception:
@@ -140,6 +171,7 @@ class OstApp(Gtk.Application):
 
     def play_ost(self, ost_id: int) -> None:
         self._current_ost = ost_id
+        self.current_ost = ost_id
         try:
             state = self.client.play(ost_id)
             if state.status == "failed":

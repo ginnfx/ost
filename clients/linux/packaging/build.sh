@@ -1,13 +1,22 @@
 #!/usr/bin/env bash
 # Stage the Linux client + embedded python-build-standalone runtime into a
-# portable bundle, mirroring the macOS packaging scripts.
-# Usage: ./build.sh [x86_64|aarch64]   (default: host arch)
+# portable bundle (or an AppImage, with --appimage), mirroring the macOS
+# packaging scripts. .deb/.rpm remain an fpm follow-up.
+# Usage: ./build.sh [x86_64|aarch64] [--appimage]   (default: host arch)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
 CLIENT_DIR="$(dirname "$HERE")"                 # clients/linux
 REPO_ROOT="$(dirname "$(dirname "$(dirname "$HERE")")")"   # repo root
-ARCH="${1:-$(uname -m)}"
+ARGS=()
+WANT_APPIMAGE=0
+for arg in "$@"; do
+  case "$arg" in
+    --appimage) WANT_APPIMAGE=1 ;;
+    *) ARGS+=("$arg") ;;
+  esac
+done
+ARCH="${ARGS[0]:-$(uname -m)}"
 OUT="$CLIENT_DIR/out/app-$ARCH"
 RUNTIME_DIR="$CLIENT_DIR/runtime"
 
@@ -56,5 +65,53 @@ EOF
 chmod +x "$OUT/OSTTracker"
 
 echo "bundle ready at $OUT (run ./OSTTracker)"
-echo "AppImage/.deb/.rpm packaging: wrap this bundle with linuxdeploy or"
-echo "fpm (out of scope of this script) — the bundle is plain and portable."
+
+if [ "$WANT_APPIMAGE" -ne 1 ]; then
+  echo "add --appimage to also build an AppImage"
+  exit 0
+fi
+
+# 5) Optional AppImage wrap: appimagetool (per-arch build) packs the bundle
+#    with a .desktop + icon so the app shows up in launchers too. The tool is
+#    downloaded to the runtime dir and run with --appimage-extract-and-run so
+#    CI/containers without FUSE still work.
+APPIMAGE_TOOL="appimagetool-${TRIPLET/unknown-linux-gnu/x86_64}"   # x86_64 / aarch64
+case "$TRIPLET" in
+  x86_64-unknown-linux-gnu) APPIMAGE_TOOL="appimagetool-x86_64" ;;
+  aarch64-unknown-linux-gnu) APPIMAGE_TOOL="appimagetool-aarch64" ;;
+esac
+TOOL_PATH="$RUNTIME_DIR/$APPIMAGE_TOOL"
+if [ ! -f "$TOOL_PATH" ]; then
+  TOOL_URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/${APPIMAGE_TOOL}"
+  echo "fetching $APPIMAGE_TOOL"
+  curl -L -o "$TOOL_PATH" "$TOOL_URL"
+fi
+chmod +x "$TOOL_PATH"
+
+APPDIR="$CLIENT_DIR/out/OSTTracker.AppDir"
+rm -rf "$APPDIR"
+mkdir -p "$APPDIR/usr/share/applications" "$APPDIR/usr/share/icons/hicolor/256x256/apps" "$APPDIR/usr/bin"
+cp -R "$OUT" "$APPDIR/usr/bin/app"
+
+cat > "$APPDIR/usr/share/applications/ost-tracker.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=OST Tracker
+Comment=Rate game soundtracks with friends
+Exec=OSTTracker
+Icon=ost-tracker
+Categories=Audio;AudioVideo;
+EOF
+
+# appimagetool puts $APPDIR/usr/bin on PATH, so expose the bundle's launcher
+# there for the desktop Exec above.
+ln -sf app/OSTTracker "$APPDIR/usr/bin/OSTTracker"
+
+cp "$REPO_ROOT/assets/icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/ost-tracker.png" \
+  2>/dev/null || cp "$REPO_ROOT/assets/icon.png" "$APPDIR/ost-tracker.png" 2>/dev/null || \
+  echo "warning: no assets/icon.png found — AppImage will use a default icon"
+cp "$APPDIR/usr/share/applications/ost-tracker.desktop" "$APPDIR/ost-tracker.desktop"
+
+APPIMAGE="$CLIENT_DIR/out/OSTTracker-linux-${ARCH}.AppImage"
+"$TOOL_PATH" --appimage-extract-and-run "$APPDIR" "$APPIMAGE"
+echo "appimage ready at $APPIMAGE"

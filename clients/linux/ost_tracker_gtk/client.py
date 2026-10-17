@@ -20,8 +20,9 @@ class ApiError(Exception):
 class Client:
     """Sync HTTP wrapper. All calls are small and localhost-fast."""
 
-    def __init__(self, port: int, token: str):
-        self._http = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=20.0)
+    def __init__(self, port: int, token: str, transport: httpx.BaseTransport | None = None):
+        self._http = httpx.Client(base_url=f"http://127.0.0.1:{port}", timeout=20.0,
+                                  transport=transport)
         self._http.headers["X-OST-Token"] = token
 
     def close(self) -> None:
@@ -63,6 +64,15 @@ class Client:
 
     def get_osts(self) -> list[models.Ost]:
         return [models.Ost(**o) for o in self._get("osts")]
+
+    def add_ost(self, title: str, submitter_id: int, source: Optional[str] = None,
+                external_link: Optional[str] = None) -> models.Ost:
+        body = {"title": title, "submitter_id": submitter_id, "source": source,
+                "external_link": external_link}
+        return models.Ost(**self._send("POST", "osts", body))
+
+    def delete_ost(self, ost_id: int) -> None:
+        self._send("DELETE", f"osts/{ost_id}")
 
     # --- history ----------------------------------------------------------------
 
@@ -154,6 +164,15 @@ class Client:
 
     def play(self, ost_id: int) -> models.PlaybackState:
         return models.PlaybackState(**self._send("POST", "player/play", {"ost_id": ost_id}))
+
+    def pause(self) -> models.PlaybackState:
+        return models.PlaybackState(**self._send("POST", "player/pause"))
+
+    def seek(self, position: float) -> models.PlaybackState:
+        return models.PlaybackState(**self._send("POST", "player/seek", {"position": position}))
+
+    def stop(self) -> models.PlaybackState:
+        return models.PlaybackState(**self._send("POST", "player/stop"))
 
     # --- covers ------------------------------------------------------------------
 

@@ -19,6 +19,7 @@ public sealed class NowPlayingBar : Grid
     private readonly TextBlock _status = new() { Foreground = Ui.DimBrush, FontSize = 12 };
     private readonly Button _play = new() { Content = "Play" };
     private readonly Button _stop = new() { Content = "Stop" };
+    private readonly VisualizerBar _visualizer = new();
 
     public NowPlayingBar()
     {
@@ -31,6 +32,7 @@ public sealed class NowPlayingBar : Grid
         ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var text = new StackPanel { Spacing = 2, VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(_title);
@@ -40,8 +42,15 @@ public sealed class NowPlayingBar : Grid
         {
             try
             {
-                if (_playing) await AppServices.Client!.Pause();
-                else await AppServices.Client!.Play(_currentOstId);
+                if (_playing)
+                {
+                    PlaybackService.Instance.Pause();
+                    await AppServices.Client!.Pause();
+                }
+                else
+                {
+                    await AppServices.Client!.Play(_currentOstId);
+                }
             }
             catch (Exception ex) { _status.Text = ex.Message; }
         };
@@ -61,9 +70,11 @@ public sealed class NowPlayingBar : Grid
         Children.Add(_cover);
         Grid.SetColumn(text, 1);
         Children.Add(text);
-        Grid.SetColumn(_play, 2);
+        Grid.SetColumn(_visualizer, 2);
+        Children.Add(_visualizer);
+        Grid.SetColumn(_play, 3);
         Children.Add(_play);
-        Grid.SetColumn(_stop, 3);
+        Grid.SetColumn(_stop, 4);
         Children.Add(_stop);
 
         if (AppServices.Events != null)
@@ -97,8 +108,27 @@ public sealed class NowPlayingBar : Grid
                 if (s == "idle") _title.Text = "Nothing playing";
                 _status.Text = s;
             }
+            payload.TryGetProperty("stream_url", out var streamEl);
+            string? streamUrl = streamEl.ValueKind == JsonValueKind.String ? streamEl.GetString() : null;
             if (payload.TryGetProperty("ost_id", out var ostId) && ostId.ValueKind == JsonValueKind.Number)
                 _currentOstId = ostId.GetInt32();
+            // Local-sink control follows the canonical sidecar state: a new
+            // stream starts playback; the same stream after a resume keeps
+            // the local position instead of restarting.
+            if (_playing && !string.IsNullOrEmpty(streamUrl))
+            {
+                if (streamUrl != _localStreamUrl)
+                {
+                    _localStreamUrl = streamUrl;
+                    PlaybackService.Instance.Play(streamUrl, payload.TryGetProperty("watch_url", out var watch) && watch.ValueKind == JsonValueKind.String ? watch.GetString() : null);
+                }
+                else
+                {
+                    PlaybackService.Instance.Resume();
+                }
+            }
         });
     }
+
+    private string? _localStreamUrl;
 }

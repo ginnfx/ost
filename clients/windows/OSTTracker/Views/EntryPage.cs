@@ -22,8 +22,15 @@ public sealed class EntryPage : Page
         Loaded += OnLoaded;
         _person.SelectionChanged += async (_, _) => await LoadRatingsAsync();
         _scroll.Content = _rows;
-        Content = Ui.Stack("Entry", _person, _scroll, _status);
+        // Grid so the celebration overlay can cover the whole page content.
+        var host = new Grid();
+        host.Children.Add(Ui.Stack("Entry", _person, _scroll, _status));
+        _burst = new ParticleBurst { Width = 420, Height = 260, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        host.Children.Add(_burst);
+        Content = host;
     }
+
+    private readonly ParticleBurst _burst;
 
     private void OnLoaded(object sender, RoutedEventArgs e) => _ = LoadAsync();
 
@@ -106,6 +113,7 @@ public sealed class EntryPage : Page
             if (score.HasValue) _ratings[ostId] = score.Value;
             else _ratings.Remove(ostId);
             _status.Text = $"{_ratings.Count}/{_osts.Count} rated for {_people[idx].Name}";
+            if (score == 10) _burst.Fire();   // perfect-score celebration, mac parity
         }
         catch (Exception ex)
         {

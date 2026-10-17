@@ -70,6 +70,10 @@ public sealed class OstClient
 
     // osts
     public Task<List<Ost>> GetOsts(CancellationToken ct = default) => GetAsync<List<Ost>>("osts", ct);
+    public Task<Ost> AddOst(OstIn body, CancellationToken ct = default)
+        => SendAsync<Ost>(HttpMethod.Post, "osts", body, ct);
+    public Task DeleteOst(int id, CancellationToken ct = default)
+        => SendNoBodyAsync(HttpMethod.Delete, $"osts/{id}", null, ct);
 
     // history
     public Task<List<HistoryEntry>> GetHistory(CancellationToken ct = default) => GetAsync<List<HistoryEntry>>("history", ct);
