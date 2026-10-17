@@ -3,6 +3,7 @@ __pycache__/
 *.py[cod]
 .venv/
 *.egg-info/
+.legacy/
 
 # PyInstaller build artifacts
 /build/OSTTracker/
@@ -46,13 +47,17 @@ coverage/
 competition-web/supabase/.branches/
 competition-web/supabase/.temp/
 
-# Reference checkouts + font source download — not part of the project.
-# (GlowEffectKit-main stays tracked: the app links it.)
-Lume-main/
-LiquidGlassReference-main/
-font/
+# Local notes, reference checkouts, and source downloads.
+# GlowEffectKit-main stays tracked because the app links it.
+/local/
 
 # Keep only the short top-level guides in Git; other Markdown notes stay local.
 *.md
 !/README.md
 !/CONTRIBUTING.md
+
+# The wire contract lives in-repo; it's what keeps the three clients honest.
+!/shared/CONTRACT.md
+
+# Local-only scratch / generated files
+competition-web/tokens.json

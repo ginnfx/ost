@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Optional
 
+from . import validation
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -272,6 +274,8 @@ class EntryPage(Page):
             else:
                 self._ratings[ost.id] = score
             self.status.set_text(f"{len(self._ratings)}/{len(self._osts)} rated for {rater.name}")
+            if score == 10:
+                self.app.fire_particles()  # perfect-score celebration, mac parity
         except Exception as exc:
             self.status.set_text(str(exc))
 
@@ -541,3 +545,87 @@ class CoverPage(Page):
             return
         self.app.client.set_cover(self._osts[idx].id, self._cands[cand_idx].image_url)
         self.status.set_text("cover updated")
+
+
+class AddOstPage(Page):
+    """Add-OST form — mirrors the macOS AddOstView: title, source, submitter
+    (required, see validation.can_submit), optional external YouTube link, and
+    a live duplicate hint against the past-round history."""
+
+    def __init__(self, app) -> None:
+        super().__init__("Add OST")
+        self.app = app
+        self._people: list = []
+        self._history: list = []
+
+        self._title = self._entry("Title (required)")
+        self._title.connect("changed", lambda *_: self._refresh_gate())
+        self._source = self._entry("Source (album / series, optional)")
+        self._source.connect("changed", lambda *_: self._refresh_gate())
+        self._link = self._entry("External link (YouTube URL, optional)")
+        self._submitter = Gtk.DropDown()
+        self._submitter.connect("notify::selected", lambda *_: self._refresh_gate())
+        self.append(self._title)
+        self.append(self._source)
+        self.append(self._link)
+        self.append(self._submitter)
+        self.append(self._button("Add OST", self._submit_ost))
+        self._status_hint = Gtk.Label(label="", xalign=0.0, wrap=True)
+        self._status_hint.add_css_class("dim-label")
+        self.append(self._status_hint)
+        self.refresh()
+
+    def refresh(self) -> None:
+        try:
+            self._people = self.app.client.get_people()
+            self._history = self.app.client.history_matches()
+        except Exception as exc:
+            self.status.set_text(str(exc))
+            return
+        names = [p.name for p in self._people]
+        self._submitter.set_model(Gtk.StringList.new(names))
+        self._submitter.set_selected(0 if names else Gtk.INVALID_LIST_POSITION)
+        self._refresh_gate()
+
+    def _conflict(self) -> tuple | None:
+        return validation.history_conflict(
+            self._title.get_text(), self._source.get_text(),
+            [(h.title, h.source) for h in self._history])
+
+    def _ready(self) -> bool:
+        idx = self._submitter.get_selected()
+        submitter_id = self._people[idx].id if idx != Gtk.INVALID_LIST_POSITION and idx < len(self._people) else None
+        return validation.can_submit(
+            self._title.get_text(), submitter_id, [p.id for p in self._people],
+            has_history_conflict=self._conflict() is not None)
+
+    def _refresh_gate(self) -> None:
+        conflict = self._conflict()
+        if conflict is not None:
+            self._status_hint.set_text(
+                f"Likely duplicate of a past round: “{conflict[0]}”"
+                + (f" ({conflict[1]})" if conflict[1] else ""))
+        elif not self._ready():
+            self._status_hint.set_text("Title and a roster submitter are required.")
+        else:
+            self._status_hint.set_text("")
+
+    def _submit_ost(self, widget) -> None:
+        if not self._ready():
+            self.status.set_text("Fill the title and pick a submitter first.")
+            return
+        idx = self._submitter.get_selected()
+        submitter = self._people[idx]
+        try:
+            ost = self.app.client.add_ost(
+                self._title.get_text().strip(), submitter.id,
+                source=self._source.get_text().strip() or None,
+                external_link=self._link.get_text().strip() or None)
+        except Exception as exc:
+            self.status.set_text(str(exc))
+            return
+        self.status.set_text(f"Added “{ost.title}” (id {ost.id})")
+        self._title.set_text("")
+        self._source.set_text("")
+        self._link.set_text("")
+        self._refresh_gate()

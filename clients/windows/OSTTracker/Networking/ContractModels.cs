@@ -59,3 +59,8 @@ public sealed record EliminationThresholdIn(int Threshold);
 public sealed record PlayIn(int OstId);
 public sealed record SeekIn(double Position);
 public sealed record CoverSetIn(string ImageUrl);
+
+// --- client-side lyric models (see LyricsService) ------------------------------
+
+public sealed record LyricLine(double Time, string Text);
+public sealed record LyricsResult(IReadOnlyList<LyricLine>? Synced, string? Plain);

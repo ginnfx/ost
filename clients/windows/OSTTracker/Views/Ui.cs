@@ -40,4 +40,14 @@ public static class Ui
     }
 
     public static Brush DimBrush => (Brush)Application.Current.Resources["TextDimBrush"];
+
+    /// <summary>Indeterminate loading placeholder while a page fetches data.</summary>
+    public static ProgressRing LoadingRing() => new()
+    {
+        IsActive = true,
+        Width = 24,
+        Height = 24,
+        HorizontalAlignment = HorizontalAlignment.Center,
+        VerticalAlignment = VerticalAlignment.Center,
+    };
 }

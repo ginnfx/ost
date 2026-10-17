@@ -20,6 +20,13 @@ public sealed partial class MainWindow : Window
         Grid.SetRow(bar, 1);
         ((Grid)Content).Children.Add(bar);
 
+        // Idle attract overlay floats across both rows.
+        var attract = new Views.AttractOverlay();
+        Grid.SetRow(attract, 0);
+        Grid.SetRowSpan(attract, 2);
+        ((Grid)Content).Children.Add(attract);
+        attract.Start(ContentFrame);
+
         Closed += OnClosed;
     }
 
@@ -37,6 +44,7 @@ public sealed partial class MainWindow : Window
                 case "roster": ContentFrame.Navigate(typeof(Views.RosterPage)); break;
                 case "people": ContentFrame.Navigate(typeof(Views.PeoplePage)); break;
                 case "entry": ContentFrame.Navigate(typeof(Views.EntryPage)); break;
+                case "addost": ContentFrame.Navigate(typeof(Views.AddOstPage)); break;
                 case "stats": ContentFrame.Navigate(typeof(Views.StatsPage)); break;
                 case "batches": ContentFrame.Navigate(typeof(Views.BatchesPage)); break;
                 case "slices": ContentFrame.Navigate(typeof(Views.SlicesPage)); break;
