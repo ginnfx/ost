@@ -24,7 +24,7 @@ public static class Theme
     /// <summary>Parse "#RRGGBB" → Color, falling back to the default accent.</summary>
     public static Color ParseHex(string? hex)
     {
-        if (hex is null or { Length: != 7 } || !hex.StartsWith("#"))
+        if (hex is null || hex.Length != 7 || !hex.StartsWith("#"))
             return ParseHex(AccentDefault);
         byte r = Convert.ToByte(hex.Substring(1, 2), 16);
         byte g = Convert.ToByte(hex.Substring(3, 2), 16);

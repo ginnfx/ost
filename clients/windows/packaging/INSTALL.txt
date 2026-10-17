@@ -1,0 +1,9 @@
+OST Tracker for Windows
+
+Run OSTTracker-windows-x64-setup.exe on 64-bit Intel/AMD Windows, or
+OSTTracker-windows-arm64-setup.exe on Windows ARM. The installer is per-user
+and adds a Start menu shortcut and a desktop shortcut.
+
+For the portable version, extract the matching ZIP and run OSTTracker.exe.
+Keep the extracted folder together so the app can find its Python runtime and
+backend.
