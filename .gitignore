@@ -48,8 +48,10 @@ competition-web/supabase/.branches/
 competition-web/supabase/.temp/
 
 # Local notes, reference checkouts, and source downloads.
-# GlowEffectKit-main stays tracked because the app links it.
+# GlowEffectKit-main is a third-party repo clone the app doesn't link
+# (the Swift packages flow in via SPM remotes in project.yml).
 /local/
+GlowEffectKit-main/
 
 # Keep only the short top-level guides in Git; other Markdown notes stay local.
 *.md
