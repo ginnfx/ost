@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -74,7 +75,8 @@ public static class LyricsService
             catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException) { /* offline */ }
         }
 
-        LyricsResult? synced = null, plain = null;
+        LyricsResult? synced = null;
+        string? plain = null;
         string? artist = null;
         foreach (var row in rows)
         {
@@ -196,4 +198,6 @@ public static class LyricsService
         [JsonPropertyName("synced")] public List<LyricLine>? Synced { get; set; }
         [JsonPropertyName("plain")] public string? Plain { get; set; }
     }
+
+    private sealed record LrclibTrack(string? ArtistName, string? SyncedLyrics, string? PlainLyrics);
 }
