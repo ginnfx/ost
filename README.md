@@ -16,11 +16,6 @@ I made this for rating game soundtracks with friends.
 - `clients/windows/` is the WinUI 3 client for Windows (x64 + arm64).
 - `clients/linux/` is the GTK4 client for Linux (x86_64 + aarch64).
 
-Both desktop ports speak the same sidecar contract (see
-`shared/CONTRACT.md`) and mirror the Mac's roster, batches, slices,
-reveal, history, notes, covers, playback, add-OST, synced lyrics, and
-the idle attract screen.
-
 ## Running it
 
 Desktop builds, when available, are on GitHub Releases. To build the Mac app from source, run `./install.sh --launch`. For a development build, `./dev.sh` runs the app directly from the repo.
