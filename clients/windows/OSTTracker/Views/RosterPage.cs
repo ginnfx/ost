@@ -154,7 +154,7 @@ public sealed class RosterPage : Page
 
     private async Task OpenDetailAsync(int ostId)
     {
-        if (MainWindow.ContentFrame is Frame frame)
+        if (MainWindow.NavigationFrame is Frame frame)
             DetailPage.Navigate(frame, ostId);
         await Task.CompletedTask;
     }
