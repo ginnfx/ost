@@ -107,9 +107,14 @@ EOF
 # there for the desktop Exec above.
 ln -sf app/OSTTracker "$APPDIR/usr/bin/OSTTracker"
 
-cp "$REPO_ROOT/assets/icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/ost-tracker.png" \
-  2>/dev/null || cp "$REPO_ROOT/assets/icon.png" "$APPDIR/ost-tracker.png" 2>/dev/null || \
-  echo "warning: no assets/icon.png found — AppImage will use a default icon"
+if [ -f "$REPO_ROOT/assets/icon.png" ]; then
+  # appimagetool validation looks in the AppDir root; launchers look in
+  # hicolor — provide both.
+  cp "$REPO_ROOT/assets/icon.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/ost-tracker.png"
+  cp "$REPO_ROOT/assets/icon.png" "$APPDIR/ost-tracker.png"
+else
+  echo "warning: no assets/icon.png found — AppImage will fail validation or use a default icon"
+fi
 cp "$APPDIR/usr/share/applications/ost-tracker.desktop" "$APPDIR/ost-tracker.desktop"
 
 APPIMAGE="$CLIENT_DIR/out/OSTTracker-linux-${ARCH}.AppImage"
