@@ -1,5 +1,6 @@
-# OST Tracker
 
+
+<img width="1803" height="1375" alt="Screenshot 2026-10-17 at 9 38 58 PM" src="https://github.com/user-attachments/assets/5772b51e-1f86-4288-9dec-9268a40822a4" />
 I made this for rating game soundtracks with friends.
 
 ## tldr
@@ -9,6 +10,8 @@ I made this for rating game soundtracks with friends.
 - Shows rankings, score spread, rater stats, and slice eliminations
 - Finds cover art, plays audio in the app, and remembers titles from past rounds so they aren't submitted twice
 - Exports standings as CSV, Markdown, or HTML
+
+<img width="1024" height="1024" alt="icon" src="https://github.com/user-attachments/assets/354eaccd-eb7e-482c-b020-6663df060826" />
 
 ## Apps
 
