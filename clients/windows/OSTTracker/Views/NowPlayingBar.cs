@@ -24,7 +24,7 @@ public sealed class NowPlayingBar : Grid
     public NowPlayingBar()
     {
         Instance = this;
-        Padding = new Thickness(12, 8);
+        Padding = new Thickness(12, 8, 12, 8);
         Background = (Brush)Application.Current.Resources["BgRaisedBrush"];
         ColumnSpacing = 10;
 
