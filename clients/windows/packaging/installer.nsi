@@ -10,9 +10,12 @@
 !ifndef OUT
 !define OUT "out\app-x64"
 !endif
+!ifndef OUTFILE
+!define OUTFILE "OSTTracker-${ARCH}-setup.exe"
+!endif
 
 Name "OST Tracker"
-OutFile "OSTTracker-${ARCH}-setup.exe"
+OutFile "${OUTFILE}"
 InstallDir "$LOCALAPPDATA\Programs\OstTracker"
 RequestExecutionLevel user
 Unicode true

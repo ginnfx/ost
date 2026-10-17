@@ -18,10 +18,15 @@ $Root = Split-Path -Parent $PSScriptRoot                # clients/windows
 $Proj = Join-Path $Root "OSTTracker\OSTTracker.csproj"
 $Out = Join-Path $Root "out\app-$Arch"
 $RuntimeDir = Join-Path $Root "runtime"                 # staging (gitignored)
+$Version = if ($env:GITHUB_REF_NAME) { $env:GITHUB_REF_NAME -replace '^v', '' } else { "0.2.0" }
 
 # 1) Publish the self-contained WinUI 3 app (Windows App SDK bundled).
 dotnet publish $Proj -c Release -r win-$Arch --self-contained true `
     -p:PublishReadyToRun=false -o $Out
+if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed for win-$Arch (exit $LASTEXITCODE)" }
+if (-not (Test-Path (Join-Path $Out "OSTTracker.exe"))) {
+    throw "dotnet publish did not produce OSTTracker.exe in $Out"
+}
 
 # 2) Stage the embedded CPython runtime next to the exe, like 01_fetch_runtime.sh.
 #    python-build-standalone publishes windows-msvc assets for both archs.
@@ -49,6 +54,7 @@ Copy-Item -Recurse $RuntimeStaged $AppRuntime
 # 3) Ship backend/ + ost_tracker/ (the sidecar contract) next to the exe.
 Copy-Item -Recurse (Join-Path $Root "..\..\backend") (Join-Path $Out "backend")
 Copy-Item -Recurse (Join-Path $Root "..\..\ost_tracker") (Join-Path $Out "ost_tracker")
+Copy-Item (Join-Path $PSScriptRoot "INSTALL.txt") (Join-Path $Out "INSTALL.txt")
 
 Write-Host "staged app at $Out"
 
@@ -57,6 +63,7 @@ Write-Host "staged app at $Out"
 $Zip = Join-Path $Root "out\OstTracker-windows-$Arch.zip"
 Remove-Item -Force $Zip -ErrorAction SilentlyContinue
 Compress-Archive -Path (Join-Path $Out "*") -DestinationPath $Zip
+if (-not (Test-Path $Zip) -or (Get-Item $Zip).Length -eq 0) { throw "Failed to create $Zip" }
 Write-Host "zip at $Zip"
 
 # 4) Optional MSIX bundle. Needs the MSIX Packaging Tools / Windows SDK on
@@ -72,7 +79,9 @@ if ($Msix) {
 }
 
 # 5) Optional NSIS installer (makensis on PATH).
-$Makensis = "makensis.exe"
-if (Get-Command $Makensis -ErrorAction SilentlyContinue) {
-    & $Makensis /DARCH=$Arch /DOUT=$Out /DVERSION=0.1.0 (Join-Path $PSScriptRoot "installer.nsi")
-}
+$Makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+if (-not $Makensis) { throw "NSIS is required to create the Windows setup installer." }
+$Setup = Join-Path $Root "out\OSTTracker-windows-$Arch-setup.exe"
+& $Makensis.Source "/DARCH=$Arch" "/DOUT=$Out" "/DVERSION=$Version" "/DOUTFILE=$Setup" (Join-Path $PSScriptRoot "installer.nsi")
+if ($LASTEXITCODE -ne 0 -or -not (Test-Path $Setup)) { throw "NSIS failed to create $Setup" }
+Write-Host "setup installer at $Setup"

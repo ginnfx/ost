@@ -44,6 +44,7 @@ jobs:
         with:
           name: macos
           path: out/*.dmg
+          if-no-files-found: error
 
   windows:
     name: Windows ${{ matrix.arch }}
@@ -61,6 +62,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "8.0.x"
+      - name: Install NSIS
+        shell: pwsh
+        run: |
+          choco install nsis --yes --no-progress
+          $nsisPath = "${env:ProgramFiles(x86)}\NSIS"
+          if (-not (Test-Path (Join-Path $nsisPath "makensis.exe"))) { throw "NSIS install did not provide makensis.exe" }
+          $nsisPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - name: Build
         shell: pwsh
         run: ./clients/windows/packaging/build.ps1 -Arch ${{ matrix.arch }}
@@ -69,8 +77,9 @@ jobs:
           name: windows-${{ matrix.arch }}
           path: |
             clients/windows/out/OstTracker-windows-${{ matrix.arch }}.zip
-            clients/windows/out/OSTTracker-${{ matrix.arch }}-setup.exe
+            clients/windows/out/OSTTracker-windows-${{ matrix.arch }}-setup.exe
             clients/windows/out/OstTracker-${{ matrix.arch }}.msix
+          if-no-files-found: error
 
   linux:
     name: Linux ${{ matrix.arch }}
@@ -95,6 +104,7 @@ jobs:
           path: |
             OSTTracker-linux-${{ matrix.arch }}.tar.gz
             clients/linux/out/OSTTracker-linux-${{ matrix.arch }}.AppImage
+          if-no-files-found: error
 
   ios:
     name: iOS (TestFlight ipa)
@@ -108,11 +118,12 @@ jobs:
       - name: Build + export ipa
         env:
           TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
-        run: bash packaging/08_ios_build.sh
+        run: bash packaging/08_ios_build.sh --archive
       - uses: actions/upload-artifact@v4
         with:
           name: ios
           path: packaging/runtime/export/*.ipa
+          if-no-files-found: error
 
   release:
     name: Draft GitHub Release
@@ -129,6 +140,23 @@ jobs:
           # artifacts may carry nested directories; flatten and checksum files
           find . -mindepth 2 -type f -exec mv -n {} . \;
           find . -mindepth 1 -type d -empty -delete
+          cat > INSTALL.txt <<'EOF'
+          OST Tracker installation
+
+          Linux: Choose the AppImage matching your CPU (x86_64 or aarch64), download it,
+          run `chmod +x OSTTracker-linux-*.AppImage`, then launch it. GTK4 and GStreamer
+          1.0 are required from your distribution. Debian/Ubuntu users can run:
+          `sudo apt install python3 python3-gi python3-gi-cairo python3-httpx gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base`.
+          The matching .tar.gz contains the same app as a portable folder.
+
+          macOS: Open the universal DMG and drag OSTTracker.app to Applications.
+
+          Windows: Run the setup.exe matching your CPU (x64 or arm64). The ZIP is a
+          portable alternative; extract it and run OSTTracker.exe.
+
+          iOS: An IPA is included only when the Apple signing job succeeds. It is a
+          TestFlight distribution build and is not a direct App Store installation.
+          EOF
           find . -maxdepth 1 -type f ! -name SHA256SUMS -printf '%P\n' | sort | xargs sha256sum > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:

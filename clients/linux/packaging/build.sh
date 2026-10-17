@@ -60,7 +60,9 @@ cp "$CLIENT_DIR/main.py" "$OUT/main.py"
 
 cat > "$OUT/OSTTracker" <<EOF
 #!/usr/bin/env bash
-exec "\$(dirname "\$0")/python-runtime/bin/python3.11" "\$(dirname "\$0")/main.py"
+# GTK's PyGObject bindings are built for the distribution's system Python.
+# Keep the embedded Python runtime for the backend sidecar only.
+exec python3 "\$(dirname "\$0")/main.py" "\$@"
 EOF
 chmod +x "$OUT/OSTTracker"
 
@@ -117,6 +119,26 @@ else
 fi
 cp "$APPDIR/usr/share/applications/ost-tracker.desktop" "$APPDIR/ost-tracker.desktop"
 
+# AppImage requires an executable entry point at the AppDir root. Some
+# appimagetool versions do not synthesize this from the desktop Exec field.
+cat > "$APPDIR/AppRun" <<'EOF'
+#!/usr/bin/env bash
+HERE="$(dirname "$(readlink -f "$0")")"
+exec "$HERE/usr/bin/OSTTracker" "$@"
+EOF
+chmod +x "$APPDIR/AppRun"
+
 APPIMAGE="$CLIENT_DIR/out/OSTTracker-linux-${ARCH}.AppImage"
 "$TOOL_PATH" --appimage-extract-and-run "$APPDIR" "$APPIMAGE"
+
+# Inspect the finished image on its native-architecture runner so a broken
+# AppDir cannot be attached to a release unnoticed.
+VERIFY_DIR="$CLIENT_DIR/out/verify-appimage-$ARCH"
+rm -rf "$VERIFY_DIR"
+mkdir -p "$VERIFY_DIR"
+(cd "$VERIFY_DIR" && "$APPIMAGE" --appimage-extract >/dev/null)
+test -x "$VERIFY_DIR/squashfs-root/AppRun"
+test -x "$VERIFY_DIR/squashfs-root/usr/bin/OSTTracker"
+test -f "$VERIFY_DIR/squashfs-root/usr/bin/app/python-runtime/bin/python3.11"
+rm -rf "$VERIFY_DIR"
 echo "appimage ready at $APPIMAGE"
