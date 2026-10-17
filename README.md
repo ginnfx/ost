@@ -12,6 +12,7 @@ I made this for rating game soundtracks with friends.
 
 
 <img width="901" height="687" alt="Screenshot 2026-10-17 at 9 38 58 PM" src="https://github.com/user-attachments/assets/5772b51e-1f86-4288-9dec-9268a40822a4" />
+
 ## Apps
 
 - `OSTTracker/` is the SwiftUI app for iPhone and Mac.
