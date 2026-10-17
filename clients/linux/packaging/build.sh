@@ -75,16 +75,16 @@ fi
 #    with a .desktop + icon so the app shows up in launchers too. The tool is
 #    downloaded to the runtime dir and run with --appimage-extract-and-run so
 #    CI/containers without FUSE still work.
-APPIMAGE_TOOL="appimagetool-${TRIPLET/unknown-linux-gnu/x86_64}"   # x86_64 / aarch64
 case "$TRIPLET" in
-  x86_64-unknown-linux-gnu) APPIMAGE_TOOL="appimagetool-x86_64" ;;
-  aarch64-unknown-linux-gnu) APPIMAGE_TOOL="appimagetool-aarch64" ;;
+  x86_64-unknown-linux-gnu) APPIMAGE_TOOL="appimagetool-x86_64.AppImage" ;;
+  aarch64-unknown-linux-gnu) APPIMAGE_TOOL="appimagetool-aarch64.AppImage" ;;
 esac
 TOOL_PATH="$RUNTIME_DIR/$APPIMAGE_TOOL"
 if [ ! -f "$TOOL_PATH" ]; then
   TOOL_URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/${APPIMAGE_TOOL}"
   echo "fetching $APPIMAGE_TOOL"
-  curl -L -o "$TOOL_PATH" "$TOOL_URL"
+  # --fail so a 404 error page never lands on disk pretending to be the tool
+  curl --fail -L -o "$TOOL_PATH" "$TOOL_URL"
 fi
 chmod +x "$TOOL_PATH"
 
