@@ -95,7 +95,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Bundle
-        run: ./clients/linux/packaging/build.sh ${{ matrix.arch }} --appimage
+        run: ./clients/linux/packaging/build.sh ${{ matrix.arch }} --appimage --deb
       - name: Tar bundle
         run: tar -czf OSTTracker-linux-${{ matrix.arch }}.tar.gz -C clients/linux/out/app-${{ matrix.arch }} .
       - uses: actions/upload-artifact@v4
@@ -104,6 +104,7 @@ jobs:
           path: |
             OSTTracker-linux-${{ matrix.arch }}.tar.gz
             clients/linux/out/OSTTracker-linux-${{ matrix.arch }}.AppImage
+            clients/linux/out/OSTTracker-linux-${{ matrix.arch }}.deb
           if-no-files-found: error
 
   ios:
@@ -143,11 +144,11 @@ jobs:
           cat > INSTALL.txt <<'EOF'
           OST Tracker installation
 
-          Linux: Choose the AppImage matching your CPU (x86_64 or aarch64), download it,
-          run `chmod +x OSTTracker-linux-*.AppImage`, then launch it. GTK4 and GStreamer
-          1.0 are required from your distribution. Debian/Ubuntu users can run:
-          `sudo apt install python3 python3-gi python3-gi-cairo python3-httpx gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base`.
-          The matching .tar.gz contains the same app as a portable folder.
+          Linux Debian/Ubuntu: Install the matching .deb with `sudo apt install ./OSTTracker-linux-*.deb`.
+          Apt installs GTK4 and GStreamer automatically. Other distributions can use the
+          AppImage after installing the GTK4/GStreamer packages for their distro; it prints
+          the Debian/Ubuntu package command when those libraries are missing. The .tar.gz
+          contains the same portable app bundle.
 
           macOS: Open the universal DMG and drag OSTTracker.app to Applications.
 

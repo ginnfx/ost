@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import stat
 
 from fastapi.testclient import TestClient
@@ -14,7 +15,8 @@ def test_lan_pairing_token_is_private_and_stable(fresh_db):
     first = api._lan_token()
     assert len(first) == 64
     assert api._lan_token() == first
-    assert stat.S_IMODE((app_support_dir() / "lan-token").stat().st_mode) == 0o600
+    if os.name == "posix":
+        assert stat.S_IMODE((app_support_dir() / "lan-token").stat().st_mode) == 0o600
 
 
 def test_lan_cover_requires_token_and_uses_known_cover_path(fresh_db):
