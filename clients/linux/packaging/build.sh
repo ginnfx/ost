@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Stage the Linux client + embedded python-build-standalone runtime into a
-# portable bundle (or an AppImage, with --appimage), mirroring the macOS
-# packaging scripts. .deb/.rpm remain an fpm follow-up.
-# Usage: ./build.sh [x86_64|aarch64] [--appimage]   (default: host arch)
+# portable bundle, AppImage, or Debian package.
+# Usage: ./build.sh [x86_64|aarch64] [--appimage] [--deb]   (default: host arch)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
@@ -10,9 +9,11 @@ CLIENT_DIR="$(dirname "$HERE")"                 # clients/linux
 REPO_ROOT="$(dirname "$(dirname "$(dirname "$HERE")")")"   # repo root
 ARGS=()
 WANT_APPIMAGE=0
+WANT_DEB=0
 for arg in "$@"; do
   case "$arg" in
     --appimage) WANT_APPIMAGE=1 ;;
+    --deb) WANT_DEB=1 ;;
     *) ARGS+=("$arg") ;;
   esac
 done
@@ -25,8 +26,8 @@ mkdir -p "$OUT" "$RUNTIME_DIR"
 # 1) python-build-standalone runtime (same pinned release as macOS packaging).
 TAG="20260623"
 case "$ARCH" in
-  x86_64|amd64) TRIPLET="x86_64-unknown-linux-gnu" ;;
-  aarch64|arm64) TRIPLET="aarch64-unknown-linux-gnu" ;;
+  x86_64|amd64) TRIPLET="x86_64-unknown-linux-gnu"; DEB_ARCH="amd64" ;;
+  aarch64|arm64) TRIPLET="aarch64-unknown-linux-gnu"; DEB_ARCH="arm64" ;;
   *) echo "unsupported arch: $ARCH"; exit 1 ;;
 esac
 ASSET="cpython-3.11.15+${TAG}-${TRIPLET}-install_only.tar.gz"
@@ -70,14 +71,65 @@ On Debian or Ubuntu, install them with:
 MSG
   exit 1
 fi
-exec python3 "\$(dirname "\$0")/main.py" "\$@"
+APP_DIR="\$(cd -- "\$(dirname -- "\$(readlink -f -- "\$0")")" && pwd)"
+exec python3 "\$APP_DIR/main.py" "\$@"
 EOF
 chmod +x "$OUT/OSTTracker"
 
 echo "bundle ready at $OUT (run ./OSTTracker)"
 
+if [ "$WANT_DEB" -eq 1 ]; then
+  DEB_ROOT="$CLIENT_DIR/out/deb-$ARCH"
+  DEB_PACKAGE="$CLIENT_DIR/out/OSTTracker-linux-${ARCH}.deb"
+  rm -rf "$DEB_ROOT"
+  mkdir -p "$DEB_ROOT/DEBIAN" "$DEB_ROOT/opt/ost-tracker" \
+    "$DEB_ROOT/usr/bin" "$DEB_ROOT/usr/share/applications"
+  cp -R "$OUT"/. "$DEB_ROOT/opt/ost-tracker/"
+
+  cat > "$DEB_ROOT/usr/bin/ost-tracker" <<'EOF'
+#!/bin/sh
+exec /opt/ost-tracker/OSTTracker "$@"
+EOF
+  chmod +x "$DEB_ROOT/usr/bin/ost-tracker"
+
+  cat > "$DEB_ROOT/usr/share/applications/ost-tracker.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=OST Tracker
+Comment=Rate game soundtracks with friends
+Exec=ost-tracker
+Icon=ost-tracker
+Categories=Audio;AudioVideo;
+EOF
+
+  if [ -f "$REPO_ROOT/assets/icon.png" ]; then
+    mkdir -p "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps"
+    cp "$REPO_ROOT/assets/icon.png" \
+      "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps/ost-tracker.png"
+  fi
+
+  VERSION="${OST_TRACKER_VERSION:-$(git -C "$REPO_ROOT" describe --tags --always 2>/dev/null || true)}"
+  VERSION="${VERSION:-0.0.0}"
+  VERSION="${VERSION#v}"
+  cat > "$DEB_ROOT/DEBIAN/control" <<EOF
+Package: ost-tracker
+Version: $VERSION
+Section: sound
+Priority: optional
+Architecture: $DEB_ARCH
+Depends: python3, python3-gi, gir1.2-gtk-4.0, gir1.2-gstreamer-1.0, gstreamer1.0-plugins-base, gstreamer1.0-plugins-good
+Maintainer: OST Tracker maintainers <noreply@github.com>
+Description: Desktop app for rating game soundtracks with friends
+EOF
+
+  dpkg-deb --build --root-owner-group "$DEB_ROOT" "$DEB_PACKAGE"
+  echo "Debian package ready at $DEB_PACKAGE"
+fi
+
 if [ "$WANT_APPIMAGE" -ne 1 ]; then
-  echo "add --appimage to also build an AppImage"
+  if [ "$WANT_DEB" -ne 1 ]; then
+    echo "add --appimage and/or --deb to build a distributable package"
+  fi
   exit 0
 fi
 

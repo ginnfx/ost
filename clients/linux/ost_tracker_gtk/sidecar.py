@@ -24,7 +24,9 @@ class SidecarConfig:
 
     @staticmethod
     def _packaged() -> "SidecarConfig | None":
-        base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent.parent))
+        # sidecar.py lives in <bundle>/ost_tracker_gtk; the runtime and backend
+        # sit one directory above that package.
+        base = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
         python = base / "python-runtime" / "bin" / "python3.11"
         if not python.is_file():
             return None
