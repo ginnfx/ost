@@ -108,7 +108,7 @@ EOF
       "$DEB_ROOT/usr/share/icons/hicolor/256x256/apps/ost-tracker.png"
   fi
 
-  VERSION="${OST_TRACKER_VERSION:-$(git -C "$REPO_ROOT" describe --tags --always 2>/dev/null || true)}"
+  VERSION="${OST_TRACKER_VERSION:-${GITHUB_REF_NAME:-$(git -C "$REPO_ROOT" describe --tags 2>/dev/null || true)}}"
   VERSION="${VERSION:-0.0.0}"
   VERSION="${VERSION#v}"
   cat > "$DEB_ROOT/DEBIAN/control" <<EOF
