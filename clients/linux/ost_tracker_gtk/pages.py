@@ -2,6 +2,8 @@
 view over the sidecar contract — no business logic here."""
 from __future__ import annotations
 
+from . import theme
+
 from typing import Optional
 
 from . import validation
