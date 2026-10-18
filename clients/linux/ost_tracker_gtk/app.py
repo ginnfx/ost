@@ -209,7 +209,7 @@ class OstApp(Gtk.Application):
         # AlertDialog needs GTK >= 4.10; older distros get a plain window.
         if hasattr(Gtk, "AlertDialog"):
             dialog = Gtk.AlertDialog()
-    dialog.set_message(message)
+            dialog.set_message(message)
             dialog.set_detail("Could not launch the Python backend. Check the install and try again.")
             dialog.show()
         else:

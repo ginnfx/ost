@@ -24,8 +24,8 @@ if [ -f "$PAGES_FILE" ]; then
     echo "Patching $PAGES_FILE..."
     # Check if import already exists
     if ! grep -q "from . import theme" "$PAGES_FILE"; then
-        # Insert 'from . import theme' after the first line (or top imports)
-        sed -i '1s/^/from . import theme\n/' "$PAGES_FILE"
+        # Keep the import after the module docstring and __future__ imports.
+        sed -i '/^from __future__ import annotations$/a\from . import theme' "$PAGES_FILE"
         echo "Successfully added theme import."
     else
         echo "Theme import already exists."
@@ -41,7 +41,7 @@ if [ -f "$APP_FILE" ]; then
     if grep -q "Gtk.AlertDialog.new(message)" "$APP_FILE"; then
         # Replace the single line allocation with multi-line setting
         # We handle indent assuming typical python format
-        sed -i 's/dialog = Gtk.AlertDialog.new(message)/dialog = Gtk.AlertDialog()\n    dialog.set_message(message)/g' "$APP_FILE"
+        sed -i 's/dialog = Gtk.AlertDialog.new(message)/dialog = Gtk.AlertDialog()\n            dialog.set_message(message)/g' "$APP_FILE"
         echo "Successfully patched Gtk.AlertDialog."
     else
         echo "Gtk.AlertDialog.new(message) not found or already patched."
@@ -54,7 +54,7 @@ fi
 REQ_FILE="requirements.txt"
 if [ -f "$REQ_FILE" ]; then
     echo "Updating $REQ_FILE..."
-    for pkg in httpx fastapi uvicorn pydantic python-multipart websockets; do
+    for pkg in httpx fastapi uvicorn python-multipart; do
         if ! grep -q "^$pkg" "$REQ_FILE"; then
             echo "$pkg" >> "$REQ_FILE"
             echo "Added $pkg to requirements."

@@ -1,6 +1,7 @@
 """GTK4 screens for the Linux client. Code-built widgets; every page is a thin
 view over the sidecar contract — no business logic here."""
 from __future__ import annotations
+
 from . import theme
 
 from typing import Optional
