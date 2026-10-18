@@ -145,8 +145,9 @@ jobs:
 
           Linux: Choose the AppImage matching your CPU (x86_64 or aarch64), download it,
           run `chmod +x OSTTracker-linux-*.AppImage`, then launch it. GTK4 and GStreamer
-          1.0 are required from your distribution. Debian/Ubuntu users can run:
-          `sudo apt install python3 python3-gi python3-gi-cairo python3-httpx gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base`.
+          1.0 are required from your distribution; the launcher prints the install
+          command if they are missing. Debian/Ubuntu users can run:
+          `sudo apt install python3 python3-gi gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good`.
           The matching .tar.gz contains the same app as a portable folder.
 
           macOS: Open the universal DMG and drag OSTTracker.app to Applications.

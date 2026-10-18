@@ -42,11 +42,11 @@ rm -rf "$OUT/python-runtime"
 mkdir -p "$OUT/python-runtime"
 tar -xzf "$ARCHIVE" -C "$OUT/python-runtime" --strip-components=1
 
-# 2) Python deps into the runtime (httpx, websockets; PyGObject must match the
-#    system GTK — install system python3-gi on target instead).
+# 2) Bundle the backend dependencies plus Linux websocket support. GTK and
+#    PyGObject use the matching system packages.
 "$OUT/python-runtime/bin/python3.11" -m pip install -q --no-warn-script-location \
-  -r "$CLIENT_DIR/requirements.txt" \
-  fastapi "uvicorn[standard]" httpx Pillow yt-dlp
+  -r "$REPO_ROOT/requirements.txt" \
+  -r "$CLIENT_DIR/requirements.txt"
 
 # 3) Sidecar (backend + domain) next to the runtime.
 rm -rf "$OUT/backend" "$OUT/ost_tracker"
@@ -60,8 +60,16 @@ cp "$CLIENT_DIR/main.py" "$OUT/main.py"
 
 cat > "$OUT/OSTTracker" <<EOF
 #!/usr/bin/env bash
-# GTK's PyGObject bindings are built for the distribution's system Python.
-# Keep the embedded Python runtime for the backend sidecar only.
+# GTK's PyGObject bindings must match the distribution's GTK installation.
+# Keep system Python for the UI and the embedded runtime for the sidecar.
+if ! python3 -c 'import gi; gi.require_version("Gtk", "4.0"); gi.require_version("Gst", "1.0"); from gi.repository import Gtk, Gst' >/dev/null 2>&1; then
+  cat >&2 <<'MSG'
+OST Tracker needs the system GTK4 and GStreamer Python bindings.
+On Debian or Ubuntu, install them with:
+  sudo apt install python3 python3-gi gir1.2-gtk-4.0 gir1.2-gstreamer-1.0 gstreamer1.0-plugins-base gstreamer1.0-plugins-good
+MSG
+  exit 1
+fi
 exec python3 "\$(dirname "\$0")/main.py" "\$@"
 EOF
 chmod +x "$OUT/OSTTracker"
