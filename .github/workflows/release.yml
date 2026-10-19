@@ -78,7 +78,6 @@ jobs:
           path: |
             clients/windows/out/OstTracker-windows-${{ matrix.arch }}.zip
             clients/windows/out/OSTTracker-windows-${{ matrix.arch }}-setup.exe
-            clients/windows/out/OstTracker-${{ matrix.arch }}.msix
           if-no-files-found: error
 
   linux:

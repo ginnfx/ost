@@ -1,7 +1,7 @@
 #!/bin/bash
 # Ship a release: commit everything, push, tag, watch the multi-platform CI,
 # and publish the drafted GitHub Release (macOS dmg + iOS ipa + Windows
-# zip/setup.exe/msix + Linux tar.gz/AppImage, x86_64 + arm64 where offered).
+# zip/setup.exe + Linux tar.gz/AppImage/deb, x86_64 + arm64 where offered).
 #
 # Uses the tag-triggered .github/workflows/release.yml — the release itself is
 # built entirely in CI, so this script only commits, tags, and publishes.

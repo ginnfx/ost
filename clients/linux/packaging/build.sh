@@ -143,7 +143,7 @@ case "$TRIPLET" in
 esac
 TOOL_PATH="$RUNTIME_DIR/$APPIMAGE_TOOL"
 if [ ! -f "$TOOL_PATH" ]; then
-  TOOL_URL="https://github.com/AppImage/AppImageKit/releases/download/continuous/${APPIMAGE_TOOL}"
+  TOOL_URL="https://github.com/AppImage/appimagetool/releases/download/continuous/${APPIMAGE_TOOL}"
   echo "fetching $APPIMAGE_TOOL"
   # --fail so a 404 error page never lands on disk pretending to be the tool
   curl --fail -L -o "$TOOL_PATH" "$TOOL_URL"
